@@ -1,0 +1,8 @@
+name = "SpiderWebModel"
+uuid = "8e1b84da-b1d7-4311-a21b-52324f990117"
+authors = ["Nils <nils.niggemann@fu-berlin.de>"]
+version = "0.1.0"
+
+[deps]
+SpinFRGLattices = "053fb7f8-31b7-4f68-aef8-4452b415dd8c"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
