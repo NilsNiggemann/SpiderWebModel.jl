@@ -51,15 +51,14 @@ let
     fig
 end
 ## plot 70 combinations
-
+ConfigRealspace(c) = SMatrix{3,3}(
+    c[4],c[3],c[2],
+    c[5], missing ,c[1],
+    c[6], c[7], c[8]
+)'
+AllAllowedConfigs = ConfigRealspace.(SW.getAllGS(0.5))
+##
 let 
-    R0 = Rvec(0,0,1)
-    sites = SW.getPlaquette(R0) ∪ [R0]
-    
-    combs = SW.getAllGS(0.5)
-    # sizex = Int(ceil(√(length(combs))))
-    # sizey = Int(floor(√(length(combs))))
-
     sizex = Int(7)
     sizey = Int(10)
 
@@ -70,16 +69,67 @@ let
     xticks = yticks = [-1,0,1]
     axes = [Axis(fig[fj,fi]; xticklabelsvisible = false, yticklabelsvisible = false,xgridvisible = false,ygridvisible = false,aspect = 1,xticks ,yticks ) for (i,(fi,fj)) in enumerate(allij)]
 
-    for (ax,c) in zip(axes,combs)
-        # scatterRvecs!(ax,sites,SW.BasisSW)
-        S1,S2,S3,S4,S5,S6,S7,S8 = c
-        Mat = [
-            S4 S3 S2;
-            S5 missing S1;
-            S6 S7 S8
-        ]
-        heatmap!(ax,xticks,yticks,Mat,colorrange = (-0.5,0.5))
+    for (ax,Mat) in zip(axes,AllAllowedConfigs)
+        heatmap!(ax,xticks,yticks,Array(Mat),colorrange = (-0.5,0.5))
     end
     save("combs.pdf",fig,)
+    fig
+end
+
+## plot rot inv combinations
+
+"""given a 3×3 matrix, return a 3×3 matrix with the same entries but rotated 90 degrees around the middle element"""
+function rotl90(A)
+    ind1, ind2 = axes(A)
+    B = similar(A, (ind2,ind1))
+    n = first(ind2)+last(ind2)
+    for i=axes(A,1), j=ind2
+        B[n-j,i] = A[i,j]
+    end
+    return B
+end
+
+function rotl90(A::SMatrix{3,3})
+    A = A'
+    return SMatrix{3,3}(
+        A[3] , A[6] ,  A[9],
+        A[2] , A[5] ,  A[8],
+        A[1] , A[4] ,  A[7]
+    )'
+end
+
+let 
+    FilteredConfigs = empty(AllAllowedConfigs)
+
+    
+    r1 = rotl90
+    r2 = rotl90 ∘ rotl90
+    r3 = rotl90 ∘ rotl90 ∘ rotl90
+
+    for c in AllAllowedConfigs
+        confs = Set([c,r1(c),r2(c),r3(c)])
+        if isempty(confs ∩ FilteredConfigs)
+            push!(FilteredConfigs,c)
+        end
+    end
+    
+    sizex = Int(floor(sqrt(length(FilteredConfigs))))
+    sizey = Int(ceil(sqrt(length(FilteredConfigs))))+1
+    
+    sizex = 3
+    sizey = 7
+    
+    layout = zeros(sizex,sizey)
+
+    fig = Figure(resolution = 200 .* (sizex,sizey))
+    allij = Tuple.(CartesianIndices(layout))
+    xticks = yticks = [-1,0,1]
+    axes = [Axis(fig[fj,fi]; xticklabelsvisible = false, yticklabelsvisible = false,xgridvisible = false,ygridvisible = false,aspect = 1,xticks ,yticks ) for (i,(fi,fj)) in enumerate(allij)]
+    # return length(axes),length(FilteredConfigs)
+    # @assert length(axes) == length(FilteredConfigs) 
+    for (ax,Mat) in zip(axes,FilteredConfigs)
+        heatmap!(ax,xticks,yticks,Array(rotl90(Mat)),colorrange = (-0.5,0.5))
+    end
+    save("combsReduced.pdf",fig,)
     fig
 end
