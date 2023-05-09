@@ -43,7 +43,7 @@ end
 
 let 
     # sites = SW.generateLattice(10)
-    sites = generateLUnitCells(4,SW.Basis)
+    sites = generateLUnitCells(4,SW.BasisSW)
     filter!(x-> isInLBox(x,2),sites )
     fig = Figure()
     ax = Axis(fig[1,1],aspect = 1)
@@ -51,12 +51,8 @@ let
     fig
 end
 ## plot 70 combinations
-ConfigRealspace(c) = SMatrix{3,3}(
-    c[4],c[3],c[2],
-    c[5], missing ,c[1],
-    c[6], c[7], c[8]
-)'
-AllAllowedConfigs = ConfigRealspace.(SW.getAllGS(0.5))
+
+AllAllowedConfigs = SW.getAllGS(0.5)
 ##
 let 
     sizex = Int(7)
@@ -70,7 +66,7 @@ let
     axes = [Axis(fig[fj,fi]; xticklabelsvisible = false, yticklabelsvisible = false,xgridvisible = false,ygridvisible = false,aspect = 1,xticks ,yticks ) for (i,(fi,fj)) in enumerate(allij)]
 
     for (ax,Mat) in zip(axes,AllAllowedConfigs)
-        heatmap!(ax,xticks,yticks,Array(Mat),colorrange = (-0.5,0.5))
+        heatmap!(ax,xticks,yticks,Array(Mat.x),colorrange = (-0.5,0.5))
     end
     save("combs.pdf",fig,)
     fig
@@ -98,6 +94,7 @@ function rotl90(A::SMatrix{3,3})
     )'
 end
 
+rotl90(S::SW.Plaquette2) = SW.Plaquette2(rotl90(S.x))
 let 
     FilteredConfigs = empty(AllAllowedConfigs)
 
@@ -128,8 +125,14 @@ let
     # return length(axes),length(FilteredConfigs)
     # @assert length(axes) == length(FilteredConfigs) 
     for (ax,Mat) in zip(axes,FilteredConfigs)
-        heatmap!(ax,xticks,yticks,Array(rotl90(Mat)),colorrange = (-0.5,0.5))
+        heatmap!(ax,xticks,yticks,Array(rotl90(Mat.x)),colorrange = (-0.5,0.5))
     end
     save("combsReduced.pdf",fig,)
     fig
+end
+
+##
+let 
+    StartTile = 
+    
 end
