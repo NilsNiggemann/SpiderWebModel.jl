@@ -12,10 +12,10 @@ import SpiderWebModel as SW
 end
 ##
 @testset "tiling test" begin
-    AllAllowedConfigs = SW.ConfigRealspace.(SW.getAllGS(0.5))
-    T1 = first(AllAllowedConfigs)
-    T2 = AllAllowedConfigs[2]
-    Tend = AllAllowedConfigs[end]
+    AllAllowedConfigs = SW.getAllGS(0.5)
+    T1 = first(AllAllowedConfigs).x
+    T2 = AllAllowedConfigs[2].x
+    Tend = AllAllowedConfigs[end].x
     @test SW.canTileUpRight(T1,T1)
     @test SW.canTileDownRight(T1,T1)
     @test SW.canTileDownLeft(T1,T1)

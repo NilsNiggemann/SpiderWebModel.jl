@@ -65,78 +65,17 @@ let
     xticks = yticks = [-1,0,1]
     axes = [Axis(fig[fj,fi]; xticklabelsvisible = false, yticklabelsvisible = false,xgridvisible = false,ygridvisible = false,aspect = 1,xticks ,yticks ) for (i,(fi,fj)) in enumerate(allij)]
 
-    for (ax,Mat) in zip(axes,AllAllowedConfigs)
-        heatmap!(ax,xticks,yticks,Array(Mat.x),colorrange = (-0.5,0.5))
+    for (ax,Plaq) in zip(axes,AllAllowedConfigs)
+        heatmap!(ax,xticks,yticks,Array(Plaq.Mat),colorrange = (-0.5,0.5))
     end
     save("combs.pdf",fig,)
-    fig
-end
-
-## plot rot inv combinations
-
-"""given a 3×3 matrix, return a 3×3 matrix with the same entries but rotated 90 degrees around the middle element"""
-function rotl90(A)
-    ind1, ind2 = axes(A)
-    B = similar(A, (ind2,ind1))
-    n = first(ind2)+last(ind2)
-    for i=axes(A,1), j=ind2
-        B[n-j,i] = A[i,j]
-    end
-    return B
-end
-
-function rotl90(A::SMatrix{3,3})
-    A = A'
-    return SMatrix{3,3}(
-        A[3] , A[6] ,  A[9],
-        A[2] , A[5] ,  A[8],
-        A[1] , A[4] ,  A[7]
-    )'
-end
-
-rotl90(S::SW.Plaquette) = SW.Plaquette(rotl90(S.x))
-let 
-    FilteredConfigs = empty(AllAllowedConfigs)
-
-    
-    r1 = rotl90
-    r2 = rotl90 ∘ rotl90
-    r3 = rotl90 ∘ rotl90 ∘ rotl90
-
-    for c in AllAllowedConfigs
-        confs = Set([c,r1(c),r2(c),r3(c)])
-        if isempty(confs ∩ FilteredConfigs)
-            push!(FilteredConfigs,c)
-        end
-    end
-    
-    sizex = Int(floor(sqrt(length(FilteredConfigs))))
-    sizey = Int(ceil(sqrt(length(FilteredConfigs))))+1
-    
-    sizex = 3
-    sizey = 7
-    
-    layout = zeros(sizex,sizey)
-
-    fig = Figure(resolution = 200 .* (sizex,sizey))
-    allij = Tuple.(CartesianIndices(layout))
-    xticks = yticks = [-1,0,1]
-    axes = [Axis(fig[fj,fi]; xticklabelsvisible = false, yticklabelsvisible = false,xgridvisible = false,ygridvisible = false,aspect = 1,xticks ,yticks ) for (i,(fi,fj)) in enumerate(allij)]
-    # return length(axes),length(FilteredConfigs)
-    # @assert length(axes) == length(FilteredConfigs) 
-    for (ax,Mat) in zip(axes,FilteredConfigs)
-        heatmap!(ax,xticks,yticks,Array(rotl90(Mat.x)),colorrange = (-0.5,0.5))
-    end
-    save("combsReduced.pdf",fig,)
     fig
 end
 
 ##
 using CairoMakie.Makie.ColorSchemes
 function plotSpinConfig!(ax,S;kwargs...)
-    rPoints = [Point2f(getCartesian(R,SW.Basis)) for R in keys(S.Spins)]
-    vals = collect(values(S.Spins))
-    scatter!(ax,rPoints,colormap = :greys,marker = :rect ,color = vals,markersize = 40;kwargs...) 
+    heatmap!(ax,Array(S.Mat),colorrange = (-0.5,0.5),color = :RdBu_11)
 end
 function plotSpinConfig(S;kwargs...) 
     fig = Figure()
@@ -148,38 +87,75 @@ end
 SpinConfig = let 
     fig = Figure()
     ax = Axis(fig[1,1],aspect = 1,backgroundcolor = :grey)
-    S = SW.SpinConfig(Rvec_2D)
-    L = 20
-    Points = generateLUnitCells(L,SW.Basis)
-    filter!(x-> x.b == 1 && isInLBox(x,L),Points )
-
-    tileNums = rand(eachindex(AllAllowedConfigs),length(Points))
-    @time for (R,tilenum) in zip(Points,tileNums)
-        SW.setTile!(S,R,AllAllowedConfigs[tilenum])
-    end
-    S
+    S = SW.SpinConfig5(rand(-1/2:1/2,10,10))
 end
 plotSpinConfig(SpinConfig)
 ##
 
-##
 AFM = let 
     Rvecs = generateLUnitCells(10,SW.Basis)
     filter!(x->isInLBox(x,10),Rvecs )
-    S = SW.SpinConfig(Rvec_2D)
+    S = SW.SpinConfig()
     for R in Rvecs
         S[R] = R.b == 1 ? 1/2 : -1/2
+        # S[R] = 1/2
     end
     S
 end
+SW.PlaquetteOperatorSave!(AFM,Rvec(0,0,1))
 plotSpinConfig(AFM)
+##
+
+function getStairCase(L) 
+    UC = SA[
+        1 1 1 0;
+        0 0 1 0;
+        1 0 1 1;
+        1 0 0 0;
+    ]
+    Mat = zeros(Float64,L,L)
+    mel(x) = x==1 ? 1/2 : -1/2
+    for i in axes(Mat,1)
+        for j in axes(Mat,2)
+            Mat[i,j] = mel(UC[i%4+1,j%4+1])
+        end
+    end
+
+    S = SW.spinConfig(Mat)
+
+end
+
+function getApplicablePlaquettes(SpinConfig)
+    plaqPos = [R for (R,S) in SpinConfig.Spins if SW.CanApplyPlaquette(SpinConfig,R)]
+    return plaqPos
+end
+
+let 
+    StairCase = getStairCase(30)
+    fig = plotSpinConfig(StairCase,markersize = 23)
+    ax = current_axis()
+    plaqs = getApplicablePlaquettes(StairCase)
+    points = Point2f.(getCartesian.(plaqs,Ref(SW.Basis)))
+    scatter!(ax,points,markersize = 13,color = :red)
+    fig
+end
+##
+let 
+    StairCase = getStairCase(30)
+    plaqs = getApplicablePlaquettes(StairCase)
+    for R in plaqs
+        SW.PlaquetteOperatorSave!(StairCase,R)
+        break
+    end
+    plotSpinConfig(StairCase,markersize = 23)
+end
 ##
 using FRGLatticeEvaluation
 let 
-    Sij = SW.getCorrel(SpinConfig)
-    Rij_vec = [SW.getCartesian(Ri)-SW.getCartesian(Rj) for Ri in keys(SpinConfig.Spins),Rj in keys(SpinConfig.Spins)]
+    Sij = SW.getCorrel(StairCase)
+    Rij_vec = [SW.getCartesian(Ri)-SW.getCartesian(Rj) for Ri in keys(StairCase.Spins),Rj in keys(StairCase.Spins)]
     Sq = FourierStruct(Sij[:],Rij_vec[:],length(Rij_vec))
-    k, sq = Fourier2D(Sq,xyplane,ext = 2pi,res = 100)
+    k, sq = Fourier2D(Sq,xyplane,ext = 2pi,res = 50)
     fig = Figure()
     ax = Axis(fig[1,1],aspect = 1)
     heatmap!(ax,k ./pi,k ./pi,sq)
