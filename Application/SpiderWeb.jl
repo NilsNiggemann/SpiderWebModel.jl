@@ -7,14 +7,14 @@ Lat = SW.generateLattice(4)
 R1 = Rvec(0,0,1)
 let 
     P = SW.getPlaquette(R1)
-    SW.isInPlaquetteOf.(Ref(R1),P)
+    all(SW.isInPlaquetteOf.(Ref(R1),SW.getSitesFromPlaquette(P)))
     
 end
 ##
 
 let 
     P = SW.getPlaquette(R1)
-    ri = [Point2f(SW.getCartesian(R)) for R in P] 
+    ri = Array([Point2f(SW.getCartesian(R)) for R in SW.getSitesFromPlaquette(P)] )
     # scatter(ri)
     fig = Figure()
     ax = Axis(fig[1,1],aspect = 1)
@@ -37,17 +37,17 @@ function scatterRvecs!(ax,RV,Basis;kwargs...)
 end
 
 function isOnBorder(R::Rvec_2D,L)
-    r = getCartesian(R,SW.BasisSW)
+    r = getCartesian(R,SW.Basis)
     abs(r[1]) == L || abs(r[2]) == L
 end
 
 let 
     # sites = SW.generateLattice(10)
-    sites = generateLUnitCells(4,SW.BasisSW)
+    sites = generateLUnitCells(4,SW.Basis)
     filter!(x-> isInLBox(x,2),sites )
     fig = Figure()
     ax = Axis(fig[1,1],aspect = 1)
-    scatterRvecs!(ax,sites,SW.BasisSW)
+    scatterRvecs!(ax,sites,SW.Basis)
     fig
 end
 ## plot 70 combinations
@@ -94,7 +94,7 @@ function rotl90(A::SMatrix{3,3})
     )'
 end
 
-rotl90(S::SW.Plaquette2) = SW.Plaquette2(rotl90(S.x))
+rotl90(S::SW.Plaquette) = SW.Plaquette(rotl90(S.x))
 let 
     FilteredConfigs = empty(AllAllowedConfigs)
 
@@ -132,7 +132,56 @@ let
 end
 
 ##
+using CairoMakie.Makie.ColorSchemes
+function plotSpinConfig!(ax,S;kwargs...)
+    rPoints = [Point2f(getCartesian(R,SW.Basis)) for R in keys(S.Spins)]
+    vals = collect(values(S.Spins))
+    scatter!(ax,rPoints,colormap = :greys,marker = :rect ,color = vals,markersize = 40;kwargs...) 
+end
+function plotSpinConfig(S;kwargs...) 
+    fig = Figure()
+    ax = Axis(fig[1,1],aspect = 1,backgroundcolor = :grey)
+    plotSpinConfig!(ax,S;kwargs...)
+    return fig
+end
+##
+SpinConfig = let 
+    fig = Figure()
+    ax = Axis(fig[1,1],aspect = 1,backgroundcolor = :grey)
+    S = SW.SpinConfig(Rvec_2D)
+    L = 20
+    Points = generateLUnitCells(L,SW.Basis)
+    filter!(x-> x.b == 1 && isInLBox(x,L),Points )
+
+    tileNums = rand(eachindex(AllAllowedConfigs),length(Points))
+    @time for (R,tilenum) in zip(Points,tileNums)
+        SW.setTile!(S,R,AllAllowedConfigs[tilenum])
+    end
+    S
+end
+plotSpinConfig(SpinConfig)
+##
+
+##
+AFM = let 
+    Rvecs = generateLUnitCells(10,SW.Basis)
+    filter!(x->isInLBox(x,10),Rvecs )
+    S = SW.SpinConfig(Rvec_2D)
+    for R in Rvecs
+        S[R] = R.b == 1 ? 1/2 : -1/2
+    end
+    S
+end
+plotSpinConfig(AFM)
+##
+using FRGLatticeEvaluation
 let 
-    StartTile = 
-    
+    Sij = SW.getCorrel(SpinConfig)
+    Rij_vec = [SW.getCartesian(Ri)-SW.getCartesian(Rj) for Ri in keys(SpinConfig.Spins),Rj in keys(SpinConfig.Spins)]
+    Sq = FourierStruct(Sij[:],Rij_vec[:],length(Rij_vec))
+    k, sq = Fourier2D(Sq,xyplane,ext = 2pi,res = 100)
+    fig = Figure()
+    ax = Axis(fig[1,1],aspect = 1)
+    heatmap!(ax,k ./pi,k ./pi,sq)
+    fig
 end
