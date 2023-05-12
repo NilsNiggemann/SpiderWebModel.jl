@@ -1,5 +1,4 @@
 [deps]
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
-FRGLatticeEvaluation = "a44b592b-45f7-4b02-a4df-e53b23f0d903"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 SpiderWebModel = "8e1b84da-b1d7-4311-a21b-52324f990117"

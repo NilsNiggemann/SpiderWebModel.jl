@@ -46,7 +46,7 @@ module SpiderWebModel
     plaquette(S1,S2,S3,S4,S5,S6,S7,S8) = plaquette((S1,S2,S3,S4,S5,S6,S7,S8))
     plaquette(x::AbstractVector) = plaquette(x...)
 
-    function getSitesFromPlaquette(Mat::SMatrix{3,3,T,9}) where T
+    function getSitesFromPlaquette(Mat::AbstractMatrix) where T
         S4,S5,S6,S3,_,S7,S2,S1,S8 = Mat
         return (S1,S2,S3,S4,S5,S6,S7,S8)
     end
@@ -56,7 +56,9 @@ module SpiderWebModel
     end
 
     Base.size(::Plaquette) = (8,)
-    Base.getindex(P::Plaquette,i) = getindex(P.sites,i)
+    Base.getindex(P::Plaquette,i) = getindex(P.Mat,i)
+    Base.setindex!(P::Plaquette,i) = setindex!(P.Mat,i)
+    Base.setindex!(P::Plaquette,i,j) = setindex!(P.Mat,i,j)
     Base.getindex(P::Plaquette,i,j) = getindex(P.Mat,i,j)
     Base.iterate(P::Plaquette,i) = iterate(P.sites,i)
     Base.iterate(P::Plaquette) = iterate(P.sites)
@@ -136,47 +138,50 @@ module SpiderWebModel
         return (;UpRight,UpLeft,DownRight,DownLeft)
     end
 
-    struct SpinConfig{T,MatType <: AbstractMatrix{T}} <:AbstractMatrix{T}
+    struct SpinConfig2{T,MatType <: AbstractMatrix{T}} <:AbstractMatrix{T}
         Mat::MatType
+        S::T
     end
 
-    Base.getindex(S::SpinConfig,i,j) = getindex(S.Spins,i,j)
-    Base.setindex!(S::SpinConfig,x,i,j) = setindex!(S.Spins,x,i,j)
-    Base.setindex!(::SpinConfig,::Missing,i,j) = nothing
-    Base.iterate(S::SpinConfig,i) = iterate(S.Spins,i)
-    Base.iterate(S::SpinConfig) = iterate(S.Spins)
+    Base.getindex(S::SpinConfig2,i,j) = getindex(S.Mat,i,j)
+    Base.setindex!(S::SpinConfig2,x,i,j) = setindex!(S.Mat,x,i,j)
+    Base.setindex!(::SpinConfig2,::Missing,i,j) = nothing
+    Base.iterate(S::SpinConfig2,i) = iterate(S.Mat,i)
+    Base.iterate(S::SpinConfig2) = iterate(S.Mat)
 
-    Base.show(io::IO, ::MIME"text/plain", S::SpinConfig) = print(io,S.Spins)
-    Base.show(io::IO, S::SpinConfig) = print(io,S.Spins)
+    Base.size(S::SpinConfig2) = size(S.Mat)
+
+    Base.show(io::IO, ::MIME"text/plain", S::SpinConfig2) = print(io,S.Mat)
+    Base.show(io::IO, S::SpinConfig2) = print(io,S.Mat)
 
     function getPlaquette(S::AbstractMatrix,i,j)
         Mat = @view S[i-1:i+1,j-1:j+1]
-        return plaquette(Mat)
+        return Plaquette(Mat)
     end
 
-    function setTile!(S::SpinConfig,i::Integer,j::Integer,T1)
+    function setTile!(S::SpinConfig2,i::Integer,j::Integer,T1)
         P = getPlaquette(i,j)
         for (r,t) in zip(P,T1)
             S[r] = t
         end
     end
 
-    function getCorrel(Conf::SpinConfig)
-        S_ij = [si*sj for si in Conf.Spins, sj in Conf.Spins]
+    function getCorrel(Conf::SpinConfig2)
+        S_ij = [si*sj for si in Conf.Mat, sj in Conf.Mat]
         return S_ij
     end
 
     plaquetteOperatorSigns() = plaquette(+1,+1,-1,-1,+1,+1,-1,-1)
-    function PlaquetteOperator!(Conf::SpinConfig, i::Integer,j::Integer)
+    function PlaquetteOperator!(Conf::SpinConfig2, i::Integer,j::Integer)
         P = getPlaquette(Conf,i,j)
         signs = plaquetteOperatorSigns()
         P .+= signs
         return Conf
     end
 
-    function plaquetteIsInBounds(Conf::SpinConfig,iCenter::Integer,jCenter::Integer)
+    function plaquetteIsInBounds(Conf::SpinConfig2,iCenter::Integer,jCenter::Integer)
         for i in iCenter-1:iCenter+1, j in jCenter-1:jCenter+1
-            if !checkbounds(Bool,Conf.Spins,i,j)
+            if !checkbounds(Bool,Conf.Mat,i,j)
                 return false
             end
         end
@@ -184,8 +189,8 @@ module SpiderWebModel
     end
 
     """Assumes that constraint are only defined on every alternating site, starting from the first index"""
-    function fulFillsConstraint(Conf::SpinConfig;verbose = false)
-        for i in axes(Conf.Spins,1), j in axes(Conf.Spins,2)
+    function fulFillsConstraint(Conf::SpinConfig2;verbose = false)
+        for i in axes(Conf.Mat,1), j in axes(Conf.Mat,2)
             iseven(i+j) && continue 
             plaquetteIsInBounds(Conf,i,j) || continue
             P = getPlaquette(i,j)
@@ -198,7 +203,7 @@ module SpiderWebModel
         return true
     end
 
-    function CanApplyPlaquette(Conf::SpinConfig,i::Integer,j::Integer)
+    function CanApplyPlaquette(Conf::SpinConfig2,i::Integer,j::Integer)
         plaquetteIsInBounds(Conf,i,j) || return false
         P = getPlaquette(Conf,i,j)
         operations = plaquetteOperatorSigns()
@@ -219,11 +224,24 @@ module SpiderWebModel
         return applicable
     end
 
-    function PlaquetteOperatorSave!(Conf::SpinConfig, i::Integer,j::Integer)
+    function PlaquetteOperatorSave!(Conf::SpinConfig2, i::Integer,j::Integer)
         CanApplyPlaquette(Conf,i,j) || return Conf
         PlaquetteOperator!(Conf,i,j)
     end
 
-    function 
+    function flipSpinsAlongLine!(Conf,org,slope)
+        slope ∈ (-Inf, Inf) && return flipSpinsAlongRow!(Conf,org[2])
+        for i in axes(Conf.Mat,1), j in axes(Conf.Mat,2)
+            if slope*(i-org[1]) == j-org[2]
+                Conf[i,j] *= -1
+            end
+        end
+        return Conf
+    end
+
+    function flipSpinsAlongRow!(Conf,i)
+        Conf[i,:] .*= -1
+        return Conf
+    end
 
 end # module SpiderWebModel

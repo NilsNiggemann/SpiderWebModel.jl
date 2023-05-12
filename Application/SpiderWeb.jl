@@ -75,7 +75,7 @@ end
 ##
 using CairoMakie.Makie.ColorSchemes
 function plotSpinConfig!(ax,S;kwargs...)
-    heatmap!(ax,Array(S.Mat),colorrange = (-0.5,0.5),color = :RdBu_11)
+    heatmap!(ax,Array(S.Mat),colorrange = (-S.S,S.S),color = :RdBu_11)
 end
 function plotSpinConfig(S;kwargs...) 
     fig = Figure()
@@ -87,25 +87,22 @@ end
 SpinConfig = let 
     fig = Figure()
     ax = Axis(fig[1,1],aspect = 1,backgroundcolor = :grey)
-    S = SW.SpinConfig(rand(-1/2:1/2,10,10))
+    S = SW.SpinConfig2(-0.5ones(20,20),1/2)
+    S[10,10] = 0.5
+    S
 end
+SW.flipSpinsAlongLine!(SpinConfig,(10,14),1)
 plotSpinConfig(SpinConfig)
 ##
 
 AFM = let 
-    Rvecs = generateLUnitCells(10,SW.Basis)
-    filter!(x->isInLBox(x,10),Rvecs )
-    S = SW.SpinConfig()
-    for R in Rvecs
-        S[R] = R.b == 1 ? 1/2 : -1/2
-        # S[R] = 1/2
-    end
-    S
+    S = SW.SpinConfig2([0.5*(-1)^(i+j) for i in 1:40,j in 1:40],1/2)
 end
-SW.PlaquetteOperatorSave!(AFM,Rvec(0,0,1))
+SW.PlaquetteOperatorSave!(AFM,5,5)
 plotSpinConfig(AFM)
 ##
-
+SW.fulFillsConstraint(AFM)
+##
 function getStairCase(L) 
     UC = SA[
         1 1 1 0;
@@ -121,7 +118,7 @@ function getStairCase(L)
         end
     end
 
-    S = SW.spinConfig(Mat)
+    S = SW.SpinConfig(Mat)
 
 end
 
