@@ -3,7 +3,7 @@ using SpiderWebModel.SpinFRGLattices
 using CairoMakie
 using SpiderWebModel.StaticArrays
 ##
-Lat = SW.generateLattice(4)
+Lat = generateLUnitCells(4,SW.Basis)
 R1 = Rvec(0,0,1)
 let 
     P = SW.getPlaquette(R1)
@@ -68,7 +68,7 @@ let
     for (ax,Plaq) in zip(axes,AllAllowedConfigs)
         heatmap!(ax,xticks,yticks,Array(Plaq.Mat),colorrange = (-0.5,0.5))
     end
-    save("combs.pdf",fig,)
+    # save("combs.pdf",fig,)
     fig
 end
 
@@ -87,7 +87,7 @@ end
 SpinConfig = let 
     fig = Figure()
     ax = Axis(fig[1,1],aspect = 1,backgroundcolor = :grey)
-    S = SW.SpinConfig5(rand(-1/2:1/2,10,10))
+    S = SW.SpinConfig(rand(-1/2:1/2,10,10))
 end
 plotSpinConfig(SpinConfig)
 ##
@@ -150,14 +150,3 @@ let
     plotSpinConfig(StairCase,markersize = 23)
 end
 ##
-using FRGLatticeEvaluation
-let 
-    Sij = SW.getCorrel(StairCase)
-    Rij_vec = [SW.getCartesian(Ri)-SW.getCartesian(Rj) for Ri in keys(StairCase.Spins),Rj in keys(StairCase.Spins)]
-    Sq = FourierStruct(Sij[:],Rij_vec[:],length(Rij_vec))
-    k, sq = Fourier2D(Sq,xyplane,ext = 2pi,res = 50)
-    fig = Figure()
-    ax = Axis(fig[1,1],aspect = 1)
-    heatmap!(ax,k ./pi,k ./pi,sq)
-    fig
-end

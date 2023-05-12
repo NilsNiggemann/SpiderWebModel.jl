@@ -2,7 +2,7 @@
 
 julia_version = "1.9.0"
 manifest_format = "2.0"
-project_hash = "af0f925e8fbf47e57d5121b0b37d40703560c43d"
+project_hash = "012290ec22ad4226923419046ceac4cc129769b2"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -21,9 +21,9 @@ version = "0.4.4"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
-git-tree-sha1 = "cc37d689f599e8df4f464b2fa3870ff7db7492ef"
+git-tree-sha1 = "76289dc51920fdc6e0013c872ba9551d54961c24"
 uuid = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
-version = "3.6.1"
+version = "3.6.2"
 weakdeps = ["StaticArrays"]
 
     [deps.Adapt.extensions]
@@ -425,9 +425,9 @@ version = "0.1.4"
 
 [[deps.GeoInterface]]
 deps = ["Extents"]
-git-tree-sha1 = "0eb6de0b312688f852f347171aba888658e29f20"
+git-tree-sha1 = "bb198ff907228523f3dee1070ceee63b9359b6ab"
 uuid = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
-version = "1.3.0"
+version = "1.3.1"
 
 [[deps.GeometryBasics]]
 deps = ["EarCut_jll", "GeoInterface", "IterTools", "LinearAlgebra", "StaticArrays", "StructArrays", "Tables"]
@@ -733,9 +733,9 @@ uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
 [[deps.LoopVectorization]]
 deps = ["ArrayInterface", "ArrayInterfaceCore", "CPUSummary", "CloseOpenIntervals", "DocStringExtensions", "HostCPUFeatures", "IfElse", "LayoutPointers", "LinearAlgebra", "OffsetArrays", "PolyesterWeave", "PrecompileTools", "SIMDTypes", "SLEEFPirates", "Static", "StaticArrayInterface", "ThreadingUtilities", "UnPack", "VectorizationBase"]
-git-tree-sha1 = "e7ce3cdc520da8135e73d7cb303e0617a19f582b"
+git-tree-sha1 = "3bb62b5003bc7d2d49f26663484267dc49fa1bf5"
 uuid = "bdcacae8-1622-11e9-2a5c-532679323890"
-version = "0.12.158"
+version = "0.12.159"
 weakdeps = ["ChainRulesCore", "ForwardDiff", "SpecialFunctions"]
 
     [deps.LoopVectorization.extensions]
@@ -953,10 +953,10 @@ uuid = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 version = "0.12.3"
 
 [[deps.Parsers]]
-deps = ["Dates", "SnoopPrecompile"]
-git-tree-sha1 = "478ac6c952fddd4399e71d4779797c538d0ff2bf"
+deps = ["Dates", "PrecompileTools", "UUIDs"]
+git-tree-sha1 = "7302075e5e06da7d000d9bfa055013e3e85578ca"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
-version = "2.5.8"
+version = "2.5.9"
 
 [[deps.Pixman_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1033,10 +1033,10 @@ uuid = "460c41e3-6112-5d7f-b78c-b6823adb3f2d"
 version = "1.0.0+1"
 
 [[deps.Qhull_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "238dd7e2cc577281976b9681702174850f8d4cbc"
+deps = ["Artifacts", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "be2449911f4d6cfddacdf7efc895eceda3eee5c1"
 uuid = "784f63db-0788-585a-bace-daefebcd302b"
-version = "8.0.1001+0"
+version = "8.0.1003+0"
 
 [[deps.QuadGK]]
 deps = ["DataStructures", "LinearAlgebra"]
@@ -1101,10 +1101,10 @@ uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 version = "0.7.0"
 
 [[deps.SIMD]]
-deps = ["SnoopPrecompile"]
-git-tree-sha1 = "8b20084a97b004588125caebf418d8cab9e393d1"
+deps = ["PrecompileTools"]
+git-tree-sha1 = "0e270732477b9e551d884e6b07e23bb2ec947790"
 uuid = "fdea26ae-647d-5447-a871-4b548cad5224"
-version = "3.4.4"
+version = "3.4.5"
 
 [[deps.SIMDTypes]]
 git-tree-sha1 = "330289636fb8107c5f32088d2741e9fd7a061a5c"
@@ -1221,9 +1221,9 @@ version = "0.1.1"
 
 [[deps.Static]]
 deps = ["IfElse"]
-git-tree-sha1 = "08be5ee09a7632c32695d954a602df96a877bf0d"
+git-tree-sha1 = "dbde6766fc677423598138a5951269432b0fcc90"
 uuid = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
-version = "0.8.6"
+version = "0.8.7"
 
 [[deps.StaticArrayInterface]]
 deps = ["ArrayInterface", "Compat", "IfElse", "LinearAlgebra", "Requires", "SnoopPrecompile", "SparseArrays", "Static", "SuiteSparse"]

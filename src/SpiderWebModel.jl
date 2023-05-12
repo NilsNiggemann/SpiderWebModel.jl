@@ -183,6 +183,21 @@ module SpiderWebModel
         return true
     end
 
+    """Assumes that constraint are only defined on every alternating site, starting from the first index"""
+    function fulFillsConstraint(Conf::SpinConfig;verbose = false)
+        for i in axes(Conf.Spins,1), j in axes(Conf.Spins,2)
+            iseven(i+j) && continue 
+            plaquetteIsInBounds(Conf,i,j) || continue
+            P = getPlaquette(i,j)
+
+            if constraint(P) != 0
+                verbose && println("Constraint not fulfilled at $R = $(getCartesian(R))" )
+                return false
+            end
+        end
+        return true
+    end
+
     function CanApplyPlaquette(Conf::SpinConfig,i::Integer,j::Integer)
         plaquetteIsInBounds(Conf,i,j) || return false
         P = getPlaquette(Conf,i,j)
@@ -209,19 +224,6 @@ module SpiderWebModel
         PlaquetteOperator!(Conf,i,j)
     end
 
-    """Assumes that constraint are only defined on every alternating site, starting from the first index"""
-    function fulFillsConstraint(Conf::SpinConfig;verbose = false)
-        for i in axes(Conf.Spins,1), j in axes(Conf.Spins,2)
-            iseven(i+j) && continue 
-            plaquetteIsInBounds(Conf,i,j) || continue
-            P = getPlaquette(i,j)
-
-            if constraint(P) != 0
-                verbose && println("Constraint not fulfilled at $R = $(getCartesian(R))" )
-                return false
-            end
-        end
-        return true
-    end
+    function 
 
 end # module SpiderWebModel
