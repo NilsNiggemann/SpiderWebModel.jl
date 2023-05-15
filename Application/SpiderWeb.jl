@@ -1,55 +1,6 @@
 import SpiderWebModel as SW
-using SpiderWebModel.SpinFRGLattices
 using CairoMakie
 using SpiderWebModel.StaticArrays
-##
-Lat = generateLUnitCells(4,SW.Basis)
-R1 = Rvec(0,0,1)
-let 
-    P = SW.getPlaquette(R1)
-    all(SW.isInPlaquetteOf.(Ref(R1),SW.getSitesFromPlaquette(P)))
-    
-end
-##
-
-let 
-    P = SW.getPlaquette(R1)
-    ri = Array([Point2f(SW.getCartesian(R)) for R in SW.getSitesFromPlaquette(P)] )
-    # scatter(ri)
-    fig = Figure()
-    ax = Axis(fig[1,1],aspect = 1)
-    scatter!(ax,ri,markersize = collect(5 .+ 3 .* eachindex(ri)))
-    fig
-end
-##
-function isInLBox(R,L)
-    r = SW.getCartesian(R)
-    -L <= r[1] <= L && -L <= r[2] <= L
-end
-
-function scatterRvecs!(ax,RV,Basis;kwargs...)
-    NU = Basis.NUnique
-    ri = [Point2f(getCartesian(R,Basis)) for R in RV]
-    cols(R) = R.b == 1 ? :red : :black
-    msize(R) = R.b == 1 ? 13 : 10
-    
-    scatter!(ax,ri,markersize = msize.(RV),color = cols.(RV);kwargs...)
-end
-
-function isOnBorder(R::Rvec_2D,L)
-    r = getCartesian(R,SW.Basis)
-    abs(r[1]) == L || abs(r[2]) == L
-end
-
-let 
-    # sites = SW.generateLattice(10)
-    sites = generateLUnitCells(4,SW.Basis)
-    filter!(x-> isInLBox(x,2),sites )
-    fig = Figure()
-    ax = Axis(fig[1,1],aspect = 1)
-    scatterRvecs!(ax,sites,SW.Basis)
-    fig
-end
 ## plot 70 combinations
 
 AllAllowedConfigs = SW.getAllGS(0.5)
@@ -75,7 +26,8 @@ end
 ##
 using CairoMakie.Makie.ColorSchemes
 function plotSpinConfig!(ax,S;kwargs...)
-    heatmap!(ax,Array(S.Mat),colorrange = (-S.S,S.S),color = :RdBu_11)
+    hm = heatmap!(ax,Array(S.Mat),colorrange = (-S.S,S.S),color = :RdBu_11)
+    Color
 end
 function plotSpinConfig(S;kwargs...) 
     fig = Figure()
@@ -83,11 +35,17 @@ function plotSpinConfig(S;kwargs...)
     plotSpinConfig!(ax,S;kwargs...)
     return fig
 end
+function drawPlaquette!(ax,(i,j);kwargs...)
+    points = Point2f.([(i-1,j-1),(i+1,j-1),(i+1,j+1),(i-1,j+1),(i-1,j-1)])
+    lines!(ax,points;linestyle = :dash,color = :white,kwargs...)
+end
+drawPlaquette!((i,j);kwargs...) = drawPlaquette!(current_axis(),(i,j);kwargs...)
 ##
+
 SpinConfig = let 
     fig = Figure()
     ax = Axis(fig[1,1],aspect = 1,backgroundcolor = :grey)
-    S = SW.SpinConfig2(-0.5ones(20,20),1/2)
+    S = SW.SpinConfig(-0.5ones(20,20),1/2)
     S[10,10] = 0.5
     S
 end
@@ -96,8 +54,9 @@ plotSpinConfig(SpinConfig)
 ##
 
 AFM = let 
-    S = SW.SpinConfig2([0.5*(-1)^(i+j) for i in 1:40,j in 1:40],1/2)
+    S = SW.SpinConfig([0.5*(-1)^(i+j) for i in 1:40,j in 1:40],1/2)
 end
+
 SW.PlaquetteOperatorSave!(AFM,5,5)
 plotSpinConfig(AFM)
 ##
@@ -118,12 +77,12 @@ function getStairCase(L)
         end
     end
 
-    S = SW.SpinConfig(Mat)
+    S = SW.SpinConfig(Mat,1/2)
 
 end
 
 function getApplicablePlaquettes(SpinConfig)
-    plaqPos = [R for (R,S) in SpinConfig.Spins if SW.CanApplyPlaquette(SpinConfig,R)]
+    plaqPos = [(i,j) for i in axes(SpinConfig.Mat,1) for j in axes(SpinConfig.Mat,2) if SW.CanApplyPlaquette(SpinConfig,i,j)]
     return plaqPos
 end
 
@@ -132,7 +91,8 @@ let
     fig = plotSpinConfig(StairCase,markersize = 23)
     ax = current_axis()
     plaqs = getApplicablePlaquettes(StairCase)
-    points = Point2f.(getCartesian.(plaqs,Ref(SW.Basis)))
+    return plaqs
+    points = Point2f.(plaqs)
     scatter!(ax,points,markersize = 13,color = :red)
     fig
 end
@@ -147,3 +107,19 @@ let
     plotSpinConfig(StairCase,markersize = 23)
 end
 ##
+
+function generateRandomGroundState(L,S=1/2;maxiter = 10000)
+    AllowedPlaquettes = SW.getAllGS(S)
+    Mat = rand(eachindex(AllowedPlaquettes),L,L)
+    SC = SW.SpinConfig(Mat,S)
+    sites_i = rand(1:L,maxiter)
+    sites_j = rand(1:L,maxiter)
+
+    for (i,j) in zip(sites_i,sites_j)
+        P = SW.getPlaquette(SC,i,j)
+        P .= -P
+        SW.fulFillsConstraint(SC) && return SC
+    end
+    return nothing
+    error("Could not find a ground state")
+end
