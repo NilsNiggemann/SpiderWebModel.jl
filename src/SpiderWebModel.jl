@@ -10,7 +10,6 @@ module SpiderWebModel
 
     Base.getindex(S::SpinConfig,i,j) = getindex(S.Mat,i,j)
     Base.setindex!(S::SpinConfig,x,i,j) = setindex!(S.Mat,x,i,j)
-    Base.setindex!(::SpinConfig,::Missing,i,j) = nothing
     Base.iterate(S::SpinConfig,i) = iterate(S.Mat,i)
     Base.iterate(S::SpinConfig) = iterate(S.Mat)
 
@@ -25,12 +24,13 @@ module SpiderWebModel
         return sum(sgn*S for (sgn,S) in zip(cons,sites))
     end
 
-
     """Order in which the spins are stored in the plaquette corresponding to the numbering convention"""
-    plaquetteOrder(S1,S2,S3,S4,S5,S6,S7,S8) = SMatrix{3,3}(S4,S5,S6,S3,missing,S7,S2,S1,S8)
+    plaquetteOrder(S1,S2,S3,S4,S5,S6,S7,S8,S9) = SMatrix{3,3}(S4,S5,S6,S3,S9,S7,S2,S1,S8)
+
+    plaquetteOrder(S1,S2,S3,S4,S5,S6,S7,S8) = SMatrix{3,3}(S4,S5,S6,S3,NaN,S7,S2,S1,S8)
     plaquetteOrder(x) = plaquetteOrder(x...)
 
-    function plaquette(sites::NTuple{8,T},S=1/2) where T
+    function plaquette(sites,S=1/2)
         Mat = SMatrix{3,3}(plaquetteOrder(sites))
         return SpinConfig(Mat,S)
     end
@@ -55,13 +55,21 @@ module SpiderWebModel
     """generates all possible combinations 0,1 of the 8 spins in a plaquette """
 
     function getAllGS(S)
-        allCombs = [plaquette((i,j,k,l,m,n,o,p)) for i in -S:S for j in -S:S for k in -S:S for l in -S:S for m in -S:S for n in -S:S for o in -S:S for p in -S:S if constraint((i,j,k,l,m,n,o,p)) == 0]
+        allCombs = [plaquette((i,j,k,l,m,n,o,p),S) for i in -S:S for j in -S:S for k in -S:S for l in -S:S for m in -S:S for n in -S:S for o in -S:S for p in -S:S if constraint((i,j,k,l,m,n,o,p)) == 0]
         return allCombs
     end
 
-    const ALLGS_S12 = getAllGS(0.5)
+    function getAllGS_noMissing(S)
+        allCombs = [plaquette((i,j,k,l,m,n,o,p,q),S) for i in -S:S for j in -S:S for k in -S:S for l in -S:S for m in -S:S for n in -S:S for o in -S:S for p in -S:S for q in -S:S if constraint((i,j,k,l,m,n,o,p)) == 0]
+        return allCombs
+    end
 
-    _isZeroOrMissing(x) = x === missing || x == 0
+
+    const ALLGS_S12 = getAllGS(0.5)
+    const ALLGS_S12_NOMISSING = getAllGS_noMissing(0.5)
+
+    _isZeroOrNaN(x) = x == 0 || isnan(x)
+    # _isZeroOrMissing(x) = x === missing || x == 0
 
 
     function getCorrel(Conf::SpinConfig)
@@ -97,7 +105,7 @@ module SpiderWebModel
     """Assumes that constraint are only defined on every alternating site, starting from the first index"""
     function fulFillsConstraint(Conf::SpinConfig;verbose = false)
         for x in Conf.Mat
-            ismissing(x) && continue
+            isnan(x) && continue
             if abs(x) > Conf.S 
                 verbose && println("Spin larger than S")
                 return false
@@ -109,7 +117,7 @@ module SpiderWebModel
             plaquetteIsInBounds(Conf,i,j) || continue
             P = getPlaquette(Conf,i,j)
             c = constraint(P)
-            ismissing(c) && continue
+            isnan(c) && continue
 
             if c ≠ 0
                 verbose && println("Constraint not fulfilled at i,j = $((i,j))" )
@@ -186,40 +194,28 @@ module SpiderWebModel
         return plaqPos
     end
     
-    # function sumNonMissing(sites)
-    #     cons = constraintSigns()
-    #     return sum(sgn*S for (sgn,S) in zip(cons,sites) if !ismissing(S))
-    # end
-
-    # function fillMissingConstraint!(sites)
-    #     numMiss = count(ismissing,Sites)
-    #     g
-    #     return Conf
-    # end
-
-    
     function canTileUpRight(T1,T2)
         T1´ = T1[1:2,2:3]
         T2´ = T2[2:3,1:2]
-        return all(_isZeroOrMissing,T1´-T2´)
+        return all(_isZeroOrNaN,T1´-T2´)
     end
     
     function canTileUpLeft(T1,T2)
         T1´ = T1[1:2,1:2]
         T2´ = T2[2:3,2:3]
-        return all(_isZeroOrMissing,T1´-T2´)
+        return all(_isZeroOrNaN,T1´-T2´)
     end
     
     function canTileDownRight(T1,T2)
         T1´ = T1[2:3,2:3]
         T2´ = T2[1:2,1:2]
-        return all(_isZeroOrMissing,T1´-T2´)
+        return all(_isZeroOrNaN,T1´-T2´)
     end
 
     function canTileDownLeft(T1,T2)
         T1´ = T1[2:3,1:2]
         T2´ = T2[1:2,2:3]
-        return all(_isZeroOrMissing,T1´-T2´)
+        return all(_isZeroOrNaN,T1´-T2´)
     end
     
     function getTilings(T1,AllTilings)
@@ -231,19 +227,22 @@ module SpiderWebModel
     end
 
     function canPlaceTile(P::SpinConfig,T1)
-        return all(_isZeroOrMissing, p -t for (p,t) in zip(P,T1))
+        return all(_isZeroOrNaN, p -t for (p,t) in zip(P,T1))
     end
-
-    function setTile!(S::SpinConfig,i::Integer,j::Integer,T1)
-        P = getPlaquette(S,i,j)
+    
+    function TileFulFillsConstraint(S::SpinConfig,P,T1)
+        OldP = SMatrix{3,3}(P)
         P .= T1
+        cons = fulFillsConstraint(S)
+        P .= OldP
+        return cons
     end
 
-    getPossibleTiles(P,PlaquetteList) = [i for (i,t) in enumerate(PlaquetteList) if canPlaceTile(P,t)]
+    getPossibleTiles(P,PlaquetteList,Config) = [i for (i,t) in enumerate(PlaquetteList) if canPlaceTile(P,t) && TileFulFillsConstraint(Config,P,t)]
             
-    function getRanTileNum!(randBuffer,tiles) 
+    function getRanNum!(randBuffer,Nums) 
         isempty(randBuffer) && error("too many steps")
-        maxIndex = length(tiles)
+        maxIndex = length(Nums)
 
         ranNumber = pop!(randBuffer)
         idx = ( (ranNumber - 1) % maxIndex) +1
@@ -251,67 +250,72 @@ module SpiderWebModel
             error("idx == $idx for ranNumber = $ranNumber and maxIndex = $maxIndex")
         end
 
-        return tiles[idx]
+        return Nums[idx]
     end
 
-    function constructSpinConfigFromPlaquettes(LPx,LPy,PlaquetteList;randBuffSize=1_000_000,maxNumTries = 10_000,deleteRows = 4, randBuffer = rand(1:70,randBuffSize)
-        )
+    function constructSpinConfigFromPlaquettes(LPx,LPy,PlaquetteList;maxNumTries = 10_000,triesDeleteRow = 10)
+
         Lx = 2*LPx+1
         Ly = 2*LPy+1
-    
-        Mat = Matrix{Union{Missing,Float64}}(undef,Lx,Ly)
-        fill!(Mat,missing)
-    
+        Mat = fill(NaN,Lx,Ly)
+        
         El = PlaquetteList[begin]
-        P = SpinConfig(Mat,El.S)
-    
+        P = SW.SpinConfig(Mat,El.S)
         j = 2
+        it = 0
         while j <= Ly-1
             i = 2
-            while i <= Lx-1 
+    
             
-                Pij = getPlaquette(P,i,j)
+            tries = 0
+            while i <= Lx-1 
                 
-                tileNums = getPossibleTiles(Pij,PlaquetteList)
+                Pij = SW.getPlaquette(P,i,j)
+                it+=1
+                tileNums = SW.getPossibleTiles(Pij,PlaquetteList,P)
+                if it > maxNumTries
+                    println((i,j))
+                    @warn "max Iterations reached" 
+                    if isempty(tileNums)
+                        @warn "no possible tiles"
+                    end
+                    return P
+                end
                 
                 if isempty(tileNums)
-                    jmin = max(j-deleteRows,2)
-                    
-                    Mat[:,jmin:end] .= missing
-                    j = jmin
-                    i = 2
+                    tries += 1
+    
+                    if tries > triesDeleteRow
+                        jdelete = t(j)
+                        
+                        
+                        P[:,jdelete:end] .= NaN
+                        
+                        j = max(jdelete,2)
+                        i = 2
+                        tries = 0
+                    else
+    
+                        P[:,j:end] .= NaN
+                        i = 2
+                    end
+    
                     continue
                 end
-                T = PlaquetteList[getRanTileNum!(randBuffer,tileNums)]
+                T = PlaquetteList[tileNums[rand(eachindex(tileNums))]]
                 Pij .= T
-    
                 i += 2
             end
             j += 2
-    
         end
-        @assert fulFillsConstraint(P,verbose=true) "initial configuration does not fulfill constraint"
-
-        OldState = copy(P)
-        for i in 1:randBuffSize
-            i % 100 == 0 && println("i = $i")
-            randPlaqlist = shuffle(PlaquetteList)
-            fillMissing!(P,randPlaqlist)
-            if !any(ismissing,P) 
-                @assert fulFillsConstraint(P,verbose = true) "constraint not fulfilled"
-                return P
-            end
-            P.Mat .= OldState.Mat
-        end
-
-        fulFillsConstraint(P,verbose = true) || warn("constraint not fulfilled")
+        @info "converged" it
+        @assert SW.fulFillsConstraint(P,verbose=true) "initial configuration does not fulfill constraint"
         return P
     end
 
     function fillMissing!(P::SpinConfig,PlaquetteList)
     
-        OldPij = Matrix{Union{Missing,Float64}}(undef,3,3)
-        fill!(OldPij,missing)
+        OldPij = fill(NaN,3,3)
         Lx,Ly = size(P.Mat)
         for i in 3:2:Lx-2, j in 3:2:Ly-2
 
@@ -322,11 +326,11 @@ module SpiderWebModel
             for T in PlaquetteList
                 
                 if canPlaceTile(Pij,T)
-                    Pij.Mat .= T
+                    Pij .= T
                     if fulFillsConstraint(P)
                         break
                     else 
-                        Pij.Mat .= OldPij
+                        Pij .= OldPij
                     end
                 end
             end

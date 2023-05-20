@@ -4,6 +4,7 @@ using SpiderWebModel.StaticArrays
 ## plot 70 combinations
 
 AllAllowedConfigs = SW.getAllGS(0.5)
+AllConfigs = SW.getAllGS_noMissing(0.5)
 ##
 let 
     sizex = Int(7)
@@ -26,20 +27,37 @@ end
 ##
 using CairoMakie.Makie.ColorSchemes
 function plotSpinConfig!(ax,S::SW.SpinConfig;kwargs...)
-    vals = filter!(!ismissing,unique(S.Mat))
-
+    vals = filter!(x-> !ismissing(x) && !isnan(x),unique(S.Mat))
+    isempty(vals) && (vals = [-1,1])
     Amin = min(minimum(vals),-S.S)
     Amax = max(maximum(vals),S.S)
     us = Amin:Amax
     hm = heatmap!(ax,Array(S.Mat),colorrange = (Amin,Amax),colormap = cgrad(:linear_bgy_10_95_c74_n256, length(us), categorical = true))
+    translate!(hm, 0, 0, -100)
     return hm
 end
 
 function plotSpinConfig(S;kwargs...) 
     fig = Figure()
-    ax = Axis(fig[1,1],aspect = DataAspect(),backgroundcolor = :grey)
+    ax = Axis(fig[1,1],
+    aspect = DataAspect(),
+    backgroundcolor = :grey,
+    # xminorgridwidth = 2,
+    # yminorgridwidth = 2,
+    xminorgridcolor = :black,
+    yminorgridcolor = :black,
+    xminorgridvisible = true,
+    yminorgridvisible = true,
+    xgridvisible = false,
+    ygridvisible = false,
+    # xticks = (axes(S,1),string.(axes(S,1))) ,
+    # yticks = (axes(S,2),string.(axes(S,2))) ,
+    xminorticks = 0.5 .+ axes(S,1),
+    yminorticks = 0.5 .+ axes(S,2),
+    )
     hm = plotSpinConfig!(ax,S;kwargs...)
-    us = filter!(!ismissing,unique(S))
+    us = filter!(x -> !ismissing(x) && !isnan(x) ,unique(S))
+    isempty(us) && (us = [-1,1])
     Colorbar(fig[1,2],hm,ticks = us)
     return fig
 end
@@ -128,11 +146,10 @@ function generateRandomGroundState(L,S=1/2;maxiter = 1_000_000)
 end
 generateRandomGroundState(10)
 ##
-S1 = SW.constructSpinConfigFromPlaquettes(4,4,AllAllowedConfigs)
+S1 = SW.constructSpinConfigFromPlaquettes(6,6,SW.ALLGS_S12_NOMISSING)
+plotSpinConfig(S1)
 ##
-using FRGLatticeEvaluation
 
-##
 using FFTW
 
 """given a matrix S_ij return the correlator C_ij = <S_ij S_00>"""
@@ -173,48 +190,82 @@ end
 plotfft(AFM)
 
 ##
-function test(LPx,LPy,PlaquetteList;randBuffSize=1_000_000,maxNumTries = 10_000,deleteRows = 4, randBuffer = rand(1:70,randBuffSize)
-)
+function t(j)
+    if j <= 5
+        return 1
+    else
+        return j-2
+    end
+end
+t.(2:2:10)
+##
+function test(LPx,LPy,PlaquetteList;maxNumTries = 10_000,deleteRows = 1,triesDeleteRow = 10)
+
     Lx = 2*LPx+1
     Ly = 2*LPy+1
-
-    Mat = Matrix{Union{Missing,Float64}}(undef,Lx,Ly)
-    fill!(Mat,missing)
-
+    Mat = fill(NaN,Lx,Ly)
+    
     El = PlaquetteList[begin]
     P = SW.SpinConfig(Mat,El.S)
-
+    # OldPij = zeros(3,3)
     j = 2
+    it = 0
     while j <= Ly-1
         i = 2
-        while i <= Lx-1 
+
         
-            Pij = SW.getPlaquette(P,i,j)
+        tries = 0
+        while i <= Lx-1 
             
-            tileNums = SW.getPossibleTiles(Pij,PlaquetteList)
+            Pij = SW.getPlaquette(P,i,j)
+            # OldPij .= Pij.Mat
+            it+=1
+            tileNums = SW.getPossibleTiles(Pij,PlaquetteList,P)
+            if it > maxNumTries
+                println((i,j))
+                @warn "max Iterations reached" 
+                if isempty(tileNums)
+                    @warn "no possible tiles"
+                end
+                return P
+            end
             
             if isempty(tileNums)
-                jmin = max(j-deleteRows,2)
-                
-                Mat[:,jmin:end] .= missing
-                j = jmin
-                i = 2
-                display(plotSpinConfig(P))
+                tries += 1
+
+                if tries > triesDeleteRow
+                    jdelete = t(j)
+                    
+                    
+                    P[:,jdelete:end] .= NaN
+                    
+                    j = max(jdelete,2)
+                    i = 2
+                    tries = 0
+                    # display(plotSpinConfig(P))
+                else
+
+                    P[:,j:end] .= NaN
+                    i = 2
+                    # display(plotSpinConfig(P))
+                end
+
                 continue
             end
-            T = PlaquetteList[SW.getRanTileNum!(randBuffer,tileNums)]
+            T = PlaquetteList[tileNums[rand(eachindex(tileNums))]]
             Pij .= T
-            display(plotSpinConfig(P))
-
             i += 2
+            # display(plotSpinConfig(P))
         end
         j += 2
-
     end
+    @info "converged" it
+    @assert SW.fulFillsConstraint(P,verbose=true) "initial configuration does not fulfill constraint"
     return P
-
 end
+
 ##
-randBuffer = rand(1:70,1_000_000)
+S1 =test(8,8,SW.ALLGS_S12_NOMISSING;maxNumTries = 500_000)
+plotSpinConfig(S1)
 ##
-test(8,5,AllAllowedConfigs;randBuffer=copy(randBuffer))
+using FRGLatticeEvaluation
