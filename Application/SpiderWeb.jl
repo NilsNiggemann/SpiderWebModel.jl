@@ -33,6 +33,7 @@ function plotSpinConfig!(ax,S::SW.SpinConfig;kwargs...)
     Amax = max(maximum(vals),S.S)
     us = Amin:Amax
     hm = heatmap!(ax,Array(S.Mat),colorrange = (Amin,Amax),colormap = cgrad(:linear_bgy_10_95_c74_n256, length(us), categorical = true))
+
     translate!(hm, 0, 0, -100)
     return hm
 end
@@ -80,7 +81,7 @@ plotSpinConfig(SpinConfig)
 ##
 
 AFM = let 
-    S = SW.SpinConfig([0.5*(-1)^(i+j) for i in 1:40,j in 1:40],1/2)
+    S = SW.SpinConfig([0.5*(-1)^(i+j) for i in 1:100,j in 1:100],1/2)
 end
 
 SW.PlaquetteOperatorSave!(AFM,5,5)
@@ -146,9 +147,6 @@ function generateRandomGroundState(L,S=1/2;maxiter = 1_000_000)
 end
 generateRandomGroundState(10)
 ##
-S1 = SW.constructSpinConfigFromPlaquettes(6,6,SW.ALLGS_S12_NOMISSING)
-plotSpinConfig(S1)
-##
 
 using FFTW
 
@@ -189,83 +187,97 @@ function plotfft(Conf::SW.SpinConfig)
 end
 plotfft(AFM)
 
+
 ##
-function t(j)
-    if j <= 5
-        return 1
-    else
-        return j-2
-    end
+
+function getConfigs(Lx,Ly,numConfigs = 10)
+    S = fetch.([Threads.@spawn SW.constructSpinConfigFromPlaquettes(Lx,Ly,SW.ALLGS_S12_NOMISSING;maxNumTries = 500_000) for _ in 1:numConfigs])
+
+    filter!(x -> SW.fulFillsConstraint(x,verbose = false),S)
+    return S
 end
-t.(2:2:10)
+Confs = getConfigs(10,10,1000)
 ##
-function test(LPx,LPy,PlaquetteList;maxNumTries = 10_000,deleteRows = 1,triesDeleteRow = 10)
-
-    Lx = 2*LPx+1
-    Ly = 2*LPy+1
-    Mat = fill(NaN,Lx,Ly)
-    
-    El = PlaquetteList[begin]
-    P = SW.SpinConfig(Mat,El.S)
-    # OldPij = zeros(3,3)
-    j = 2
-    it = 0
-    while j <= Ly-1
-        i = 2
-
-        
-        tries = 0
-        while i <= Lx-1 
-            
-            Pij = SW.getPlaquette(P,i,j)
-            # OldPij .= Pij.Mat
-            it+=1
-            tileNums = SW.getPossibleTiles(Pij,PlaquetteList,P)
-            if it > maxNumTries
-                println((i,j))
-                @warn "max Iterations reached" 
-                if isempty(tileNums)
-                    @warn "no possible tiles"
-                end
-                return P
-            end
-            
-            if isempty(tileNums)
-                tries += 1
-
-                if tries > triesDeleteRow
-                    jdelete = t(j)
-                    
-                    
-                    P[:,jdelete:end] .= NaN
-                    
-                    j = max(jdelete,2)
-                    i = 2
-                    tries = 0
-                    # display(plotSpinConfig(P))
-                else
-
-                    P[:,j:end] .= NaN
-                    i = 2
-                    # display(plotSpinConfig(P))
-                end
-
-                continue
-            end
-            T = PlaquetteList[tileNums[rand(eachindex(tileNums))]]
-            Pij .= T
-            i += 2
-            # display(plotSpinConfig(P))
-        end
-        j += 2
+"""given a matrix, rotate it by 90 degrees"""
+function rotate(Mat)
+    Mat2 = zeros(size(Mat))
+    for i in axes(Mat,1)
+        row = Mat'[:,i]
+        Mat2[:,i] .= reverse(row)
     end
-    @info "converged" it
-    @assert SW.fulFillsConstraint(P,verbose=true) "initial configuration does not fulfill constraint"
-    return P
-end
+    return Mat2
 
-##
-S1 =test(8,8,SW.ALLGS_S12_NOMISSING;maxNumTries = 500_000)
-plotSpinConfig(S1)
+end
+function rotate(Mat,n)
+    if n == 0
+        return Mat
+    elseif n == 1
+        return rotate(Mat)
+    elseif n == 2
+        return Mat |> rotate |> rotate
+    elseif n == 3
+        return Mat |> rotate |> rotate |> rotate
+    end
+    error("n must be 0,1,2,3")
+end
+rotate(S::SW.SpinConfig,n) = SW.SpinConfig(rotate(S.Mat,n),S.S)
+
+function AllRots(Confs)
+    Confs2 = [rotate(c,n) for c in Confs for n in 0:3]
+    return Confs2
+end
 ##
 using FRGLatticeEvaluation
+using MakieHelpers
+function plotStructureFac(Confs)
+    Confs2 = AllRots(Confs)
+
+
+    Sij = SW.getSij(Confs2)
+    Rij = SW.getRij_vec(Confs2[1])
+
+    chik = FourierStruct(Sij,Rij,length(Sij))
+    kx = LinRange(0,2pi,80)
+    ky = LinRange(0,2pi,80)
+    chi = fetch.([Threads.@spawn chik(kx,ky) for kx in kx, ky in ky])
+    fig = Figure()
+    ax = Axis(fig[1,1],aspect = 1,xticks = PiTicks(),yticks = PiTicks())
+    heatmap!(ax,kx,ky,chi)
+    fig
+end
+plotStructureFac(Confs)
+##
+
+function generateFluctuations(StartConfig,maxiter = 500)
+
+    Configs = Set([copy(StartConfig),])
+    b1 = findOps(StartConfig)[1]
+    b3 = findOps(StartConfig)[3]
+    for i in 1:maxiter
+
+        Conf = copy(rand(Configs))
+
+        plaqs1 = SW.getApplicablePlaquettes(Conf,b1)
+        plaqs3 = SW.getApplicablePlaquettes(Conf,b3)
+        isempty(plaqs1) && isempty(plaqs3) && (@warn "no fluctuations possible"; break)
+
+        if !isempty(plaqs1)
+            rn2 = rand(eachindex(plaqs1))
+            pij = SW.getPlaquette(Conf,plaqs1[rn2]...)
+            pij .+= b1
+            push!(Configs,Conf)
+        end
+        if !isempty(plaqs3)
+            rn2 = rand(eachindex(plaqs3))
+            pij = SW.getPlaquette(Conf,plaqs3[rn2]...)
+            pij .+= b3
+            push!(Configs,Conf)
+        end
+    end
+    filter!(x -> SW.fulFillsConstraint(x,verbose = false),Configs)
+    return Configs
+end
+a = generateFluctuations(Confs[10],500)
+##
+@profview plotStructureFac(collect(a))
+# plotStructureFac([Confs[10]])

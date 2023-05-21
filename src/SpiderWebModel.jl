@@ -1,5 +1,5 @@
 module SpiderWebModel
-    using StaticArrays,Random
+    using StaticArrays,Random,Statistics
 
     import Base:size,getindex,setindex!,iterate,show,copy
 
@@ -253,6 +253,14 @@ module SpiderWebModel
         return Nums[idx]
     end
 
+    function t_delete(j)
+        if j <= 5
+            return 1
+        else
+            return j-2
+        end
+    end
+
     function constructSpinConfigFromPlaquettes(LPx,LPy,PlaquetteList;maxNumTries = 10_000,triesDeleteRow = 10)
 
         Lx = 2*LPx+1
@@ -260,7 +268,7 @@ module SpiderWebModel
         Mat = fill(NaN,Lx,Ly)
         
         El = PlaquetteList[begin]
-        P = SW.SpinConfig(Mat,El.S)
+        P = SpinConfig(Mat,El.S)
         j = 2
         it = 0
         while j <= Ly-1
@@ -270,9 +278,9 @@ module SpiderWebModel
             tries = 0
             while i <= Lx-1 
                 
-                Pij = SW.getPlaquette(P,i,j)
+                Pij = getPlaquette(P,i,j)
                 it+=1
-                tileNums = SW.getPossibleTiles(Pij,PlaquetteList,P)
+                tileNums = getPossibleTiles(Pij,PlaquetteList,P)
                 if it > maxNumTries
                     println((i,j))
                     @warn "max Iterations reached" 
@@ -286,7 +294,7 @@ module SpiderWebModel
                     tries += 1
     
                     if tries > triesDeleteRow
-                        jdelete = t(j)
+                        jdelete = t_delete(j)
                         
                         
                         P[:,jdelete:end] .= NaN
@@ -308,8 +316,7 @@ module SpiderWebModel
             end
             j += 2
         end
-        @info "converged" it
-        @assert SW.fulFillsConstraint(P,verbose=true) "initial configuration does not fulfill constraint"
+        @assert fulFillsConstraint(P,verbose=true) "initial configuration does not fulfill constraint"
         return P
     end
 
@@ -338,6 +345,18 @@ module SpiderWebModel
         end
         
         return P
+    end
+    function getRij_vec(Config::SpinConfig)
+        rij = reshape([float(SVector(Tuple(ij))) for ij in CartesianIndices(Config.Mat)],length(Config))
+        return [ri - rj for ri in rij for rj in rij]
+    end
+
+    function getSij(Configs::AbstractVector{<:SpinConfig},i,j)
+        return mean(c[i]*c[j] for c in Configs)
+    end
+
+    function getSij(Configs::AbstractVector{<:SpinConfig})
+        return [getSij(Configs,i,j) for i in eachindex(Configs[1]) for j in eachindex(Configs[1])]
     end
 
 end # module SpiderWebModel

@@ -2,7 +2,7 @@
 
 julia_version = "1.9.0"
 manifest_format = "2.0"
-project_hash = "b48143138dae8bf91affd95c5c0521033dc6637d"
+project_hash = "81804522681abbe67e691fbae381ee07d5d2390b"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -766,6 +766,12 @@ git-tree-sha1 = "9926529455a331ed73c19ff06d16906737a876ed"
 uuid = "20f20a25-4f0e-4fdf-b5d1-57303727442b"
 version = "0.6.3"
 
+[[deps.MakieHelpers]]
+deps = ["Makie", "MakieCore"]
+git-tree-sha1 = "fc5d7f926332d951fa53e5e6928187486ec694cb"
+uuid = "769ed66a-a1e3-4c16-885f-a5b16fb973c2"
+version = "0.2.5"
+
 [[deps.ManualMemory]]
 git-tree-sha1 = "bcaef4fc7a0cfe2cba636d84cda54b5e4e4ca3cd"
 uuid = "d125e4d3-2237-4719-b19c-fa641b8a4667"
@@ -1196,7 +1202,7 @@ weakdeps = ["ChainRulesCore"]
     SpecialFunctionsChainRulesCoreExt = "ChainRulesCore"
 
 [[deps.SpiderWebModel]]
-deps = ["Random", "StaticArrays", "Test"]
+deps = ["Random", "StaticArrays", "Statistics", "Test"]
 path = ".."
 uuid = "8e1b84da-b1d7-4311-a21b-52324f990117"
 version = "0.1.0"
