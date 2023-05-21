@@ -237,21 +237,7 @@ module SpiderWebModel
         P .= OldP
         return cons
     end
-
     getPossibleTiles(P,PlaquetteList,Config) = [i for (i,t) in enumerate(PlaquetteList) if canPlaceTile(P,t) && TileFulFillsConstraint(Config,P,t)]
-            
-    function getRanNum!(randBuffer,Nums) 
-        isempty(randBuffer) && error("too many steps")
-        maxIndex = length(Nums)
-
-        ranNumber = pop!(randBuffer)
-        idx = ( (ranNumber - 1) % maxIndex) +1
-        if idx == 0 || idx > maxIndex
-            error("idx == $idx for ranNumber = $ranNumber and maxIndex = $maxIndex")
-        end
-
-        return Nums[idx]
-    end
 
     function t_delete(j)
         if j <= 5
@@ -260,8 +246,7 @@ module SpiderWebModel
             return j-2
         end
     end
-
-    function constructSpinConfigFromPlaquettes(LPx,LPy,PlaquetteList;maxNumTries = 10_000,triesDeleteRow = 10)
+    function constructSpinConfigFromPlaquettes_old(LPx,LPy,PlaquetteList;maxNumTries = 10_000,triesDeleteRow = 10)
 
         Lx = 2*LPx+1
         Ly = 2*LPy+1
@@ -320,6 +305,72 @@ module SpiderWebModel
         return P
     end
 
+
+    getFittingTiles(P,PlaquetteList) = [i for (i,t) in enumerate(PlaquetteList) if canPlaceTile(P,t)]
+
+    function constructSpinConfigFromPlaquettes(LPx,LPy,PlaquetteList;maxNumTries = 10_000,triesDeleteRow = 10,deleteRows = 2)
+
+        Lx = 2*LPx+1
+        Ly = 2*LPy+1
+        Mat = fill(NaN,Lx,Ly)
+        
+        El = PlaquetteList[begin]
+        P = SpinConfig(Mat,El.S)
+        j = 2
+        it = 0
+        i_start(j) = 2 + isodd(j)
+    
+        while j <= Ly -1
+            i = i_start(j)
+    
+            tries = 0
+            while i <= Lx - 1
+    
+                Pij = getPlaquette(P,i,j)
+                it+=1
+                tileNums = getFittingTiles(Pij,PlaquetteList)
+    
+                if it > maxNumTries
+                    @warn "max Iterations reached" 
+                    if isempty(tileNums)
+                        @warn "no possible tiles"
+                    end
+                    return P
+                end
+                
+                if isempty(tileNums)
+                    tries += 1
+    
+                    if  tries > triesDeleteRow
+                        jdel = max(j-deleteRows+1,1)
+                        P[:,jdel:end] .= NaN
+                        j = max(j-deleteRows,2)
+                        tries = 0
+                        i = i_start(j)
+                    # elseif tries < 3
+                    #     # P[:,j+1:end] .= NaN
+                    #     idel = max(i-2,i_start(j))
+                    #     P[idel:end,j+1:end] .= NaN
+                    #     i = idel
+                    else
+                        P[:,j+1:end] .= NaN
+                        i = i_start(j)
+                    end
+    
+                    continue
+                end
+                T = PlaquetteList[rand(tileNums)]
+                Pij .= T
+                i += 2
+            end
+            j += 1
+        end
+
+        @assert fulFillsConstraint(P,verbose=true) "initial configuration does not fulfill constraint"
+        return P
+    end
+
+
     function fillMissing!(P::SpinConfig,PlaquetteList)
     
         OldPij = fill(NaN,3,3)
@@ -346,6 +397,15 @@ module SpiderWebModel
         
         return P
     end
+
+    getR(ij::CartesianIndex{2}) = float(SA[ij[1],ij[2]])
+
+    function getRij_vec(Config::SpinConfig,i)
+        CI = CartesianIndices(Config)
+        ri = getR(CI[i])
+        rij = [ri - getR(j) for j in CI]
+    end    
+
     function getRij_vec(Config::SpinConfig)
         rij = reshape([float(SVector(Tuple(ij))) for ij in CartesianIndices(Config.Mat)],length(Config))
         return [ri - rj for ri in rij for rj in rij]
@@ -355,8 +415,13 @@ module SpiderWebModel
         return mean(c[i]*c[j] for c in Configs)
     end
 
-    function getSij(Configs::AbstractVector{<:SpinConfig})
-        return [getSij(Configs,i,j) for i in eachindex(Configs[1]) for j in eachindex(Configs[1])]
+    function getSij(Configs::AbstractVector{<:SpinConfig},i)
+        return fetch.([Threads.@spawn getSij(Configs,i,j) for j in eachindex(Configs[1])])
     end
+
+    function getSij(Configs::AbstractVector{<:SpinConfig})
+        return fetch.([Threads.@spawn getSij(Configs,i,j) for i in eachindex(Configs[1]) for j in eachindex(Configs[1])])
+    end
+
 
 end # module SpiderWebModel

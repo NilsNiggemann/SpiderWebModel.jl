@@ -148,55 +148,13 @@ end
 generateRandomGroundState(10)
 ##
 
-using FFTW
-
-"""given a matrix S_ij return the correlator C_ij = <S_ij S_00>"""
-function getSij!(Sij,Conf::SW.SpinConfig,i,j)
-    S = Conf.Mat
-    si = S[i,j]
-    for k in axes(S,1)
-        for l in axes(S,2)
-            Sij[k,l] = si*S[k,l]
-        end
-    end
-    return Sij
-end
-getSij(Conf::SW.SpinConfig,i,j) = getSij!(similar(Conf.Mat),Conf,i,j)
-function getfft(Conf::SW.SpinConfig)
-    Sij = similar(Conf.Mat)
-    Sq = zeros(ComplexF64,size(Conf.Mat))
-    for i in axes(Conf.Mat,1)
-        for j in axes(Conf.Mat,2)
-            i == j || continue
-            getSij!(Sij,Conf,i,j)
-            FT = fft(Sij)
-            Sq .+= FT
-        end
-    end
-    return real.(Sq)
-end
-
-function plotfft(Conf::SW.SpinConfig)
-    FT = getfft(Conf)
-
-    k = fftfreq(size(Conf.Mat,1))
-    fig = Figure()
-    ax = Axis(fig[1,1],aspect = 1)
-    heatmap!(ax,k,k,real(FT))
-    fig
-end
-plotfft(AFM)
-
-
-##
-
 function getConfigs(Lx,Ly,numConfigs = 10)
-    S = fetch.([Threads.@spawn SW.constructSpinConfigFromPlaquettes(Lx,Ly,SW.ALLGS_S12_NOMISSING;maxNumTries = 500_000) for _ in 1:numConfigs])
+    S = fetch.([Threads.@spawn SW.constructSpinConfigFromPlaquettes(Lx,Ly,SW.ALLGS_S12_NOMISSING;maxNumTries = 4_000_000) for _ in 1:numConfigs])
 
-    filter!(x -> SW.fulFillsConstraint(x,verbose = false),S)
+    filter!(x -> SW.fulFillsConstraint(x,verbose = false) && !any(isnan,x),S)
     return S
 end
-Confs = getConfigs(10,10,1000)
+Confs = getConfigs(22,22,150)
 ##
 """given a matrix, rotate it by 90 degrees"""
 function rotate(Mat)
@@ -226,17 +184,35 @@ function AllRots(Confs)
     Confs2 = [rotate(c,n) for c in Confs for n in 0:3]
     return Confs2
 end
+
+function randRots(Confs)
+    Confs2 = [rotate(c,rand(0:3)) for c in Confs]
+    return Confs2
+end
+
 ##
 using FRGLatticeEvaluation
 using MakieHelpers
 function plotStructureFac(Confs)
-    Confs2 = AllRots(Confs)
+    Confs2 = randRots(Confs)
 
-
-    Sij = SW.getSij(Confs2)
-    Rij = SW.getRij_vec(Confs2[1])
-
+    @time Sij = SW.getSij(Confs2)
+    @time Rij = SW.getRij_vec(Confs2[1])
     chik = FourierStruct(Sij,Rij,length(Sij))
+
+    # i = size(Confs2[1],1) ÷ 2
+    # j = size(Confs2[1],2) ÷ 2
+
+    # ij = LinearIndices(Confs2[1])[i,j]
+
+    # Sij = SW.getSij(Confs2,ij)[:]
+    # Sij2 = SW.getSij(Confs2,ij+1)[:]
+    # append!(Sij,Sij2)
+    # Rij = SW.getRij_vec(Confs2[1],ij)[:]
+    # Rij2 = SW.getRij_vec(Confs2[1],ij+1)[:]
+    # append!(Rij,Rij2)
+    # chik = FourierStruct(Sij,Rij,1)
+
     kx = LinRange(0,2pi,80)
     ky = LinRange(0,2pi,80)
     chi = fetch.([Threads.@spawn chik(kx,ky) for kx in kx, ky in ky])
@@ -281,3 +257,7 @@ a = generateFluctuations(Confs[10],500)
 ##
 @profview plotStructureFac(collect(a))
 # plotStructureFac([Confs[10]])
+
+# @profview a = [test(18,18,SW.ALLGS_S12_NOMISSING;maxNumTries = 1_0000_000,triesDeleteRow = 18,deleteRows = 2) for i in 1:100]
+@time a = [SW.constructSpinConfigFromPlaquettes(18,18,SW.ALLGS_S12_NOMISSING;maxNumTries = 1_0000_000,triesDeleteRow = 18,deleteRows = 2) for i in 1:100]
+filter!(x -> !any(isnan.(x.Mat)),a)
