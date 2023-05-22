@@ -193,12 +193,19 @@ end
 ##
 using FRGLatticeEvaluation
 using MakieHelpers
-function plotStructureFac(Confs)
-    Confs2 = randRots(Confs)
 
-    @time Sij = SW.getSij(Confs2)
-    @time Rij = SW.getRij_vec(Confs2[1])
+function getStructureFac(Confs)
+    
+    @time Sij = SW.getSij_fast(Confs)
+    @time Rij = SW.getRij_vec(Confs[1])
     chik = FourierStruct(Sij,Rij,length(Sij))
+end
+##
+function plotStructureFac(Confs)
+    Confs2 = Confs
+    # Confs2 = randRots(Confs)
+
+    chik = getStructureFac(Confs2)
 
     # i = size(Confs2[1],1) ÷ 2
     # j = size(Confs2[1],2) ÷ 2
@@ -261,3 +268,7 @@ a = generateFluctuations(Confs[10],500)
 # @profview a = [test(18,18,SW.ALLGS_S12_NOMISSING;maxNumTries = 1_0000_000,triesDeleteRow = 18,deleteRows = 2) for i in 1:100]
 @time a = [SW.constructSpinConfigFromPlaquettes(18,18,SW.ALLGS_S12_NOMISSING;maxNumTries = 1_0000_000,triesDeleteRow = 18,deleteRows = 2) for i in 1:100]
 filter!(x -> !any(isnan.(x.Mat)),a)
+##
+@time a = SW.constructSpinConfigFromPlaquettes_old(14,14,SW.ALLGS_S12_NOMISSING;maxNumTries = 1_000_000,triesDeleteRow = 20)
+
+

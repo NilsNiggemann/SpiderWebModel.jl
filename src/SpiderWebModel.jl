@@ -102,8 +102,7 @@ module SpiderWebModel
         return true
     end
 
-    """Assumes that constraint are only defined on every alternating site, starting from the first index"""
-    function fulFillsConstraint(Conf::SpinConfig;verbose = false)
+    function allSpinsInBounds(Conf::SpinConfig;verbose=false)
         for x in Conf.Mat
             isnan(x) && continue
             if abs(x) > Conf.S 
@@ -111,20 +110,32 @@ module SpiderWebModel
                 return false
             end
         end
+        return true
+    end
+
+    """Assumes that constraint are only defined on every alternating site, starting from the first index"""
+    function fulFillsConstraint_nonStrict(Conf::SpinConfig;verbose = false)
 
         for i in axes(Conf.Mat,1), j in axes(Conf.Mat,2)
             iseven(i+j) || continue 
             plaquetteIsInBounds(Conf,i,j) || continue
             P = getPlaquette(Conf,i,j)
+            any(isnan,P) && continue
+
             c = constraint(P)
-            isnan(c) && continue
 
             if c ≠ 0
                 verbose && println("Constraint not fulfilled at i,j = $((i,j))" )
                 return false
             end
         end
+        
         return true
+    end
+
+    function fulFillsConstraint(Conf::SpinConfig;verbose = false)
+        allSpinsInBounds(Conf;verbose) || return false
+        return fulFillsConstraint_nonStrict(Conf;verbose)
     end
 
     function CanApplyPlaquette(Conf::SpinConfig,i::Integer,j::Integer)
@@ -178,9 +189,10 @@ module SpiderWebModel
         a1 = axes(Conf.Mat,1)
         a2 = axes(Conf.Mat,2)
 
+        OPx,Opy = size(Op)
         for i in a1, j in a2
-            firstindex(a1)+2 <= i <= lastindex(a1)-2 || continue
-            firstindex(a2)+2 <= j <= lastindex(a2)-2 || continue
+            firstindex(a1)+Opx <= i <= lastindex(a1)-Opx || continue
+            firstindex(a2)+Opy <= j <= lastindex(a2)-Opy || continue
 
             if CanApply(Conf,Op,i,j)
                 return true
@@ -233,7 +245,7 @@ module SpiderWebModel
     function TileFulFillsConstraint(S::SpinConfig,P,T1)
         OldP = SMatrix{3,3}(P)
         P .= T1
-        cons = fulFillsConstraint(S)
+        cons = fulFillsConstraint_nonStrict(S)
         P .= OldP
         return cons
     end
@@ -265,7 +277,9 @@ module SpiderWebModel
                 
                 Pij = getPlaquette(P,i,j)
                 it+=1
-                tileNums = getPossibleTiles(Pij,PlaquetteList,P)
+                SubConf = SubConfig(P,i-3:i+3,j-3:j+3)
+                tileNums = getPossibleTiles(Pij,PlaquetteList,SubConf)
+                
                 if it > maxNumTries
                     println((i,j))
                     @warn "max Iterations reached" 
@@ -295,7 +309,7 @@ module SpiderWebModel
     
                     continue
                 end
-                T = PlaquetteList[tileNums[rand(eachindex(tileNums))]]
+                T = PlaquetteList[rand(tileNums)]
                 Pij .= T
                 i += 2
             end
@@ -305,6 +319,23 @@ module SpiderWebModel
         return P
     end
 
+    function getIdxInBounds(i,L)
+        return (i,j)
+    end
+
+    function SubConfig(S::SpinConfig,irange,jrange)
+        imin, imax = extrema(irange)
+
+        imin = max(imin,firstindex(S.Mat,1))
+        imax = min(imax,lastindex(S.Mat,1))
+
+        jmin, jmax = extrema(jrange)
+        jmin = max(jmin,firstindex(S.Mat,2))
+        jmax = min(jmax,lastindex(S.Mat,2))
+
+        Matview = @view S.Mat[imin:imax,jmin:jmax]
+        return SpinConfig(Matview,S.S)
+    end
 
     getFittingTiles(P,PlaquetteList) = [i for (i,t) in enumerate(PlaquetteList) if canPlaceTile(P,t)]
 
@@ -407,8 +438,8 @@ module SpiderWebModel
     end    
 
     function getRij_vec(Config::SpinConfig)
-        rij = reshape([float(SVector(Tuple(ij))) for ij in CartesianIndices(Config.Mat)],length(Config))
-        return [ri - rj for ri in rij for rj in rij]
+        Ri = reshape([float(SVector(Tuple(ij))) for ij in CartesianIndices(Config.Mat)],length(Config))
+        return [Ri[i] - Ri[j] for i in eachindex(Ri) for j in 1:i]
     end
 
     function getSij(Configs::AbstractVector{<:SpinConfig},i,j)
@@ -420,7 +451,8 @@ module SpiderWebModel
     end
 
     function getSij(Configs::AbstractVector{<:SpinConfig})
-        return fetch.([Threads.@spawn getSij(Configs,i,j) for i in eachindex(Configs[1]) for j in eachindex(Configs[1])])
+        fac(i,j) = ifelse(i==j,1,2)
+        return fetch.([Threads.@spawn fac(i,j)* getSij(Configs,i,j) for i in LinearIndices(Configs[1]) for j in 1:i])
     end
 
 
