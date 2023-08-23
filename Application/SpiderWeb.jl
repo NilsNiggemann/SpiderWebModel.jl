@@ -145,16 +145,16 @@ function generateRandomGroundState(L,S=1/2;maxiter = 1_000_000)
     return nothing
     error("Could not find a ground state")
 end
-generateRandomGroundState(10)
+generateRandomGroundState(5)
 ##
 
 function getConfigs(Lx,Ly,numConfigs = 10)
-    S = fetch.([Threads.@spawn SW.constructSpinConfigFromPlaquettes(Lx,Ly,SW.ALLGS_S12_NOMISSING;maxNumTries = 4_000_000) for _ in 1:numConfigs])
+    S = fetch.([Threads.@spawn SW.constructSpinConfigFromPlaquettes(Lx,Ly,SW.ALLGS_S12_NOMISSING;maxNumTries = 1_500_000) for _ in 1:numConfigs])
 
     filter!(x -> SW.fulFillsConstraint(x,verbose = false) && !any(isnan,x),S)
     return S
 end
-Confs = getConfigs(22,22,150)
+Confs = getConfigs(18,18,550)
 ##
 """given a matrix, rotate it by 90 degrees"""
 function rotate(Mat)
@@ -191,21 +191,24 @@ function randRots(Confs)
 end
 
 ##
-using FRGLatticeEvaluation
+using LatticeFFTs
 using MakieHelpers
-
+using Statistics
+using LatticeFFTs.Interpolations
+##
 function getStructureFac(Confs)
-    
-    @time Sij = SW.getSij_fast(Confs)
-    @time Rij = SW.getRij_vec(Confs[1])
-    chik = FourierStruct(Sij,Rij,length(Sij))
+    plan = getLatticeFFTPlan(Confs[1].Mat,0)
+
+    Sq = [getInterpolatedFFT(c.Mat,0,plan;Interpolation = BSpline(Constant())) for c in Confs]
 end
 ##
 function plotStructureFac(Confs)
     Confs2 = Confs
     # Confs2 = randRots(Confs)
 
-    chik = getStructureFac(Confs2)
+    Sq = getStructureFac(Confs2)
+    SSq(kx,ky) = mean(real(s(kx,ky)*s(-kx,-ky)) for s in Sq)
+    # SSq(kx,ky) = mean(real(s(kx,ky)) for s in Sq)
 
     # i = size(Confs2[1],1) ÷ 2
     # j = size(Confs2[1],2) ÷ 2
@@ -220,9 +223,9 @@ function plotStructureFac(Confs)
     # append!(Rij,Rij2)
     # chik = FourierStruct(Sij,Rij,1)
 
-    kx = LinRange(0,2pi,80)
-    ky = LinRange(0,2pi,80)
-    chi = fetch.([Threads.@spawn chik(kx,ky) for kx in kx, ky in ky])
+    kx = LinRange(0,2pi,200)
+    ky = LinRange(0,2pi,200)
+    chi = fetch.([Threads.@spawn SSq(kx,ky) for kx in kx, ky in ky])
     fig = Figure()
     ax = Axis(fig[1,1],aspect = 1,xticks = PiTicks(),yticks = PiTicks())
     heatmap!(ax,kx,ky,chi)

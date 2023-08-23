@@ -189,7 +189,7 @@ module SpiderWebModel
         a1 = axes(Conf.Mat,1)
         a2 = axes(Conf.Mat,2)
 
-        OPx,Opy = size(Op)
+        Opx,Opy = size(Op)
         for i in a1, j in a2
             firstindex(a1)+Opx <= i <= lastindex(a1)-Opx || continue
             firstindex(a2)+Opy <= j <= lastindex(a2)-Opy || continue
