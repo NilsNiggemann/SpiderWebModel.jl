@@ -111,8 +111,13 @@ end
 ##
 function findOps(Conf)
     r = -1.:1.
-    Allops = [SW.SpinConfig(SMatrix{3,3}(a,b,c,d,e,f,g,h,i),1/2) for a in r for b in r for c in r for d in r for e in r for f in r for g in r for h in r for i in r]
-    filter!(x ->SW.CanApplyAnywhere(Conf,x),Allops)
+    ops(a,b,c,d,e,f,g,h,i) = SW.SpinConfig(SMatrix{3,3,Float64,9}(a,b,c,d,e,f,g,h,i),1/2)
+    it = Iterators.product(r,r,r,r,r,r,r,r,r)
+
+    Allops = [ops(a,b,c,d,e,f,g,h,i) for (a,b,c,d,e,f,g,h,i) in it]
+    
+    # return reshape(Allops,length(Allops))
+    filter!(x ->SW.CanApplyAnywhere(Conf,x),reshape(Allops,length(Allops)))
     return Allops
 end
 ##
@@ -122,10 +127,13 @@ let
     StairCase = getStairCase(15)
     b = findOps(StairCase)
     plaqs = SW.getApplicablePlaquettes(StairCase,b[1])
+    plaqs2 = SW.getApplicablePlaquettes(StairCase,b[3])
     fig = plotSpinConfig(StairCase,markersize = 23)
     ax = current_axis()
     points = Point2f.(plaqs)
+    points2 = Point2f.(plaqs2)
     scatter!(ax,points,markersize = 13,color = :red)
+    scatter!(ax,points2,markersize = 13,color = :red)
     fig
 end
 ##
@@ -148,13 +156,13 @@ end
 generateRandomGroundState(5)
 ##
 
-function getConfigs(Lx,Ly,numConfigs = 10)
-    S = fetch.([Threads.@spawn SW.constructSpinConfigFromPlaquettes(Lx,Ly,SW.ALLGS_S12_NOMISSING;maxNumTries = 1_500_000) for _ in 1:numConfigs])
+function getConfigs(Lx,Ly,numConfigs = 10;kwargs...)
+    S = fetch.([Threads.@spawn SW.constructSpinConfigFromPlaquettes(Lx,Ly,SW.ALLGS_S12_NOMISSING;maxNumTries = 1_500_000,kwargs...) for _ in 1:numConfigs])
 
     filter!(x -> SW.fulFillsConstraint(x,verbose = false) && !any(isnan,x),S)
     return S
 end
-Confs = getConfigs(18,18,550)
+Confs = append!(getConfigs(24,24,100),getConfigs(24,24,100,rightToLeft=true))
 ##
 """given a matrix, rotate it by 90 degrees"""
 function rotate(Mat)
@@ -223,8 +231,8 @@ function plotStructureFac(Confs)
     # append!(Rij,Rij2)
     # chik = FourierStruct(Sij,Rij,1)
 
-    kx = LinRange(0,2pi,200)
-    ky = LinRange(0,2pi,200)
+    kx = LinRange(-0,2pi,200)
+    ky = LinRange(-0,2pi,200)
     chi = fetch.([Threads.@spawn SSq(kx,ky) for kx in kx, ky in ky])
     fig = Figure()
     ax = Axis(fig[1,1],aspect = 1,xticks = PiTicks(),yticks = PiTicks())
@@ -263,15 +271,47 @@ function generateFluctuations(StartConfig,maxiter = 500)
     filter!(x -> SW.fulFillsConstraint(x,verbose = false),Configs)
     return Configs
 end
-a = generateFluctuations(Confs[10],500)
+a = generateFluctuations(getStairCase(16),500)
 ##
-@profview plotStructureFac(collect(a))
+plotStructureFac(collect(a))
+##
 # plotStructureFac([Confs[10]])
+using OrderedCollections
+function generateAllFluctuations(StartConfig,operator = findOps(StartConfig)[1];maxiter = 500)
 
-# @profview a = [test(18,18,SW.ALLGS_S12_NOMISSING;maxNumTries = 1_0000_000,triesDeleteRow = 18,deleteRows = 2) for i in 1:100]
-@time a = [SW.constructSpinConfigFromPlaquettes(18,18,SW.ALLGS_S12_NOMISSING;maxNumTries = 1_0000_000,triesDeleteRow = 18,deleteRows = 2) for i in 1:100]
-filter!(x -> !any(isnan.(x.Mat)),a)
+    Configs = [[copy(StartConfig)]]
+    uniqeConfs = Set([copy(StartConfig)])
+    for iter in 1:maxiter-1
+        Confs = Configs[iter]
+        newconf = empty(Confs)
+        for Conf in Confs
+            plaqs = SW.getApplicablePlaquettes(Conf,operator)
+            # isempty(plaqs) && (@warn "no fluctuations possible"; break)
+            
+            for p in plaqs
+                Conf2 = copy(Conf)
+                pij = SW.getPlaquette(Conf2,p...)
+                pij .+= operator
+                if Conf2 ∉ uniqeConfs
+                    push!(newconf,Conf2)
+                    push!(uniqeConfs,Conf2)
+                end
+            end
+            if isempty(newconf) 
+                @info "" length(uniqeConfs)
+                return Configs,uniqeConfs
+            end
+            # @assert i1 == i2 "i1 = $i1, i2 = $i2"
+        end
+        # @info "" length(newconf) length(uniqeConfs)
+        push!(Configs,newconf)
+    end
+    # filter!(x -> SW.fulFillsConstraint(x,verbose = false),Configs)
+    # @assert all(SW.fulFillsConstraint.(Configs,verbose = true))
+    @warn "max iterations reached" length(uniqeConfs)
+    return Configs,uniqeConfs
+end
 ##
-@time a = SW.constructSpinConfigFromPlaquettes_old(14,14,SW.ALLGS_S12_NOMISSING;maxNumTries = 1_000_000,triesDeleteRow = 20)
-
-
+a,ua = generateAllFluctuations(getStairCase(20),maxiter=3)
+##
+plotSpinConfig(a[5][2])

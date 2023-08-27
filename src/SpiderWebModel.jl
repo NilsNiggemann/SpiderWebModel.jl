@@ -339,7 +339,9 @@ module SpiderWebModel
 
     getFittingTiles(P,PlaquetteList) = [i for (i,t) in enumerate(PlaquetteList) if canPlaceTile(P,t)]
 
-    function constructSpinConfigFromPlaquettes(LPx,LPy,PlaquetteList;maxNumTries = 10_000,triesDeleteRow = 10,deleteRows = 2)
+    mapRightToLeft(i,L) = L-i+1
+
+    function constructSpinConfigFromPlaquettes(LPx,LPy,PlaquetteList;maxNumTries = 10_000,triesDeleteRow = 10,deleteRows = 2,rightToLeft = false)
 
         Lx = 2*LPx+1
         Ly = 2*LPy+1
@@ -356,8 +358,9 @@ module SpiderWebModel
     
             tries = 0
             while i <= Lx - 1
-    
-                Pij = getPlaquette(P,i,j)
+                i´ = rightToLeft ? mapRightToLeft(i,Lx) : i
+
+                Pij = getPlaquette(P,i´,j)
                 it+=1
                 tileNums = getFittingTiles(Pij,PlaquetteList)
     
@@ -400,7 +403,6 @@ module SpiderWebModel
         @assert fulFillsConstraint(P,verbose=true) "initial configuration does not fulfill constraint"
         return P
     end
-
 
     function fillMissing!(P::SpinConfig,PlaquetteList)
     
