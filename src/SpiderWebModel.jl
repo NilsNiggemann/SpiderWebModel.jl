@@ -495,8 +495,10 @@ module SpiderWebModel
         return coords
     end
 
-    ydirecPath(LPx,LPy) = [(i,j) for i in 1:2LPx+1 for j in 1:2LPy+1 if iseven(i+j)]
-    xdirecPath(LPx,LPy) = [(i,j) for j in 1:2LPy+1 for i in 1:2LPx+1 if iseven(i+j) ]
+    xdirecPath(LPx,LPy=LPx) = [(i,j) for j in 1:2LPy+1 for i in 1:2LPx+1 if iseven(i+j) ]
+    xdirecPathReverse(LPx,LPy=LPx) = [(i,j) for j in 1:2LPy+1 for i in 2LPx+1:-1:1 if iseven(i+j) ]
+    ydirecPath(LPx,LPy=LPx) = [(i,j) for i in 1:2LPx+1 for j in 1:2LPy+1 if iseven(i+j)]
+    ydirecPathReverse(LPx,LPy=LPx) = [(i,j) for i in 1:2LPx+1 for j in 2LPy+1:-1:1 if iseven(i+j)]
 
     function constructConfigPath(LPx,LPy,PlaquetteList,
         path = xdirecPath(LPx,LPy);
@@ -545,7 +547,6 @@ module SpiderWebModel
             Pij = getPlaquette(P,i,j)
             tileNums = getFittingTiles(Pij,PlaquetteList)
             if isempty(tileNums)
-                @info "resetting" length(tilingHistory)
                 deleteat!(tilingHistory,max(1,iter-deleteSteps):iter)
                 iter = lastindex(tilingHistory)
                 resetFromCheckpoint!(P,iter)
@@ -556,7 +557,12 @@ module SpiderWebModel
             addTile!(Pij,T)
             push!(tilingHistory,iT)
             
-        end
+        # end
+        # P.Mat .= NaN
+
+        # confs = [copy(applyStep!(P,i)) for i in eachindex(tilingHistory)]
+        # @assert fulFillsConstraint(P,verbose=true) "initial configuration does not fulfill constraint"
+        # return confs
         return P
     end
 
