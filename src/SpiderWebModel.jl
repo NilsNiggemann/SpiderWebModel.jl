@@ -71,6 +71,14 @@ module SpiderWebModel
     _isZeroOrNaN(x) = x == 0 || isnan(x)
     # _isZeroOrMissing(x) = x === missing || x == 0
 
+    function addTile!(Pij::SpinConfig,Tile::SpinConfig,)
+        for i in eachindex(Tile,Pij)
+            ti = Tile[i]
+            isnan(ti) && continue
+            Pij[i] = ti
+        end
+        return Pij
+    end
 
     function getCorrel(Conf::SpinConfig)
         S_ij = [si*sj for si in Conf.Mat, sj in Conf.Mat]
@@ -185,6 +193,19 @@ module SpiderWebModel
         return applicable
     end
 
+    function CanApplyNonStrict(Conf::SpinConfig,Op::SpinConfig,i,j)
+        plaquetteIsInBounds(Conf,i,j) || return false
+        P = getPlaquette(Conf,i,j)
+        
+        P .+= Op
+
+        applicable = all(x->abs(x)<=Conf.S,P)
+
+        P .-= Op
+
+        return applicable
+    end
+
     function CanApplyAnywhere(Conf::SpinConfig,Op::SpinConfig)
         a1 = axes(Conf.Mat,1)
         a2 = axes(Conf.Mat,2)
@@ -203,6 +224,12 @@ module SpiderWebModel
     
     function getApplicablePlaquettes(Conf::SpinConfig,Op::SpinConfig)
         plaqPos = [(i,j) for i in axes(Conf.Mat,1) for j in axes(Conf.Mat,2) if CanApply(Conf,Op,i,j)]
+        return plaqPos
+    end
+    
+    """assumes that Op is already an allowed operator"""
+    function getApplicablePlaquettes_ns(Conf::SpinConfig,Op::SpinConfig)
+        plaqPos = [(i,j) for i in axes(Conf.Mat,1) for j in axes(Conf.Mat,2) if CanApplyNonStrict(Conf,Op,i,j)]
         return plaqPos
     end
     
@@ -403,33 +430,136 @@ module SpiderWebModel
         @assert fulFillsConstraint(P,verbose=true) "initial configuration does not fulfill constraint"
         return P
     end
-
-    function fillMissing!(P::SpinConfig,PlaquetteList)
-    
-        OldPij = fill(NaN,3,3)
-        Lx,Ly = size(P.Mat)
-        for i in 3:2:Lx-2, j in 3:2:Ly-2
-
-            Pij = getPlaquette(P,i,j)
-            OldPij .= Pij
-            @assert fulFillsConstraint(P,verbose = true) "constraint not fulfilled in fillMissing"
+    """given a box of size (2Lx+1)*(2Ly+1) gives a spiral path through the box starting at the center"""
+    # function spiralPath(Lx,Ly=Lx)
+    #     AllCoords = [(x,y) for x in -Lx:Lx for y in -Ly:Ly if iseven(x+y)]
+        
+    #     norm2(p) = p[1]^2 + p[2]^2
+    #     function lt(p1,p2)
+    #         x1,y1 = p1
+    #         x2,y2 = p2
+    #         n1 = norm2(p1)
+    #         n2 = norm2(p2)
+    #         if n1 != n2
+    #             return n1 < n2
+    #         elseif y2 != y1
+    #             return y2 < y1
+    #         elseif x2 != x1
+    #             return x2 < x1
+    #         end
             
-            for T in PlaquetteList
-                
-                if canPlaceTile(Pij,T)
-                    Pij .= T
-                    if fulFillsConstraint(P)
-                        break
-                    else 
-                        Pij .= OldPij
-                    end
+    #         return true
+
+    #     end
+
+    #     sort!(AllCoords,lt = lt)
+    #     # for i in eachindex(AllCoords)
+    #     #     AllCoords[i] = AllCoords[i] .+ (Lx+1,Ly+1)
+    #     # end
+    #     return AllCoords
+    # end
+
+    function spiralPath(L)
+        num_points = 4L^2
+        coords = [(0, 0)]
+        x, y = 0, 0
+        dx, dy = 1, 0
+        side_length = 1
+        steps_in_side = 0
+    
+        for i in 2:num_points
+            x += dx
+            y += dy
+            push!(coords, (x, y))
+            steps_in_side += 1
+    
+            if steps_in_side == side_length
+                steps_in_side = 0
+                if dx == 1 && dy == 0
+                    dx, dy = 0, 1
+                elseif dx == 0 && dy == 1
+                    dx, dy = -1, 0
+                    side_length += 1
+                elseif dx == -1 && dy == 0
+                    dx, dy = 0, -1
+                elseif dx == 0 && dy == -1
+                    dx, dy = 1, 0
+                    side_length += 1
                 end
             end
-            @assert fulFillsConstraint(P,verbose = true) "constraint not fulfilled in fillMissing2"
         end
+        filter!(x -> iseven(x[1]+x[2]), coords)
+        for i in eachindex(coords)
+            coords[i] = coords[i] .+ (L,L)
+        end
+        return coords
+    end
+
+    ydirecPath(LPx,LPy) = [(i,j) for i in 1:2LPx+1 for j in 1:2LPy+1 if iseven(i+j)]
+    xdirecPath(LPx,LPy) = [(i,j) for j in 1:2LPy+1 for i in 1:2LPx+1 if iseven(i+j) ]
+
+    function constructConfigPath(LPx,LPy,PlaquetteList,
+        path = xdirecPath(LPx,LPy);
+        maxiter= 10000,
+        deleteSteps = LPx,
+        )
         
+        Lx = 2*LPx+1
+        Ly = 2*LPy+1
+        Mat = fill(NaN,Lx,Ly)
+        
+        El = PlaquetteList[begin]
+        P = SpinConfig(Mat,El.S)
+        filter!(x -> plaquetteIsInBounds(P,x...),path)
+
+        # path = spiralPath(LPx)
+        tilingHistory = Int[]
+        iter = 1
+        TotIter = 1
+        function applyStep!(P,n)
+            i,j = path[n]
+            T = PlaquetteList[tilingHistory[n]]
+            Pij = getPlaquette(P,i,j)
+            addTile!(Pij,T)
+            return P
+        end
+
+        function resetFromCheckpoint!(P,iterNum)
+            P.Mat .= NaN
+            for n in 1:iterNum
+                applyStep!(P,n)
+            end
+        end
+
+
+        while iter < lastindex(path)-1
+            
+            iter = lastindex(tilingHistory)
+            
+            i,j = path[iter+1]
+            TotIter += 1
+            if TotIter > maxiter 
+                @warn "maxiter reached"
+                break 
+            end
+            Pij = getPlaquette(P,i,j)
+            tileNums = getFittingTiles(Pij,PlaquetteList)
+            if isempty(tileNums)
+                @info "resetting" length(tilingHistory)
+                deleteat!(tilingHistory,max(1,iter-deleteSteps):iter)
+                iter = lastindex(tilingHistory)
+                resetFromCheckpoint!(P,iter)
+                continue
+            end
+            iT = rand(tileNums)
+            T = PlaquetteList[iT]
+            addTile!(Pij,T)
+            push!(tilingHistory,iT)
+            
+        end
         return P
     end
+
 
     getR(ij::CartesianIndex{2}) = float(SA[ij[1],ij[2]])
 
