@@ -557,7 +557,7 @@ module SpiderWebModel
             addTile!(Pij,T)
             push!(tilingHistory,iT)
             
-        # end
+        end
         # P.Mat .= NaN
 
         # confs = [copy(applyStep!(P,i)) for i in eachindex(tilingHistory)]
