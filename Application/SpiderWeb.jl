@@ -109,32 +109,45 @@ function getStairCase(L)
 end
 
 ##
+# function findOps(Conf)
+#     r = -1.:1.
+#     ops(a,b,c,d,e,f,g,h,i) = SW.SpinConfig(SMatrix{3,3,Float64,9}(a,b,c,d,e,f,g,h,i),1/2)
+#     it = Iterators.product(r,r,r,r,r,r,r,r,r)
+
+#     Allops = [ops(a,b,c,d,e,f,g,h,i) for (a,b,c,d,e,f,g,h,i) in it]
+    
+#     # return reshape(Allops,length(Allops))
+#     filter!(x ->SW.CanApplyAnywhere(Conf,x),reshape(Allops,length(Allops)))
+#     return Allops
+# end
+
+##
 function findOps(Conf)
     r = -1.:1.
-    ops(a,b,c,d,e,f,g,h,i) = SW.SpinConfig(SMatrix{3,3,Float64,9}(a,b,c,d,e,f,g,h,i),1/2)
-    it = Iterators.product(r,r,r,r,r,r,r,r,r)
-
-    Allops = [ops(a,b,c,d,e,f,g,h,i) for (a,b,c,d,e,f,g,h,i) in it]
-    
-    # return reshape(Allops,length(Allops))
-    filter!(x ->SW.CanApplyAnywhere(Conf,x),reshape(Allops,length(Allops)))
+    Allops = (SW.SpinConfig(SMatrix{3,3}(a,b,c,d,e,f,g,h,i),1/2) for a in r for b in r for c in r for d in r for e in r for f in r for g in r for h in r for i in r)
+    # filter!(x ->SW.CanApplyAnywhere(Conf,x),Allops)
+    Allops = [x for x in Allops if SW.CanApplyAnywhere(Conf,x)]
     return Allops
 end
 ##
-
-let 
-
-    StairCase = getStairCase(15)
-    b = findOps(StairCase)
-    plaqs = SW.getApplicablePlaquettes(StairCase,b[1])
-    plaqs2 = SW.getApplicablePlaquettes(StairCase,b[3])
-    fig = plotSpinConfig(StairCase,markersize = 23)
+function plotApplPlaquettes(State)
+    b = findOps(State)
+    plaqs = SW.getApplicablePlaquettes_ns(State,b[1])
+    plaqs2 = SW.getApplicablePlaquettes_ns(State,b[3])
+    fig = plotSpinConfig(State,markersize = 23)
     ax = current_axis()
     points = Point2f.(plaqs)
     points2 = Point2f.(plaqs2)
     scatter!(ax,points,markersize = 13,color = :red)
-    scatter!(ax,points2,markersize = 13,color = :red)
+    scatter!(ax,points2,markersize = 13,color = :lime)
     fig
+
+end
+##
+let 
+
+    StairCase = getStairCase(15)
+    plotApplPlaquettes(StairCase)
 end
 ##
 function generateRandomGroundState(L,S=1/2;maxiter = 1_000_000)
@@ -156,13 +169,21 @@ end
 generateRandomGroundState(5)
 ##
 
-function getConfigs(Lx,Ly,numConfigs = 10;kwargs...)
-    S = fetch.([Threads.@spawn SW.constructSpinConfigFromPlaquettes(Lx,Ly,SW.ALLGS_S12_NOMISSING;maxNumTries = 1_500_000,kwargs...) for _ in 1:numConfigs])
+function getConfigs(L,numConfigs = 10;kwargs...)
+    # paths = [SW.ydirecPathReverse(L),SW.xdirecPathReverse(L),SW.ydirecPath(L),SW.xdirecPath(L),SW.spiralPath(L)]
+
+    # S1 = fetch.([Threads.@spawn SW.constructConfigPath(L,L,SW.ALLGS_S12, SW.xdirecPath(L),maxiter = 1_000_000,deleteSteps= x->L,verbose = false;kwargs...) for _ in 1:numConfigs])
+
+    S2 = fetch.([Threads.@spawn SW.constructConfigPath(L,L,SW.ALLGS_S12, SW.xdirecPathReverse(L),maxiter = 1_000_000,deleteSteps= x->L,verbose = false;kwargs...) for _ in 1:numConfigs])
+    S3 = fetch.([Threads.@spawn SW.constructConfigPath(L,L,SW.ALLGS_S12, SW.ydirecPathReverse(L),maxiter = 1_000_000,deleteSteps= x->L,verbose = false;kwargs...) for _ in 1:numConfigs])
+    S4 = fetch.([Threads.@spawn SW.constructConfigPath(L,L,SW.ALLGS_S12, SW.ydirecPath(L),maxiter = 1_000_000,deleteSteps= x->L,verbose = false;kwargs...) for _ in 1:numConfigs])
+
+    S = append!(S2,S3,S4)
 
     filter!(x -> SW.fulFillsConstraint(x,verbose = false) && !any(isnan,x),S)
     return S
 end
-Confs = append!(getConfigs(24,24,100),getConfigs(24,24,100,rightToLeft=true))
+Confs = getConfigs(18,50)
 ##
 """given a matrix, rotate it by 90 degrees"""
 function rotate(Mat)
@@ -312,6 +333,42 @@ function generateAllFluctuations(StartConfig,operator = findOps(StartConfig)[1];
     return Configs,uniqeConfs
 end
 ##
-a,ua = generateAllFluctuations(getStairCase(20),maxiter=3)
+function generateFluctuations(StartConfig,b1,b3,maxiter = 500)
+
+    Configs = Set([copy(StartConfig),])
+
+    for i in 1:maxiter
+
+        Conf = copy(rand(Configs))
+        plaqs1 = SW.getApplicablePlaquettes_ns(Conf,b1)
+        plaqs3 = SW.getApplicablePlaquettes_ns(Conf,b3)
+        isempty(plaqs1) && isempty(plaqs3) && (@warn "no fluctuations possible"; break)
+
+        if !isempty(plaqs1)
+            rn2 = rand(eachindex(plaqs1))
+            pij = SW.getPlaquette(Conf,plaqs1[rn2]...)
+            pij .+= b1
+            push!(Configs,Conf)
+        end
+        if !isempty(plaqs3)
+            rn2 = rand(eachindex(plaqs3))
+            pij = SW.getPlaquette(Conf,plaqs3[rn2]...)
+            pij .+= b3
+            push!(Configs,Conf)
+        end
+    end
+    filter!(x -> SW.fulFillsConstraint(x,verbose = false),Configs)
+    return Configs
+end
 ##
-plotSpinConfig(a[5][2])
+a,ua = generateAllFluctuations(getStairCase(16),maxiter=3)
+##
+b = findOps(getStairCase(10))
+##
+# generateFluctuations(Confs[1],b[1],b[3],1)
+ConfFluc = [collect(generateFluctuations(c,b[1],b[3],100)) for c in ua]
+ConfFluc = append!(ConfFluc...)
+##
+a = SW.constructConfigPath(6,6,SW.ALLGS_S12,SW.ydirecPathReverse(6))
+##
+display.(plotSpinConfig.(a))

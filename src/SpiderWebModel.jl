@@ -503,7 +503,8 @@ module SpiderWebModel
     function constructConfigPath(LPx,LPy,PlaquetteList,
         path = xdirecPath(LPx,LPy);
         maxiter= 10000,
-        deleteSteps = LPx,
+        deleteSteps = i->LPx,
+        verbose = true,
         )
         
         Lx = 2*LPx+1
@@ -541,13 +542,15 @@ module SpiderWebModel
             i,j = path[iter+1]
             TotIter += 1
             if TotIter > maxiter 
-                @warn "maxiter reached"
+                if verbose 
+                    @warn "maxiter reached"
+                end
                 break 
             end
             Pij = getPlaquette(P,i,j)
             tileNums = getFittingTiles(Pij,PlaquetteList)
             if isempty(tileNums)
-                deleteat!(tilingHistory,max(1,iter-deleteSteps):iter)
+                deleteat!(tilingHistory,max(1,iter-deleteSteps(iter)):iter)
                 iter = lastindex(tilingHistory)
                 resetFromCheckpoint!(P,iter)
                 continue
