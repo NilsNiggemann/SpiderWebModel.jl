@@ -265,9 +265,20 @@ module SpiderWebModel
         return (;UpRight,UpLeft,DownRight,DownLeft)
     end
 
+    # function canPlaceTile(P::SpinConfig,T1)
+    #     return all(_isZeroOrNaN, p -t for (p,t) in zip(P,T1))
+    # end
+
     function canPlaceTile(P::SpinConfig,T1)
-        return all(_isZeroOrNaN, p -t for (p,t) in zip(P,T1))
+        for (p,t) in zip(P,T1)
+            x = p - t
+            if !(_isZeroOrNaN(x))
+                return false
+            end
+        end
+        return true
     end
+
     
     function TileFulFillsConstraint(S::SpinConfig,P,T1)
         OldP = SMatrix{3,3}(P)
@@ -366,6 +377,15 @@ module SpiderWebModel
 
     getFittingTiles(P,PlaquetteList) = [i for (i,t) in enumerate(PlaquetteList) if canPlaceTile(P,t)]
 
+    function getfirstFittingTile(P,shuffleList,indices) 
+        for (t,i) in zip(shuffleList,indices)
+            if canPlaceTile(P,t)
+                return i
+            end
+        end
+        return 0
+    end
+    
     mapRightToLeft(i,L) = L-i+1
 
     function constructSpinConfigFromPlaquettes(LPx,LPy,PlaquetteList;maxNumTries = 10_000,triesDeleteRow = 10,deleteRows = 2,rightToLeft = false)
@@ -514,7 +534,9 @@ module SpiderWebModel
         El = PlaquetteList[begin]
         P = SpinConfig(Mat,El.S)
         filter!(x -> plaquetteIsInBounds(P,x...),path)
-
+        
+        indices = shuffle(collect(eachindex(PlaquetteList)))
+        shuffleList = PlaquetteList[indices]
         # path = spiralPath(LPx)
         tilingHistory = Int[]
         iter = 1
@@ -548,14 +570,19 @@ module SpiderWebModel
                 break 
             end
             Pij = getPlaquette(P,i,j)
-            tileNums = getFittingTiles(Pij,PlaquetteList)
-            if isempty(tileNums)
+            if TotIter %2 == 0
+                shuffle!(indices)
+                for (i,t) in enumerate(indices)
+                    shuffleList[i] = PlaquetteList[t]
+                end
+            end
+            iT = getfirstFittingTile(Pij,shuffleList,indices)
+            if iT == 0
                 deleteat!(tilingHistory,max(1,iter-deleteSteps(iter)):iter)
                 iter = lastindex(tilingHistory)
                 resetFromCheckpoint!(P,iter)
                 continue
             end
-            iT = rand(tileNums)
             T = PlaquetteList[iT]
             addTile!(Pij,T)
             push!(tilingHistory,iT)

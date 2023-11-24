@@ -172,18 +172,19 @@ generateRandomGroundState(5)
 function getConfigs(L,numConfigs = 10;kwargs...)
     # paths = [SW.ydirecPathReverse(L),SW.xdirecPathReverse(L),SW.ydirecPath(L),SW.xdirecPath(L),SW.spiralPath(L)]
 
-    # S1 = fetch.([Threads.@spawn SW.constructConfigPath(L,L,SW.ALLGS_S12, SW.xdirecPath(L),maxiter = 1_000_000,deleteSteps= x->L,verbose = false;kwargs...) for _ in 1:numConfigs])
+    # Paths = (SW.xdirecPath(L),SW.ydirecPath(L),SW.xdirecPathReverse(L),SW.ydirecPathReverse(L))
+    Paths = (SW.xdirecPathReverse(L),)
+    # Paths = (SW.spiralPath(L),)
 
-    S2 = fetch.([Threads.@spawn SW.constructConfigPath(L,L,SW.ALLGS_S12, SW.xdirecPathReverse(L),maxiter = 1_000_000,deleteSteps= x->L,verbose = false;kwargs...) for _ in 1:numConfigs])
-    S3 = fetch.([Threads.@spawn SW.constructConfigPath(L,L,SW.ALLGS_S12, SW.ydirecPathReverse(L),maxiter = 1_000_000,deleteSteps= x->L,verbose = false;kwargs...) for _ in 1:numConfigs])
-    S4 = fetch.([Threads.@spawn SW.constructConfigPath(L,L,SW.ALLGS_S12, SW.ydirecPath(L),maxiter = 1_000_000,deleteSteps= x->L,verbose = false;kwargs...) for _ in 1:numConfigs])
-
-    S = append!(S2,S3,S4)
+    S = fetch.([Threads.@spawn SW.constructConfigPath(L,L,SW.ALLGS_S12, path,maxiter = 10_000,deleteSteps= x->L,verbose = false;kwargs...) for _ in 1:numConfigs for path in Paths])
 
     filter!(x -> SW.fulFillsConstraint(x,verbose = false) && !any(isnan,x),S)
     return S
 end
-Confs = getConfigs(18,50)
+##
+
+# @profview (@time Confs = getConfigs(13,100))
+@time Confs = getConfigs(15,400)
 ##
 """given a matrix, rotate it by 90 degrees"""
 function rotate(Mat)
@@ -231,7 +232,7 @@ function getStructureFac(Confs)
     Sq = [getInterpolatedFFT(c.Mat,0,plan;Interpolation = BSpline(Constant())) for c in Confs]
 end
 ##
-function plotStructureFac(Confs)
+function plotStructureFac(Confs;kwargs...)
     Confs2 = Confs
     # Confs2 = randRots(Confs)
 
@@ -257,7 +258,7 @@ function plotStructureFac(Confs)
     chi = fetch.([Threads.@spawn SSq(kx,ky) for kx in kx, ky in ky])
     fig = Figure()
     ax = Axis(fig[1,1],aspect = 1,xticks = PiTicks(),yticks = PiTicks())
-    heatmap!(ax,kx,ky,chi)
+    heatmap!(ax,kx,ky,chi;kwargs...)
     fig
 end
 plotStructureFac(Confs)

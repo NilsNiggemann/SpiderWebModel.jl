@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.9.2"
+julia_version = "1.9.3"
 manifest_format = "2.0"
-project_hash = "152ca5d025b70929825667c819c453c5199a1947"
+project_hash = "0f172eca9f9177abe45e7e2a454d7d78ebf9cdc6"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -746,7 +746,7 @@ version = "1.3.0"
 deps = ["FFTViews", "FFTW", "Interpolations", "LoopVectorization", "PaddedViews", "PrecompileTools", "StaticArrays", "StructArrays"]
 path = "../../LatticeFFTs.jl"
 uuid = "83e9f648-131d-4a3c-a1de-d155351cd207"
-version = "0.3.1"
+version = "0.3.3"
 
 [[deps.LayoutPointers]]
 deps = ["ArrayInterface", "LinearAlgebra", "ManualMemory", "SIMDTypes", "Static", "StaticArrayInterface"]
@@ -1415,6 +1415,12 @@ deps = ["Random", "StaticArrays", "Statistics", "Test"]
 path = ".."
 uuid = "8e1b84da-b1d7-4311-a21b-52324f990117"
 version = "0.1.0"
+
+[[deps.SpinFRGLattices]]
+deps = ["StaticArrays", "StructArrays", "Test"]
+git-tree-sha1 = "d700e4c773cb0f5aac2863d3bedf65a5fd971499"
+uuid = "053fb7f8-31b7-4f68-aef8-4452b415dd8c"
+version = "0.5.2"
 
 [[deps.StableHashTraits]]
 deps = ["CRC32c", "Compat", "Dates", "SHA", "Tables", "TupleTools", "UUIDs"]

@@ -66,14 +66,18 @@ end
 let
     L = 1
     AllPoints = [Point2f(n1,n2) for n1 in -L:L for n2 in -L:L]
-    
+    inbox(x) = abs(x[1]) <= 1 && abs(x[2]) <= 1
+    inbox(x::Rvec_2D) = abs(x.n1) <= 1 && abs(x.n2) <= 1
+    filter!(inbox,AllPoints)
+
     fig = Figure()
-    ax = Axis(fig[1,1],aspect = 1,xgridcolor = :black,ygridcolor = :black,backgroundcolor = :white)
+    ax = Axis(fig[1,1],aspect = 1,xgridcolor = :black,ygridcolor = :black,backgroundcolor = :white,xticks = [-1,0,1],yticks = [-1,0,1])
 
     PlotPoints = Set(copy(AllPoints))
     for p0 in AllPoints
         a = SpinFRGLattices.Octochlore.reduceCouplings(getCouplingsToS1(Rvec(p0...,1)))
         filter!(x->x.fac != 0,a)
+        filter!(x->inbox(x.site),a)
         aDF = DataFrame(;n1 = StructArray(a.site).n1, n2 = StructArray(a.site).n2,fac = a.fac)
 
         p = [Point2f(n1,n2) for (n1,n2) in zip(aDF.n1,aDF.n2)]
@@ -85,11 +89,11 @@ let
             push!(PlotPoints,p)
         end
     end
-    scatter!(collect(PlotPoints),color = :black,markersize = 10)
+    scatter!(collect(PlotPoints),color = :black,markersize = 25)
 
     axislegend(ax,unique=true)
 
-    save("couplings_All.png",fig)
+    save("couplings_All_plaq.png",fig)
     fig
 end
 ##
