@@ -71,15 +71,30 @@ module SpiderWebModel
     _isZeroOrNaN(x) = x == 0 || isnan(x)
     # _isZeroOrMissing(x) = x === missing || x == 0
 
+    # function addTile!(Pij::SpinConfig,Tile::SpinConfig,)
+    #     for i in eachindex(Tile,Pij)
+    #         ti = Tile[i]
+    #         isnan(ti) && continue
+    #         Pij[i] = ti
+    #     end
+    #     return Pij
+    # end
+
     function addTile!(Pij::SpinConfig,Tile::SpinConfig,)
-        for i in eachindex(Tile,Pij)
-            ti = Tile[i]
-            isnan(ti) && continue
-            Pij[i] = ti
-        end
+        Pij[1,1] = Tile[1,1]
+        Pij[1,2] = Tile[1,2]
+        Pij[1,3] = Tile[1,3]
+        
+        Pij[2,1] = Tile[2,1]
+        #middle of tile is empty
+        Pij[2,3] = Tile[2,3]
+        
+        Pij[3,1] = Tile[3,1]
+        Pij[3,2] = Tile[3,2]
+        Pij[3,3] = Tile[3,3]
         return Pij
     end
-
+    
     function getCorrel(Conf::SpinConfig)
         S_ij = [si*sj for si in Conf.Mat, sj in Conf.Mat]
         return S_ij
@@ -450,34 +465,6 @@ module SpiderWebModel
         @assert fulFillsConstraint(P,verbose=true) "initial configuration does not fulfill constraint"
         return P
     end
-    """given a box of size (2Lx+1)*(2Ly+1) gives a spiral path through the box starting at the center"""
-    # function spiralPath(Lx,Ly=Lx)
-    #     AllCoords = [(x,y) for x in -Lx:Lx for y in -Ly:Ly if iseven(x+y)]
-        
-    #     norm2(p) = p[1]^2 + p[2]^2
-    #     function lt(p1,p2)
-    #         x1,y1 = p1
-    #         x2,y2 = p2
-    #         n1 = norm2(p1)
-    #         n2 = norm2(p2)
-    #         if n1 != n2
-    #             return n1 < n2
-    #         elseif y2 != y1
-    #             return y2 < y1
-    #         elseif x2 != x1
-    #             return x2 < x1
-    #         end
-            
-    #         return true
-
-    #     end
-
-    #     sort!(AllCoords,lt = lt)
-    #     # for i in eachindex(AllCoords)
-    #     #     AllCoords[i] = AllCoords[i] .+ (Lx+1,Ly+1)
-    #     # end
-    #     return AllCoords
-    # end
 
     function spiralPath(L)
         num_points = 4L^2
@@ -593,6 +580,89 @@ module SpiderWebModel
         # confs = [copy(applyStep!(P,i)) for i in eachindex(tilingHistory)]
         # @assert fulFillsConstraint(P,verbose=true) "initial configuration does not fulfill constraint"
         # return confs
+        return P
+    end
+
+    abstract type GroundStateAlgorithm end
+    
+    struct DictAlgorithm <: GroundStateAlgorithm end
+
+    function getFittingTilesDict!(fittingTilesDict,P,PlaquetteList)::Vector{Int}
+        tilenums = get(fittingTilesDict,P,nothing)
+        if tilenums !== nothing
+            return tilenums
+        else
+            newtiles = getFittingTiles(P,PlaquetteList)
+            fittingTilesDict[P] = newtiles
+            return newtiles
+        end
+    end
+
+    function constructConfigPath(::DictAlgorithm,LPx,LPy,PlaquetteList,
+        path = xdirecPath(LPx,LPy);
+        maxiter= 10000,
+        deleteSteps = i->LPx,
+        verbose = true,
+        )
+        
+        Lx = 2*LPx+1
+        Ly = 2*LPy+1
+        Mat = fill(NaN,Lx,Ly)
+        
+        El = PlaquetteList[begin]
+        P = SpinConfig(Mat,El.S)
+        filter!(x -> plaquetteIsInBounds(P,x...),path)
+        
+        # path = spiralPath(LPx)
+        tilingHistory = Int[]
+        iter = 1
+        TotIter = 1
+        function applyStep!(P,n)
+            i,j = path[n]
+            T = PlaquetteList[tilingHistory[n]]
+            Pij = getPlaquette(P,i,j)
+            addTile!(Pij,T)
+            return P
+        end
+
+        function resetFromCheckpoint!(P,iterNum)
+            P.Mat .= NaN
+            for n in 1:iterNum
+                applyStep!(P,n)
+            end
+        end
+
+        P_init = getPlaquette(P, path[lastindex(tilingHistory)+1]...)
+        fittingTilesDict = Dict(P_init => getFittingTiles(P_init,PlaquetteList))
+
+        while iter < lastindex(path)-1
+            
+            iter = lastindex(tilingHistory)
+            
+            i,j = path[iter+1]
+            TotIter += 1
+            if TotIter > maxiter 
+                if verbose 
+                    @warn "maxiter reached"
+                end
+                break 
+            end
+            Pij = getPlaquette(P,i,j)
+
+            tileList = getFittingTilesDict!(fittingTilesDict,Pij,PlaquetteList)
+            if isempty(tileList)
+                deleteat!(tilingHistory,max(1,iter-deleteSteps(iter)):iter)
+                iter = lastindex(tilingHistory)
+                resetFromCheckpoint!(P,iter)
+                continue
+            end
+            iT = rand(tileList)
+            T = PlaquetteList[iT]
+            addTile!(Pij,T)
+            push!(tilingHistory,iT)
+            
+        end
+
         return P
     end
 

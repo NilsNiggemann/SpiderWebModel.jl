@@ -173,10 +173,10 @@ function getConfigs(L,numConfigs = 10;kwargs...)
     # paths = [SW.ydirecPathReverse(L),SW.xdirecPathReverse(L),SW.ydirecPath(L),SW.xdirecPath(L),SW.spiralPath(L)]
 
     # Paths = (SW.xdirecPath(L),SW.ydirecPath(L),SW.xdirecPathReverse(L),SW.ydirecPathReverse(L))
-    Paths = (SW.xdirecPathReverse(L),)
+    Paths = (SW.xdirecPathReverse(L),SW.xdirecPathReverse(L))
     # Paths = (SW.spiralPath(L),)
 
-    S = fetch.([Threads.@spawn SW.constructConfigPath(L,L,SW.ALLGS_S12, path,maxiter = 10_000,deleteSteps= x->L,verbose = false;kwargs...) for _ in 1:numConfigs for path in Paths])
+    S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, path,maxiter = 300_000,deleteSteps= x->L,verbose = false;kwargs...) for _ in 1:numConfigs for path in Paths])
 
     filter!(x -> SW.fulFillsConstraint(x,verbose = false) && !any(isnan,x),S)
     return S
@@ -184,7 +184,7 @@ end
 ##
 
 # @profview (@time Confs = getConfigs(13,100))
-@time Confs = getConfigs(15,400)
+@time Confs = getConfigs(15,500)
 ##
 """given a matrix, rotate it by 90 degrees"""
 function rotate(Mat)
