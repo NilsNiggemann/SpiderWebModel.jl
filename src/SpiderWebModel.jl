@@ -294,6 +294,11 @@ module SpiderWebModel
         return true
     end
 
+    function canPlaceTile(P::Tuple,T1)
+        Tsites = getSitesFromPlaquette(T1)
+        return all(_isZeroOrNaN, p -t for (p,t) in zip(P,Tsites))
+    end
+
     
     function TileFulFillsConstraint(S::SpinConfig,P,T1)
         OldP = SMatrix{3,3}(P)
@@ -391,7 +396,7 @@ module SpiderWebModel
     end
 
     getFittingTiles(P,PlaquetteList) = [i for (i,t) in enumerate(PlaquetteList) if canPlaceTile(P,t)]
-
+    
     function getfirstFittingTile(P,shuffleList,indices) 
         for (t,i) in zip(shuffleList,indices)
             if canPlaceTile(P,t)
@@ -632,7 +637,7 @@ module SpiderWebModel
             end
         end
 
-        P_init = getPlaquette(P, path[lastindex(tilingHistory)+1]...)
+        P_init = getSitesFromPlaquette(getPlaquette(P, path[lastindex(tilingHistory)+1]...))
         fittingTilesDict = Dict(P_init => getFittingTiles(P_init,PlaquetteList))
 
         while iter < lastindex(path)-1
@@ -648,8 +653,9 @@ module SpiderWebModel
                 break 
             end
             Pij = getPlaquette(P,i,j)
+            PijSites = getSitesFromPlaquette(Pij)
 
-            tileList = getFittingTilesDict!(fittingTilesDict,Pij,PlaquetteList)
+            tileList = getFittingTilesDict!(fittingTilesDict,PijSites,PlaquetteList)
             if isempty(tileList)
                 deleteat!(tilingHistory,max(1,iter-deleteSteps(iter)):iter)
                 iter = lastindex(tilingHistory)
