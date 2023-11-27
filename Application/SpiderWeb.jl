@@ -168,23 +168,33 @@ function generateRandomGroundState(L,S=1/2;maxiter = 1_000_000)
 end
 generateRandomGroundState(5)
 ##
-
+function getStepDeleter(L,default = 5,tries = 5)
+    counter = 0
+    function deleter(x)
+        counter += 1
+        if counter > tries
+            return L
+        end
+        return default
+    end
+end
+##
 function getConfigs(L,numConfigs = 10;kwargs...)
     # paths = [SW.ydirecPathReverse(L),SW.xdirecPathReverse(L),SW.ydirecPath(L),SW.xdirecPath(L),SW.spiralPath(L)]
 
-    # Paths = (SW.xdirecPath(L),SW.ydirecPath(L),SW.xdirecPathReverse(L),SW.ydirecPathReverse(L))
-    Paths = (SW.xdirecPathReverse(L),SW.xdirecPathReverse(L))
+    Paths = (SW.xdirecPath(L),SW.ydirecPath(L),SW.xdirecPathReverse(L),SW.ydirecPathReverse(L))
+    # Paths = (SW.xdirecPathReverse(L),SW.xdirecPathReverse(L))
     # Paths = (SW.spiralPath(L),)
 
-    S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, path,maxiter = 300_000,deleteSteps= x->L,verbose = false;kwargs...) for _ in 1:numConfigs for path in Paths])
+    S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, path,maxiter = 400_000,deleteSteps = getStepDeleter(L+2,3,100),verbose = false;kwargs...) for _ in 1:numConfigs for path in Paths])
 
     filter!(x -> SW.fulFillsConstraint(x,verbose = false) && !any(isnan,x),S)
     return S
 end
 ##
-
-# @profview (@time Confs = getConfigs(13,100))
-@time Confs = getConfigs(15,500)
+SW.Random.seed!(1234)
+# @profview (@time Confs = getConfigs(18,20))
+@time Confs = getConfigs(18,1000)
 ##
 """given a matrix, rotate it by 90 degrees"""
 function rotate(Mat)
@@ -373,3 +383,4 @@ ConfFluc = append!(ConfFluc...)
 a = SW.constructConfigPath(6,6,SW.ALLGS_S12,SW.ydirecPathReverse(6))
 ##
 display.(plotSpinConfig.(a))
+##
