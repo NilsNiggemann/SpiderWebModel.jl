@@ -2,6 +2,7 @@ import SpiderWebModel as SW
 using CairoMakie
 using SpiderWebModel.StaticArrays
 ## plot 70 combinations
+using SpiderWebModel:plotSpinConfig
 
 AllAllowedConfigs = SW.getAllGS(0.5)
 AllConfigs = SW.getAllGS_noMissing(0.5)
@@ -12,7 +13,7 @@ let
 
     layout = zeros(sizex,sizey)
 
-    fig = Figure(resolution = 200 .* (sizex,sizey))
+    fig = Figure(size = 200 .* (sizex,sizey))
     allij = Tuple.(CartesianIndices(layout))
     xticks = yticks = [-1,0,1]
     axes = [Axis(fig[fj,fi]; xticklabelsvisible = false, yticklabelsvisible = false,xgridvisible = false,ygridvisible = false,aspect = 1,xticks ,yticks ) for (i,(fi,fj)) in enumerate(allij)]
@@ -25,43 +26,7 @@ let
 end
 
 ##
-using CairoMakie.Makie.ColorSchemes
-function plotSpinConfig!(ax,S::SW.SpinConfig;kwargs...)
-    vals = filter!(x-> !ismissing(x) && !isnan(x),unique(S.Mat))
-    isempty(vals) && (vals = [-1,1])
-    Amin = min(minimum(vals),-S.S)
-    Amax = max(maximum(vals),S.S)
-    us = Amin:Amax
-    hm = heatmap!(ax,Array(S.Mat),colorrange = (Amin,Amax),colormap = cgrad(:linear_bgy_10_95_c74_n256, length(us), categorical = true))
 
-    translate!(hm, 0, 0, -100)
-    return hm
-end
-
-function plotSpinConfig(S;kwargs...) 
-    fig = Figure()
-    ax = Axis(fig[1,1],
-    aspect = DataAspect(),
-    backgroundcolor = :grey,
-    # xminorgridwidth = 2,
-    # yminorgridwidth = 2,
-    xminorgridcolor = :black,
-    yminorgridcolor = :black,
-    xminorgridvisible = true,
-    yminorgridvisible = true,
-    xgridvisible = false,
-    ygridvisible = false,
-    # xticks = (axes(S,1),string.(axes(S,1))) ,
-    # yticks = (axes(S,2),string.(axes(S,2))) ,
-    xminorticks = 0.5 .+ axes(S,1),
-    yminorticks = 0.5 .+ axes(S,2),
-    )
-    hm = plotSpinConfig!(ax,S;kwargs...)
-    us = filter!(x -> !ismissing(x) && !isnan(x) ,unique(S))
-    isempty(us) && (us = [-1,1])
-    Colorbar(fig[1,2],hm,ticks = us)
-    return fig
-end
 function drawPlaquette!(ax,(i,j);kwargs...)
     points = Point2f.([(i-1,j-1),(i+1,j-1),(i+1,j+1),(i-1,j+1),(i-1,j-1)])
     lines!(ax,points;linestyle = :dash,color = :white,kwargs...)
@@ -169,108 +134,83 @@ end
 generateRandomGroundState(5)
 ##
 function getStepDeleter(L,default = 5,tries = 5)
-    counter = 0
-    function deleter(x)
-        counter += 1
-        if counter > tries
+    function deleter(x,counter)
+        counter[] += 1
+        # println(counter[])
+        if counter[] > tries
+            counter[] = 0
             return L
         end
         return default
     end
 end
 ##
+function getLevels(path)
+    origin = first(path)
+    levels = [maximum(abs,x.-origin) for x in path]
+end
+function getPrevLevels(levels)
+    mapnothing(x) = isnothing(x) ? 1 : x
+
+    prevlevel = [mapnothing(findfirst(==(x-2),levels)) for x in levels]
+
+    # prevlevel = [x + (i % x)  for (i,x) in enumerate(prevlevel)]
+    # any(isnothing,prevlevel) && error("could not find all previous levels")
+end
+
+function getspiralDeleter(spiralpath,default = 3, tries = 5)
+    # rsquares = [x[1]^2+x[2]^2 for x in spiralpath]
+    levels = getLevels(spiralpath)
+    # phis = [atan(x[2],x[1]) for x in spiralpath]
+    
+    prevlevel = getPrevLevels(levels)
+    function deleter(x,counter)
+        counter[] += 1
+        if counter[] > tries
+            counter[] = 0
+            return max(1,x - prevlevel[x] - 3)
+        end
+        return default
+    end
+end
+##
+
+let 
+    pt = SW.spiralPath(10)
+    
+    levels = getLevels(pt)
+    lines(Point.(pt),color = levels,colormap = :flag,axis = (;aspect = 1))
+    scatter!(Point.(pt),color = levels,colormap = :flag,markersize = 40)
+
+    prevlevel = getPrevLevels(levels)
+    # prevlevel = eachindex(levels)
+    # return string.(prevlevel)
+    text!(Point.(pt),text = string.(prevlevel),color = :white,align = (:center,:center))
+    current_figure()
+end
+##
+include("plotStructureFac.jl")
+##
 function getConfigs(L,numConfigs = 10;kwargs...)
     # paths = [SW.ydirecPathReverse(L),SW.xdirecPathReverse(L),SW.ydirecPath(L),SW.xdirecPath(L),SW.spiralPath(L)]
 
-    Paths = (SW.xdirecPath(L),SW.ydirecPath(L),SW.xdirecPathReverse(L),SW.ydirecPathReverse(L))
-    # Paths = (SW.xdirecPathReverse(L),SW.xdirecPathReverse(L))
-    # Paths = (SW.spiralPath(L),)
+    # Paths = (SW.xdirecPath(L),SW.ydirecPath(L),SW.xdirecPathReverse(L),SW.ydirecPathReverse(L))
+    # Paths = (SW.xdirecPath(L),)
+    path = SW.spiralPath(L)
+    deleter = getspiralDeleter(path,1,20)
+    setup = SW.setupCalc!(path,L,L,SW.ALLGS_S12)
+    # S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, path,maxiter = 200_000,deleteSteps = getStepDeleter(L+2,1,15),verbose = false;kwargs...) for _ in 1:numConfigs for path in Paths])
 
-    S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, path,maxiter = 400_000,deleteSteps = getStepDeleter(L+2,3,100),verbose = false;kwargs...) for _ in 1:numConfigs for path in Paths])
+    S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, setup,maxiter = 30_000,deleteSteps = deleter,verbose = false;kwargs...) for _ in 1:numConfigs])
 
     filter!(x -> SW.fulFillsConstraint(x,verbose = false) && !any(isnan,x),S)
     return S
 end
 ##
-SW.Random.seed!(1234)
-# @profview (@time Confs = getConfigs(18,20))
-@time Confs = getConfigs(18,1000)
+SW.Random.seed!(345)
+# @profview (@time Confs = getConfigs(25,100))
+@time Confs = getConfigs(15,2000)
 ##
-"""given a matrix, rotate it by 90 degrees"""
-function rotate(Mat)
-    Mat2 = zeros(size(Mat))
-    for i in axes(Mat,1)
-        row = Mat'[:,i]
-        Mat2[:,i] .= reverse(row)
-    end
-    return Mat2
-
-end
-function rotate(Mat,n)
-    if n == 0
-        return Mat
-    elseif n == 1
-        return rotate(Mat)
-    elseif n == 2
-        return Mat |> rotate |> rotate
-    elseif n == 3
-        return Mat |> rotate |> rotate |> rotate
-    end
-    error("n must be 0,1,2,3")
-end
-rotate(S::SW.SpinConfig,n) = SW.SpinConfig(rotate(S.Mat,n),S.S)
-
-function AllRots(Confs)
-    Confs2 = [rotate(c,n) for c in Confs for n in 0:3]
-    return Confs2
-end
-
-function randRots(Confs)
-    Confs2 = [rotate(c,rand(0:3)) for c in Confs]
-    return Confs2
-end
-
-##
-using LatticeFFTs
-using MakieHelpers
-using Statistics
-using LatticeFFTs.Interpolations
-##
-function getStructureFac(Confs)
-    plan = getLatticeFFTPlan(Confs[1].Mat,0)
-
-    Sq = [getInterpolatedFFT(c.Mat,0,plan;Interpolation = BSpline(Constant())) for c in Confs]
-end
-##
-function plotStructureFac(Confs;kwargs...)
-    Confs2 = Confs
-    # Confs2 = randRots(Confs)
-
-    Sq = getStructureFac(Confs2)
-    SSq(kx,ky) = mean(real(s(kx,ky)*s(-kx,-ky)) for s in Sq)
-    # SSq(kx,ky) = mean(real(s(kx,ky)) for s in Sq)
-
-    # i = size(Confs2[1],1) ÷ 2
-    # j = size(Confs2[1],2) ÷ 2
-
-    # ij = LinearIndices(Confs2[1])[i,j]
-
-    # Sij = SW.getSij(Confs2,ij)[:]
-    # Sij2 = SW.getSij(Confs2,ij+1)[:]
-    # append!(Sij,Sij2)
-    # Rij = SW.getRij_vec(Confs2[1],ij)[:]
-    # Rij2 = SW.getRij_vec(Confs2[1],ij+1)[:]
-    # append!(Rij,Rij2)
-    # chik = FourierStruct(Sij,Rij,1)
-
-    kx = LinRange(-0,2pi,200)
-    ky = LinRange(-0,2pi,200)
-    chi = fetch.([Threads.@spawn SSq(kx,ky) for kx in kx, ky in ky])
-    fig = Figure()
-    ax = Axis(fig[1,1],aspect = 1,xticks = PiTicks(),yticks = PiTicks())
-    heatmap!(ax,kx,ky,chi;kwargs...)
-    fig
-end
 plotStructureFac(Confs)
 ##
 

@@ -1,5 +1,5 @@
 module SpiderWebModel
-    using StaticArrays,Random,Statistics
+    using StaticArrays,Random,Statistics,LoopVectorization
 
     import Base:size,getindex,setindex!,iterate,show,copy
 
@@ -116,14 +116,15 @@ module SpiderWebModel
         return Conf
     end
 
-    function plaquetteIsInBounds(Conf::SpinConfig,iCenter::Integer,jCenter::Integer)
+    function plaquetteIsInBounds(Conf::AbstractMatrix,iCenter::Integer,jCenter::Integer)
         for i in iCenter-1:iCenter+1, j in jCenter-1:jCenter+1
-            if !checkbounds(Bool,Conf.Mat,i,j)
+            if !checkbounds(Bool,Conf,i,j)
                 return false
             end
         end
         return true
     end
+    plaquetteIsInBounds(Conf::SpinConfig,iCenter::Integer,jCenter::Integer) = plaquetteIsInBounds(Conf.Mat,iCenter,jCenter)
 
     function allSpinsInBounds(Conf::SpinConfig;verbose=false)
         for x in Conf.Mat
@@ -602,13 +603,43 @@ module SpiderWebModel
             return newtiles
         end
     end
+    using CairoMakie
+    
+    function setupCalc!(path,LPx,LPy,PlaquetteList)
+        Lx = 2*LPx+1
+        Ly = 2*LPy+1
+        Mat = fill(NaN,Lx,Ly)
+        El = PlaquetteList[begin]
+        P = SpinConfig(Mat,El.S)
+        filter!(x -> plaquetteIsInBounds(Mat,x...),path)
+
+        emptyTilesList = getFreeTilesPath(P,path,PlaquetteList)
+
+        # TilesDict = getFittingTilesDict(PlaquetteList)
+        (;path,emptyTilesList)
+    end
+
+    # function getFittingTilesDict(PlaquetteList)
+
+    #     P_init = (NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN)
+        
+    #     vals = unique([i  for P in PlaquetteList for i in P])
+
+    #     fittingTilesDict = Dict(P => getFittingTiles(P,PlaquetteList) for P in Iterators.product(vals,vals,vals,vals,vals,vals,vals,vals))
+
+    #     return fittingTilesDict
+    # end
 
     function constructConfigPath(::DictAlgorithm,LPx,LPy,PlaquetteList,
-        path = xdirecPath(LPx,LPy);
+        setup = setupCalc!(xdirecPath(LPx,LPy),LPx,LPy,PlaquetteList);
         maxiter= 10000,
         deleteSteps = i->LPx,
         verbose = true,
+        plotSteps = false,
         )
+        
+        path = setup.path
+        emptyTilesList = setup.emptyTilesList
         
         Lx = 2*LPx+1
         Ly = 2*LPy+1
@@ -616,12 +647,13 @@ module SpiderWebModel
         
         El = PlaquetteList[begin]
         P = SpinConfig(Mat,El.S)
-        filter!(x -> plaquetteIsInBounds(P,x...),path)
         
         # path = spiralPath(LPx)
         tilingHistory = Int[]
+        sizehint!(tilingHistory,length(path))
         iter = 1
         TotIter = 1
+
         function applyStep!(P,n)
             i,j = path[n]
             T = PlaquetteList[tilingHistory[n]]
@@ -630,16 +662,20 @@ module SpiderWebModel
             return P
         end
 
-        function resetFromCheckpoint!(P,iterNum)
-            P.Mat .= NaN
-            for n in 1:iterNum
-                applyStep!(P,n)
+        function resetToStep!(P,iterNum)
+            emptyTiles = emptyTilesList[iterNum+1]
+            for i in eachindex(emptyTiles)
+                I = emptyTiles[i]
+                P[I] = NaN
             end
         end
 
         P_init = getSitesFromPlaquette(getPlaquette(P, path[lastindex(tilingHistory)+1]...))
         fittingTilesDict = Dict(P_init => getFittingTiles(P_init,PlaquetteList))
 
+        counter = Ref(0)
+        successfulplacements = 0
+        
         while iter < lastindex(path)-1
             
             iter = lastindex(tilingHistory)
@@ -657,21 +693,77 @@ module SpiderWebModel
 
             tileList = getFittingTilesDict!(fittingTilesDict,PijSites,PlaquetteList)
             if isempty(tileList)
-                deleteat!(tilingHistory,max(1,iter-deleteSteps(iter)):iter)
+                deleteat!(tilingHistory,max(2,iter-deleteSteps(iter,counter)):iter)
                 iter = lastindex(tilingHistory)
-                resetFromCheckpoint!(P,iter)
+                resetToStep!(P,iter)
+                successfulplacements = 0
                 continue
             end
             iT = rand(tileList)
             T = PlaquetteList[iT]
             addTile!(Pij,T)
             push!(tilingHistory,iT)
-            
-        end
+            if successfulplacements > 1
+                counter[] = 0
+            end
+            successfulplacements +=1 
+            plotSteps && display(plotSpinConfig(P))
 
+        end
         return P
     end
+    using CairoMakie.Makie.ColorSchemes
+    function plotSpinConfig!(ax,S::SpinConfig;kwargs...)
+        vals = filter!(x-> !ismissing(x) && !isnan(x),unique(S.Mat))
+        isempty(vals) && (vals = [-1,1])
+        Amin = min(minimum(vals),-S.S)
+        Amax = max(maximum(vals),S.S)
+        us = Amin:Amax
+        hm = heatmap!(ax,Array(S.Mat),colorrange = (Amin,Amax),colormap = cgrad(:linear_bgy_10_95_c74_n256, length(us), categorical = true))
+    
+        translate!(hm, 0, 0, -100)
+        return hm
+    end
+    
+    function plotSpinConfig(S;kwargs...) 
+        fig = Figure()
+        ax = Axis(fig[1,1],
+        aspect = DataAspect(),
+        backgroundcolor = :grey,
+        # xminorgridwidth = 2,
+        # yminorgridwidth = 2,
+        xminorgridcolor = :black,
+        yminorgridcolor = :black,
+        xminorgridvisible = true,
+        yminorgridvisible = true,
+        xgridvisible = false,
+        ygridvisible = false,
+        # xticks = (axes(S,1),string.(axes(S,1))) ,
+        # yticks = (axes(S,2),string.(axes(S,2))) ,
+        xminorticks = 0.5 .+ axes(S,1),
+        yminorticks = 0.5 .+ axes(S,2),
+        )
+        hm = plotSpinConfig!(ax,S;kwargs...)
+        us = filter!(x -> !ismissing(x) && !isnan(x) ,unique(S))
+        isempty(us) && (us = [-1,1])
+        Colorbar(fig[1,2],hm,ticks = us)
+        return fig
+    end
 
+    function getFreeTilesPath(P,path,PlaquetteList)
+        # emptyTiles = Vector{Int}[]
+        emptyTiles = Vector{CartesianIndex{2}}[]
+        newP = copy(P)
+        newP .= NaN
+        testPlaq = first(PlaquetteList)
+        for (i,j) in path
+            Pij = getPlaquette(newP,i,j)
+            addTile!(Pij,testPlaq)
+            emptyTilesCurrent = findall(isnan,newP)
+            push!(emptyTiles,emptyTilesCurrent)
+        end
+        return emptyTiles
+    end
 
     getR(ij::CartesianIndex{2}) = float(SA[ij[1],ij[2]])
 
