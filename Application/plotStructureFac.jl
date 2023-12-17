@@ -44,7 +44,7 @@ function getStructureFac(Confs)
     Sq = [getInterpolatedFFT(c.Mat,0,plan;Interpolation = BSpline(Constant())) for c in Confs]
 end
 ##
-function plotStructureFac(Confs;kwargs...)
+function plotStructureFac(Confs;cbar = false,kwargs...)
     Confs2 = Confs
     # Confs2 = randRots(Confs)
 
@@ -68,8 +68,11 @@ function plotStructureFac(Confs;kwargs...)
     kx = LinRange(-0,2pi,200)
     ky = LinRange(-0,2pi,200)
     chi = fetch.([Threads.@spawn SSq(kx,ky) for kx in kx, ky in ky])
-    fig = Figure()
+    fig = Figure(fontsize = 22)
     ax = Axis(fig[1,1],aspect = 1,xticks = PiTicks(),yticks = PiTicks())
-    heatmap!(ax,kx,ky,chi;kwargs...)
+    hm = heatmap!(ax,kx,ky,chi;kwargs...)
+    if cbar 
+        Colorbar(fig[1,2],hm)
+    end
     fig
 end

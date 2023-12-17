@@ -170,6 +170,10 @@ function getspiralDeleter(spiralpath,default = 3, tries = 5)
             counter[] = 0
             return max(1,x - prevlevel[x] - 3)
         end
+
+        # if counter[] > tries ÷ 2
+        #     return default + 1
+        # end
         return default
     end
 end
@@ -195,25 +199,43 @@ function getConfigs(L,numConfigs = 10;kwargs...)
     # paths = [SW.ydirecPathReverse(L),SW.xdirecPathReverse(L),SW.ydirecPath(L),SW.xdirecPath(L),SW.spiralPath(L)]
 
     # Paths = (SW.xdirecPath(L),SW.ydirecPath(L),SW.xdirecPathReverse(L),SW.ydirecPathReverse(L))
-    # Paths = (SW.xdirecPath(L),)
+    # Paths = (SW.xdirecPathReverse(L),)
     path = SW.spiralPath(L)
-    deleter = getspiralDeleter(path,1,20)
+    defaultDelete = 1
+    tries = 60
+    maxiter = 2_500_000
+    deleter = getspiralDeleter(path,defaultDelete,tries)
     setup = SW.setupCalc!(path,L,L,SW.ALLGS_S12)
-    # S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, path,maxiter = 200_000,deleteSteps = getStepDeleter(L+2,1,15),verbose = false;kwargs...) for _ in 1:numConfigs for path in Paths])
+    # setup(path) = SW.setupCalc!(path,L,L,SW.ALLGS_S12)
+    
+    # S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, setup(path),maxiter = 200_000,deleteSteps = getStepDeleter(L+2,1,15),verbose = false;kwargs...) for _ in 1:numConfigs for path in Paths])
 
-    S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, setup,maxiter = 30_000,deleteSteps = deleter,verbose = false;kwargs...) for _ in 1:numConfigs])
+    S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, setup,maxiter = maxiter,deleteSteps = deleter,verbose = false;kwargs...) for _ in 1:numConfigs])
 
     filter!(x -> SW.fulFillsConstraint(x,verbose = false) && !any(isnan,x),S)
+    @info "" L defaultDelete tries maxiter length(S) 
     return S
 end
 ##
 SW.Random.seed!(345)
 # @profview (@time Confs = getConfigs(25,100))
-@time Confs = getConfigs(15,2000)
+@time Confs = getConfigs(14,500)
 ##
-plotStructureFac(Confs)
+@time Confs2 = unique!(collect(Iterators.filter(x->SW.fulFillsConstraint(x,verbose=false),(SW.SpinConfig(rand(-1/2:1/2,5,5),1/2) for _ in 1:5000000))))
 ##
+plotStructureFac(Confs,cbar = true)
+##
+save("Confs/SpiralPathSq_14.pdf",current_figure())
+##
+function visualizeConstruction(L)
+    path = SW.spiralPath(L)
+    setup = SW.setupCalc!(path,L,L,SW.ALLGS_S12)
+    # setup(path) = SW.setupCalc!(path,L,L,SW.ALLGS_S12)
+    S = SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, setup,maxiter = 200,deleteSteps = getspiralDeleter(path,1,10),verbose = false,plotSteps = true)
+    return S
+end
 
+##
 function generateFluctuations(StartConfig,maxiter = 500)
 
     Configs = Set([copy(StartConfig),])
@@ -312,7 +334,7 @@ function generateFluctuations(StartConfig,b1,b3,maxiter = 500)
     return Configs
 end
 ##
-a,ua = generateAllFluctuations(getStairCase(16),maxiter=3)
+a,ua = generateAllFluctuations(Confs[1],maxiter=2)
 ##
 b = findOps(getStairCase(10))
 ##
@@ -324,3 +346,17 @@ a = SW.constructConfigPath(6,6,SW.ALLGS_S12,SW.ydirecPathReverse(6))
 ##
 display.(plotSpinConfig.(a))
 ##
+function takeFluctuations(Confs,b1 = findOps(Confs[1])[1])
+    findNumFlucs = [length(SW.getApplicablePlaquettes_ns(c,b1)) for c in Confs]
+
+    inds = sortperm(findNumFlucs)
+    Confs = Confs[inds[end-10:end]]
+
+    flucs = Set(empty(Confs))
+    for Conf in Confs
+        fl = generateAllFluctuations(Conf,b1,maxiter = 15)[2]
+        flucs = flucs ∪ fl
+    end
+
+    return flucs
+end
