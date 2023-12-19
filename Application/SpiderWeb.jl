@@ -198,17 +198,27 @@ include("plotStructureFac.jl")
 function getConfigs(L,numConfigs = 10;kwargs...)
     # paths = [SW.ydirecPathReverse(L),SW.xdirecPathReverse(L),SW.ydirecPath(L),SW.xdirecPath(L),SW.spiralPath(L)]
 
-    # Paths = (SW.xdirecPath(L),SW.ydirecPath(L),SW.xdirecPathReverse(L),SW.ydirecPathReverse(L))
+    Paths = (SW.xdirecPath(L),SW.ydirecPath(L),SW.xdirecPathReverse(L),SW.ydirecPathReverse(L))
     # Paths = (SW.xdirecPathReverse(L),)
+    defaultDelete = 1
+    tries = 60
+    maxiter = 10_500_000
+    
+    S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, setup(path),maxiter = 200_000,deleteSteps = getStepDeleter(L+2,1,15),verbose = false;kwargs...) for _ in 1:numConfigs for path in Paths])
+
+
+    filter!(x -> SW.fulFillsConstraint(x,verbose = false) && !any(isnan,x),S)
+    @info "" L defaultDelete tries maxiter length(S) 
+    return S
+end
+##
+function getConfigsSpiral(L,numConfigs = 10;kwargs...)
     path = SW.spiralPath(L)
     defaultDelete = 1
     tries = 60
-    maxiter = 2_500_000
+    maxiter = 18_500_000
     deleter = getspiralDeleter(path,defaultDelete,tries)
     setup = SW.setupCalc!(path,L,L,SW.ALLGS_S12)
-    # setup(path) = SW.setupCalc!(path,L,L,SW.ALLGS_S12)
-    
-    # S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, setup(path),maxiter = 200_000,deleteSteps = getStepDeleter(L+2,1,15),verbose = false;kwargs...) for _ in 1:numConfigs for path in Paths])
 
     S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, setup,maxiter = maxiter,deleteSteps = deleter,verbose = false;kwargs...) for _ in 1:numConfigs])
 
@@ -219,11 +229,16 @@ end
 ##
 SW.Random.seed!(345)
 # @profview (@time Confs = getConfigs(25,100))
-@time Confs = getConfigs(14,500)
+@time Confs = getConfigsSpiral(15,200)
 ##
-@time Confs2 = unique!(collect(Iterators.filter(x->SW.fulFillsConstraint(x,verbose=false),(SW.SpinConfig(rand(-1/2:1/2,5,5),1/2) for _ in 1:5000000))))
+using HDF5
+let
+    L = size(Confs[1],1)
+    h5write("ConfsRaw/Confs$(L).h5","Confs",stack(Confs,dims = 3))
+end
 ##
-plotStructureFac(Confs,cbar = true)
+# Confs = [SW.SpinConfig(S,1/2) for S in eachslice(h5read("confs20.h5","Confs"),dims = 3)]
+plotStructureFac(Confs,cbar = false)
 ##
 save("Confs/SpiralPathSq_14.pdf",current_figure())
 ##
@@ -350,13 +365,55 @@ function takeFluctuations(Confs,b1 = findOps(Confs[1])[1])
     findNumFlucs = [length(SW.getApplicablePlaquettes_ns(c,b1)) for c in Confs]
 
     inds = sortperm(findNumFlucs)
-    Confs = Confs[inds[end-10:end]]
+    Confs = Confs[inds[end-50:end]]
 
     flucs = Set(empty(Confs))
     for Conf in Confs
-        fl = generateAllFluctuations(Conf,b1,maxiter = 15)[2]
+        fl = generateAllFluctuations(Conf,b1,maxiter = 5)[2]
         flucs = flucs ∪ fl
     end
 
     return flucs
 end
+
+function takeFluctuations2(Conf,maxiter = 100,b = findOps(Confs[1]))
+    b1,b3 = b[1],b[3]
+    Conf2 = copy(Conf)
+    for i in 1:maxiter
+        plaqs1 = SW.getApplicablePlaquettes(Conf2,b1)
+        plaqs3 = SW.getApplicablePlaquettes(Conf2,b3)
+        isempty(plaqs1) && isempty(plaqs3) && (@warn "no fluctuations possible"; break)
+
+        if !isempty(plaqs1)
+            rn2 = rand(eachindex(plaqs1))
+            pij = SW.getPlaquette(Conf2,plaqs1[rn2]...)
+            pij .+= b1
+        end
+
+        if !isempty(plaqs3)
+            rn2 = rand(eachindex(plaqs3))
+            pij = SW.getPlaquette(Conf2,plaqs3[rn2]...)
+            pij .+= b3
+        end
+    end
+    return Conf2
+end
+function appendFluctuations(Confs,maxiter,numFlucs = 2,b= findOps(Confs[1]))
+    newconfs = copy(Confs)
+    for C in Confs
+        for i in 1:numFlucs
+            push!(newconfs,takeFluctuations2(C,maxiter,b))
+            push!(newconfs,takeFluctuations2(C,maxiter,b))
+        end
+    end
+    return newconfs
+end
+##
+function readConfs(File,group="")
+    Arr = h5read(File,group*"Confs")
+    Confs = [SW.SpinConfig(Matrix(S),1/2) for S in eachslice(Arr,dims = 3)]
+end
+a = readConfs("ConfsRaw/Confs35.h5")
+##
+ConfFlucs = appendFluctuations(a,4,2,b)
+plotStructureFac(ConfFlucs)
