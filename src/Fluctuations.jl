@@ -70,16 +70,34 @@ end
 function getAllNeighborStates(StartConfig)
     AllConfigs = Dict(StartConfig => 1)
     
-    Nplus = Vector{Int[]}()
-    Nminus = Vector{Int[]}()
+    Nplus = Dict(1 => Int[])
+    Nminus = Dict(1 => Int[])
 
     for (Conf,num) in AllConfigs
         neighbors = getNeighborStates!(AllConfigs,Conf,P1)
-        push!(Nplus,neighbors)
-
+        Nplus[num] = neighbors
+        
         neighbors = getNeighborStates!(AllConfigs,Conf,P2)
-        push!(Nminus,neighbors)
+        Nminus[num] = neighbors
+        println(num)
     end
-    @assert length(AllConfigs) == length(Nplus) == length(Nminus)
+    @info "" length(AllConfigs) length(Nplus) length(Nminus) 
+    
     return (;AllConfigs,Nplus,Nminus)
+
+    # return (;
+    # AllConfigs = extractVectors(AllConfigs),
+    # Nplus = extractVectors(Nplus),
+    # Nminus = extractVectors(Nminus),
+    # )
+end
+
+function extractVectors(ConfDict)
+    AllConfigsVec = collect(keys(ConfDict))
+    vals = collect(values(ConfDict))
+    return AllConfigsVec[sortperm(vals)]
+end
+
+function invertDict(D)
+    D2 = Dict(v => k for (k,v) in D)
 end

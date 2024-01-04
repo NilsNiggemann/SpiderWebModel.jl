@@ -48,3 +48,5 @@ function adjFig(Flucs)
 end
 adjFig(Flucs)
 ##
+Stair = getStairCase(8)
+res = SW.getAllNeighborStates(Stair)
