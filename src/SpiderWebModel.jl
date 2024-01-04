@@ -196,7 +196,7 @@ module SpiderWebModel
         return Conf
     end
 
-    function CanApply(Conf::SpinConfig,Op::SpinConfig,i,j)
+    function CanApply(Conf::SpinConfig,Op::AbstractMatrix,i,j)
         plaquetteIsInBounds(Conf,i,j) || return false
         P = getPlaquette(Conf,i,j)
         
@@ -209,7 +209,7 @@ module SpiderWebModel
         return applicable
     end
 
-    function CanApplyNonStrict(Conf::SpinConfig,Op::SpinConfig,i,j)
+    function CanApplyNonStrict(Conf::SpinConfig,Op::AbstractMatrix,i,j)
         plaquetteIsInBounds(Conf,i,j) || return false
         P = getPlaquette(Conf,i,j)
         
@@ -222,7 +222,7 @@ module SpiderWebModel
         return applicable
     end
 
-    function CanApplyAnywhere(Conf::SpinConfig,Op::SpinConfig)
+    function CanApplyAnywhere(Conf::SpinConfig,Op::AbstractMatrix)
         a1 = axes(Conf.Mat,1)
         a2 = axes(Conf.Mat,2)
 
@@ -238,13 +238,13 @@ module SpiderWebModel
         return false
     end
     
-    function getApplicablePlaquettes(Conf::SpinConfig,Op::SpinConfig)
+    function getApplicablePlaquettes(Conf::SpinConfig,Op::AbstractMatrix)
         plaqPos = [(i,j) for i in axes(Conf.Mat,1) for j in axes(Conf.Mat,2) if CanApply(Conf,Op,i,j)]
         return plaqPos
     end
     
     """assumes that Op is already an allowed operator"""
-    function getApplicablePlaquettes_ns(Conf::SpinConfig,Op::SpinConfig)
+    function getApplicablePlaquettes_ns(Conf::SpinConfig,Op::AbstractMatrix)
         plaqPos = [(i,j) for i in axes(Conf.Mat,1) for j in axes(Conf.Mat,2) if CanApplyNonStrict(Conf,Op,i,j)]
         return plaqPos
     end
@@ -725,10 +725,8 @@ module SpiderWebModel
         return hm
     end
     
-    function plotSpinConfig(S;kwargs...) 
-        fig = Figure()
-        ax = Axis(fig[1,1],
-        aspect = DataAspect(),
+    function getConfigAxis(S;kwargs...)
+        (;aspect = DataAspect(),
         backgroundcolor = :grey,
         # xminorgridwidth = 2,
         # yminorgridwidth = 2,
@@ -742,6 +740,15 @@ module SpiderWebModel
         # yticks = (axes(S,2),string.(axes(S,2))) ,
         xminorticks = 0.5 .+ axes(S,1),
         yminorticks = 0.5 .+ axes(S,2),
+        limits = (0.5,size(S,1)+0.5,0.5,size(S,2)+0.5),
+        )
+
+    end
+
+    function plotSpinConfig(S;kwargs...) 
+        fig = Figure()
+        ax = Axis(fig[1,1];
+            getConfigAxis(S)...
         )
         hm = plotSpinConfig!(ax,S;kwargs...)
         us = filter!(x -> !ismissing(x) && !isnan(x) ,unique(S))
@@ -791,5 +798,6 @@ module SpiderWebModel
         return fetch.([Threads.@spawn fac(i,j)* getSij(Configs,i,j) for i in LinearIndices(Configs[1]) for j in 1:i])
     end
 
+    include("Fluctuations.jl")
 
 end # module SpiderWebModel

@@ -285,42 +285,6 @@ a = generateFluctuations(getStairCase(16),500)
 plotStructureFac(collect(a))
 ##
 # plotStructureFac([Confs[10]])
-using OrderedCollections
-function generateAllFluctuations(StartConfig,operator = findOps(StartConfig)[1];maxiter = 500)
-
-    Configs = [[copy(StartConfig)]]
-    uniqeConfs = Set([copy(StartConfig)])
-    for iter in 1:maxiter-1
-        Confs = Configs[iter]
-        newconf = empty(Confs)
-        for Conf in Confs
-            plaqs = SW.getApplicablePlaquettes(Conf,operator)
-            # isempty(plaqs) && (@warn "no fluctuations possible"; break)
-            
-            for p in plaqs
-                Conf2 = copy(Conf)
-                pij = SW.getPlaquette(Conf2,p...)
-                pij .+= operator
-                if Conf2 ∉ uniqeConfs
-                    push!(newconf,Conf2)
-                    push!(uniqeConfs,Conf2)
-                end
-            end
-            if isempty(newconf) 
-                @info "" length(uniqeConfs)
-                return Configs,uniqeConfs
-            end
-            # @assert i1 == i2 "i1 = $i1, i2 = $i2"
-        end
-        # @info "" length(newconf) length(uniqeConfs)
-        push!(Configs,newconf)
-    end
-    # filter!(x -> SW.fulFillsConstraint(x,verbose = false),Configs)
-    # @assert all(SW.fulFillsConstraint.(Configs,verbose = true))
-    @warn "max iterations reached" length(uniqeConfs)
-    return Configs,uniqeConfs
-end
-##
 function generateFluctuations(StartConfig,b1,b3,maxiter = 500)
 
     Configs = Set([copy(StartConfig),])
