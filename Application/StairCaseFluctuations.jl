@@ -41,6 +41,7 @@ function adjFig(Flucs)
             SW.plotSpinConfig!(axes[i,j],Flucs[i][j])
             plotApplPlaquettes!(axes[i,j],Flucs[i][j],SW.P1)
             plotApplPlaquettes!(axes[i,j],Flucs[i][j],SW.P2,color = :blue)
+            plotApplPlaquettes!(current_axis(),res.AllConfigs[s],SW.P2,color = :blue)
             # lines!(axes[i,j],1:10,color = :black)
         end
     end
@@ -50,3 +51,14 @@ adjFig(Flucs)
 ##
 Stair = getStairCase(8)
 res = SW.getAllNeighborStates(Stair)
+##
+SW.plotSpinConfig(res.AllConfigs[1])
+plotApplPlaquettes!(current_axis(),res.AllConfigs[1],SW.P1)
+plotApplPlaquettes!(current_axis(),res.AllConfigs[1],SW.P2,color = :blue)
+display(current_figure())
+for s in res.Nminus[1]
+    SW.plotSpinConfig(res.AllConfigs[s]) 
+    plotApplPlaquettes!(current_axis(),res.AllConfigs[s],SW.P1)
+    plotApplPlaquettes!(current_axis(),res.AllConfigs[s],SW.P2,color = :blue)
+    display(current_figure())
+end

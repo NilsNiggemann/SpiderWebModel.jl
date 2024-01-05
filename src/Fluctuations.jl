@@ -70,32 +70,42 @@ end
 function getAllNeighborStates(StartConfig)
     AllConfigs = Dict(StartConfig => 1)
     
-    Nplus = Dict(1 => Int[])
-    Nminus = Dict(1 => Int[])
+    Nplus = empty(Dict(1 => Int[]))
+    Nminus = empty(Dict(1 => Int[]))
 
-    for (Conf,num) in AllConfigs
-        neighbors = getNeighborStates!(AllConfigs,Conf,P1)
-        Nplus[num] = neighbors
-        
-        neighbors = getNeighborStates!(AllConfigs,Conf,P2)
-        Nminus[num] = neighbors
-        println(num)
+    while length(Nplus) < length(AllConfigs)
+        for (Conf,num) in AllConfigs
+            num in keys(Nplus) && continue
+            neighbors = getNeighborStates!(AllConfigs,Conf,P1)
+            Nplus[num] = neighbors
+            
+            neighbors = getNeighborStates!(AllConfigs,Conf,P2)
+            Nminus[num] = neighbors
+        end
     end
+
+
     @info "" length(AllConfigs) length(Nplus) length(Nminus) 
     
-    return (;AllConfigs,Nplus,Nminus)
+    # return (;AllConfigs,Nplus,Nminus)
 
-    # return (;
-    # AllConfigs = extractVectors(AllConfigs),
-    # Nplus = extractVectors(Nplus),
-    # Nminus = extractVectors(Nminus),
-    # )
+    return (;
+    AllConfigs = sortByValueOrder(AllConfigs),
+    Nplus = sortbyKeyOrder(Nplus),
+    Nminus = sortbyKeyOrder(Nminus),
+    )
 end
 
-function extractVectors(ConfDict)
-    AllConfigsVec = collect(keys(ConfDict))
-    vals = collect(values(ConfDict))
-    return AllConfigsVec[sortperm(vals)]
+function sortByValueOrder(D::Dict)
+    ks = collect(keys(D))
+    vals = collect(values(D))
+    return ks[sortperm(vals)]
+end
+
+function sortbyKeyOrder(D::Dict)
+    ks = collect(keys(D))
+    vals = collect(values(D))
+    return vals[sortperm(ks)]
 end
 
 function invertDict(D)
