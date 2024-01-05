@@ -1489,7 +1489,7 @@ weakdeps = ["ChainRulesCore"]
     SpecialFunctionsChainRulesCoreExt = "ChainRulesCore"
 
 [[deps.SpiderWebModel]]
-deps = ["CairoMakie", "LoopVectorization", "OrderedCollections", "Random", "StaticArrays", "Statistics", "Test"]
+deps = ["CairoMakie", "LinearAlgebra", "LoopVectorization", "OrderedCollections", "Random", "StaticArrays", "Statistics", "Test"]
 path = ".."
 uuid = "8e1b84da-b1d7-4311-a21b-52324f990117"
 version = "0.1.0"

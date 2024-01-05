@@ -111,3 +111,46 @@ end
 function invertDict(D)
     D2 = Dict(v => k for (k,v) in D)
 end
+
+function H(AllStates,neighborplus,neighborminus,mu=0)
+    dim = length(AllStates)
+    H = zeros(dim,dim)
+    for n in axes(H,1), m in axes(H,2)
+        if m ∈ neighborplus[n] || m ∈ neighborminus[n] 
+            H[n,m] = -1
+        end
+
+        if n == m
+            H[n,m] = mu*(length(neighborplus[n] ∪ neighborminus[n]))
+        end
+    end
+
+    # return Hermitian(H)
+    return H
+end
+
+
+function Hnonflip(AllStates,neighborplus,neighborminus)
+    dim = length(AllStates)
+    H = zeros(dim,dim)
+    for n in axes(H,1), m in axes(H,2)
+        if m ∈ neighborplus[n] || m ∈ neighborminus[n] 
+            H[n,m] = 1
+        end
+    end
+    return Hermitian(H)
+end
+
+function testNplusMinus(nplus,nminus)
+    for (n,ns) in enumerate(nplus)
+        for m in ns
+            @assert n in nminus[m] "$n in nplus[$n] but not in nminus[$m]"
+        end
+    end
+
+    for (n,ns) in enumerate(nminus)
+        for m in ns
+            @assert n in nplus[m] "$n in nminus[$n] but not in nplus[$m]"
+        end
+    end
+end

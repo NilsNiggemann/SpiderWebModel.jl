@@ -62,3 +62,8 @@ for s in res.Nminus[1]
     plotApplPlaquettes!(current_axis(),res.AllConfigs[s],SW.P2,color = :blue)
     display(current_figure())
 end
+##
+H = SW.H(res.AllConfigs,res.Nplus,res.Nminus,0)
+heatmap(H,axis = (;aspect=1))
+
+@info "" ishermitian(H) length(filter(!=(0),H - H'))
