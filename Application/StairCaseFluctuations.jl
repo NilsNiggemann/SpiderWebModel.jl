@@ -61,21 +61,22 @@ for s in res.Nminus[1]
     display(current_figure())
 end
 ##
-Stair = getStairCase(11)
+Stair = getStairCase(10)
 res = SW.getAllNeighborStates(Stair)
 
 # SW.swapStates!(res.AllConfigs,res.Nplus,res.Nminus,1,2)
 # SW.swapStates!(res.AllConfigs,res.Nplus,res.Nminus,2,12)
 
 H = SW.H(res.AllConfigs,res.Nplus,res.Nminus,0)
-SW.testNplusMinus(res.Nplus,res.Nminus)
-@info "" SW.ishermitian(H) length(filter(!=(0),H - H'))
+# SW.testNplusMinus(res.Nplus,res.Nminus)
+# @info "" SW.ishermitian(H) length(filter(!=(0),H - H'))
 
-heatmap(H,axis = (;aspect=1))
+# heatmap(H,axis = (;aspect=1))
 ##
 sol = SW.SolveH(H)
 
 mag = [SW.getMagnetization(res.AllConfigs,sol,CartesianIndex(i,j)) for i in axes(Stair,1),j in axes(Stair,2)] 
+@info "" mavg = sum(abs,mag)/length(mag)
 fig,ax,hm = heatmap(mag;axis = (;aspect=1))
 Colorbar(fig[1,2],hm)
 fig

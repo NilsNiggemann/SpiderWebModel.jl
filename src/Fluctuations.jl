@@ -183,7 +183,7 @@ function getMagnetization(AllConfigs,eigen,i)
     mag = zero(eltype(eigen.vectors))
     for n in eachindex(ψ0)
         Si = AllConfigs[n][i]
-        mag += ψ0[n]'*Si*ψ0[n]
+        mag += abs2(ψ0[n])*Si
     end
     return mag
 end
