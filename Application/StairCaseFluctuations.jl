@@ -19,7 +19,7 @@ function getStairCase(L)
 
 end
 ##
-Stair = getStairCase(6)
+Stair = getStairCase(7)
 Flucs,_ = SW.generateAllFluctuations(Stair,SW.P1)
 ##
 res = SW.getAllNeighborStates(Stair)
@@ -61,7 +61,7 @@ for s in res.Nminus[1]
     display(current_figure())
 end
 ##
-Stair = getStairCase(8)
+Stair = getStairCase(11)
 res = SW.getAllNeighborStates(Stair)
 
 # SW.swapStates!(res.AllConfigs,res.Nplus,res.Nminus,1,2)
@@ -73,3 +73,9 @@ SW.testNplusMinus(res.Nplus,res.Nminus)
 
 heatmap(H,axis = (;aspect=1))
 ##
+sol = SW.SolveH(H)
+
+mag = [SW.getMagnetization(res.AllConfigs,sol,CartesianIndex(i,j)) for i in axes(Stair,1),j in axes(Stair,2)] 
+fig,ax,hm = heatmap(mag;axis = (;aspect=1))
+Colorbar(fig[1,2],hm)
+fig

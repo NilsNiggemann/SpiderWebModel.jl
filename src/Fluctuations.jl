@@ -171,3 +171,19 @@ end
 #     end
 
 # end
+SolveH(H) = eigen(H)
+
+function SolveH(AllConfigs,Nplus,Nminus,mu)
+    H = Hermitian(H(AllConfigs,Nplus,Nminus,mu))
+    return SolveH(H)
+end
+
+function getMagnetization(AllConfigs,eigen,i)
+    ψ0 = eigen.vectors[:,1]
+    mag = zero(eltype(eigen.vectors))
+    for n in eachindex(ψ0)
+        Si = AllConfigs[n][i]
+        mag += ψ0[n]'*Si*ψ0[n]
+    end
+    return mag
+end
