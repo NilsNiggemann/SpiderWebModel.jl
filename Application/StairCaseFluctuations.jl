@@ -61,7 +61,7 @@ for s in res.Nminus[1]
     display(current_figure())
 end
 ##
-Stair = getStairCase(10)
+Stair = getStairCase(9)
 res = SW.getAllNeighborStates(Stair)
 
 # SW.swapStates!(res.AllConfigs,res.Nplus,res.Nminus,1,2)
@@ -78,5 +78,23 @@ sol = SW.SolveH(H)
 mag = [SW.getMagnetization(res.AllConfigs,sol,CartesianIndex(i,j)) for i in axes(Stair,1),j in axes(Stair,2)] 
 @info "" mavg = sum(abs,mag)/length(mag)
 fig,ax,hm = heatmap(mag;axis = (;aspect=1))
+Colorbar(fig[1,2],hm)
+fig
+##
+using LatticeFFTs
+using LatticeFFTs.Interpolations
+function getStructureFac(AllStates,eigen)
+    plan = getLatticeFFTPlan(AllStates[1].Mat,0)
+    Psi = eigen.vectors[:,1]
+    
+    Sq = [getInterpolatedFFT(abs2(psin)* c.Mat,0,plan;Interpolation = BSpline(Constant())) for (c,psin) in zip( AllStates,Psi)]
+    SSq(kx,ky) = real(sum(s(kx,ky)*s(-kx,-ky) for s in Sq))
+end
+
+Sq = getStructureFac(res.AllConfigs,sol)
+##
+k = LinRange(-0,2pi,100)
+Sq_k = [Sq(kx,ky) for kx in k, ky in k]
+fig,ax,hm = heatmap(Sq_k;axis = (;aspect=1))
 Colorbar(fig[1,2],hm)
 fig

@@ -187,3 +187,13 @@ function getMagnetization(AllConfigs,eigen,i)
     end
     return mag
 end
+
+function getStructureFac(AllConfigs,eigen,i)
+    ψ0 = eigen.vectors[:,1]
+    mag = zero(eltype(eigen.vectors))
+    for n in eachindex(ψ0)
+        Si = AllConfigs[n][i]
+        mag += ψ0[n]'*Si*ψ0[n]
+    end
+    return mag
+end
