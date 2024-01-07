@@ -19,8 +19,10 @@ function getStairCase(L)
 
 end
 ##
-Stair = getStairCase(8)
+Stair = getStairCase(6)
 Flucs,_ = SW.generateAllFluctuations(Stair,SW.P1)
+##
+res = SW.getAllNeighborStates(Stair)
 
 function plotApplPlaquettes!(ax,State,op;kwargs...)
     plaqs = SW.getApplicablePlaquettes_ns(State,op)
@@ -49,9 +51,6 @@ function adjFig(Flucs)
 end
 adjFig(Flucs)
 ##
-Stair = getStairCase(8)
-res = SW.getAllNeighborStates(Stair)
-##
 SW.plotSpinConfig(res.AllConfigs[1])
 plotApplPlaquettes!(current_axis(),res.AllConfigs[1],SW.P1)
 plotApplPlaquettes!(current_axis(),res.AllConfigs[1],SW.P2,color = :blue)
@@ -63,7 +62,9 @@ for s in res.Nminus[1]
     display(current_figure())
 end
 ##
-H = SW.H(res.AllConfigs,res.Nplus,res.Nminus,0)
-heatmap(H,axis = (;aspect=1))
+res = SW.getAllNeighborStates(Stair)
 
-@info "" ishermitian(H) length(filter(!=(0),H - H'))
+H = SW.H(res.AllConfigs,res.Nplus,res.Nminus,0)
+@info "" SW.ishermitian(H) length(filter(!=(0),H - H'))
+heatmap(H,axis = (;aspect=1))
+##

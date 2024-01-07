@@ -1,7 +1,7 @@
 module SpiderWebModel
     using StaticArrays,Random,Statistics,LoopVectorization
     using OrderedCollections, LinearAlgebra
-
+    using Test
     import Base:size,getindex,setindex!,iterate,show,copy
 
     struct SpinConfig{T,MatType <: AbstractMatrix{T},T1<:Real} <:AbstractMatrix{T}

@@ -1,4 +1,3 @@
-using OrderedCollections
 const P1 =  SA[
     -1.0  1.0   1.0;
     -1.0  0.0  -1.0;
@@ -75,7 +74,7 @@ function getAllNeighborStates(StartConfig)
 
     while length(Nplus) < length(AllConfigs)
         for (Conf,num) in AllConfigs
-            num in keys(Nplus) && continue
+            # num in keys(Nplus) && continue
             neighbors = getNeighborStates!(AllConfigs,Conf,P1)
             Nplus[num] = neighbors
             
@@ -83,9 +82,7 @@ function getAllNeighborStates(StartConfig)
             Nminus[num] = neighbors
         end
     end
-
-
-    @info "" length(AllConfigs) length(Nplus) length(Nminus) 
+    # @info "" length(AllConfigs) length(Nplus) length(Nminus) 
     
     # return (;AllConfigs,Nplus,Nminus)
 
@@ -142,15 +139,18 @@ function Hnonflip(AllStates,neighborplus,neighborminus)
 end
 
 function testNplusMinus(nplus,nminus)
-    for (n,ns) in enumerate(nplus)
-        for m in ns
-            @assert n in nminus[m] "$n in nplus[$n] but not in nminus[$m]"
+    @testset "test nplus" begin
+        for (n,ns) in enumerate(nplus)
+            for m in ns
+                @test n in nminus[m]
+            end
         end
     end
-
-    for (n,ns) in enumerate(nminus)
-        for m in ns
-            @assert n in nplus[m] "$n in nminus[$n] but not in nplus[$m]"
+    @testset "test nminus" begin
+        for (n,ns) in enumerate(nminus)
+            for m in ns
+                @test n in nplus[m]
+            end
         end
     end
 end
