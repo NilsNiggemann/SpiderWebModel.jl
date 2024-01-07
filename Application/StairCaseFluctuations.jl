@@ -43,7 +43,6 @@ function adjFig(Flucs)
             SW.plotSpinConfig!(axes[i,j],Flucs[i][j])
             plotApplPlaquettes!(axes[i,j],Flucs[i][j],SW.P1)
             plotApplPlaquettes!(axes[i,j],Flucs[i][j],SW.P2,color = :blue)
-            plotApplPlaquettes!(current_axis(),res.AllConfigs[s],SW.P2,color = :blue)
             # lines!(axes[i,j],1:10,color = :black)
         end
     end
@@ -62,9 +61,15 @@ for s in res.Nminus[1]
     display(current_figure())
 end
 ##
+Stair = getStairCase(8)
 res = SW.getAllNeighborStates(Stair)
 
+# SW.swapStates!(res.AllConfigs,res.Nplus,res.Nminus,1,2)
+# SW.swapStates!(res.AllConfigs,res.Nplus,res.Nminus,2,12)
+
 H = SW.H(res.AllConfigs,res.Nplus,res.Nminus,0)
+SW.testNplusMinus(res.Nplus,res.Nminus)
 @info "" SW.ishermitian(H) length(filter(!=(0),H - H'))
+
 heatmap(H,axis = (;aspect=1))
 ##

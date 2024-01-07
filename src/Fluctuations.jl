@@ -139,14 +139,14 @@ function Hnonflip(AllStates,neighborplus,neighborminus)
 end
 
 function testNplusMinus(nplus,nminus)
-    @testset "test nplus" begin
+    @testset "test nplus" failfast = true begin
         for (n,ns) in enumerate(nplus)
             for m in ns
                 @test n in nminus[m]
             end
         end
     end
-    @testset "test nminus" begin
+    @testset "test nminus" failfast = true begin
         for (n,ns) in enumerate(nminus)
             for m in ns
                 @test n in nplus[m]
@@ -154,3 +154,20 @@ function testNplusMinus(nplus,nminus)
         end
     end
 end
+
+# function swapStates!(AllStates,Nplus,Nminus,i,j)
+#     # temp = copy(AllStates[i])
+#     # AllStates[i] .= AllStates[j]
+#     # AllStates[j] .= temp
+#     AllStates[i],AllStates[j] = AllStates[j],AllStates[i]
+#     for neighborlist in (Nplus,Nminus)
+#         for (i_n,n) in enumerate(neighborlist)
+#             if n == i
+#                 neighborlist[i_n] = j
+#             elseif n == j
+#                 neighborlist[i_n] = i
+#             end
+#         end
+#     end
+
+# end
