@@ -1,3 +1,18 @@
+using LatticeFFTs
+using LatticeFFTs
+using LatticeFFTs.Interpolations
+
+function getStructureFac(AllStates,eigen,tol=0)
+    plan = getLatticeFFTPlan(AllStates[1].Mat,0)
+    Psi = eigen.vectors[:,1]
+    # weights = abs2.(Psi)
+    # inds = findall(x->abs(x)>tol,weights)
+
+    # state_weight = collect(zip( AllStates,weights))[inds]
+    Sq = [getInterpolatedFFT(abs2(psin)* c.Mat,0,plan;Interpolation = BSpline(Constant())) for (c,psin) in zip( AllStates,Psi)]
+    # Sq = [getInterpolatedFFT(weight* c.Mat,0,plan;Interpolation = BSpline(Constant())) for (c,weight) in state_weight]
+    SSq(kx,ky) = real(sum(s(kx,ky)*s(-kx,-ky) for s in Sq))
+end
 
 getR(ij::CartesianIndex{2}) = float(SA[ij[1],ij[2]])
 

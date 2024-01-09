@@ -19,17 +19,12 @@ function getStairCase(L)
 
 end
 ##
-Stair = getStairCase(7)
+Stair = getStairCase(8)
 Flucs,_ = SW.generateAllFluctuations(Stair,SW.P1)
 ##
 res = SW.getAllNeighborStates(Stair)
 
-function plotApplPlaquettes!(ax,State,op;kwargs...)
-    plaqs = SW.getApplicablePlaquettes_ns(State,op)
-    points = Point2f.(plaqs)
-    scatter!(ax,points,markersize = 13,color = :red;kwargs...)
 
-end
 
 function adjFig(Flucs)
     dims1 = length(Flucs)
@@ -41,9 +36,7 @@ function adjFig(Flucs)
     for i in eachindex(Flucs)
         for j in eachindex(Flucs[i])
             SW.plotSpinConfig!(axes[i,j],Flucs[i][j])
-            plotApplPlaquettes!(axes[i,j],Flucs[i][j],SW.P1)
-            plotApplPlaquettes!(axes[i,j],Flucs[i][j],SW.P2,color = :blue)
-            # lines!(axes[i,j],1:10,color = :black)
+            SW.plotApplPlaquettes!(axes[i,j],Flucs[i][j])
         end
     end
     fig
@@ -51,8 +44,7 @@ end
 adjFig(Flucs)
 ##
 SW.plotSpinConfig(res.AllConfigs[1])
-plotApplPlaquettes!(current_axis(),res.AllConfigs[1],SW.P1)
-plotApplPlaquettes!(current_axis(),res.AllConfigs[1],SW.P2,color = :blue)
+plotApplPlaquettes!(current_axis(),res.AllConfigs[1])
 display(current_figure())
 for s in res.Nminus[1]
     SW.plotSpinConfig(res.AllConfigs[s]) 
@@ -61,40 +53,55 @@ for s in res.Nminus[1]
     display(current_figure())
 end
 ##
-Stair = getStairCase(9)
+function plotPath()
+    current = 1
+
+    display(SW.plotApplPlaquettes(res.AllConfigs[current]))
+    for i in 1:50
+        neighbor = rand((res.Nminus,res.Nplus))
+        isempty(neighbor[current]) && (i -=1;continue)
+        current = rand(neighbor[current])
+        display(SW.plotApplPlaquettes(res.AllConfigs[current]))
+    end
+end
+plotPath()
+##
+Stair = getStairCase(12)
 res = SW.getAllNeighborStates(Stair)
 
 # SW.swapStates!(res.AllConfigs,res.Nplus,res.Nminus,1,2)
 # SW.swapStates!(res.AllConfigs,res.Nplus,res.Nminus,2,12)
-
-H = SW.H(res.AllConfigs,res.Nplus,res.Nminus,0)
+GC.gc()
+##
+μ = 0
+H = SW.H(res.AllConfigs,res.Nplus,res.Nminus,μ)
 # SW.testNplusMinus(res.Nplus,res.Nminus)
 # @info "" SW.ishermitian(H) length(filter(!=(0),H - H'))
 
 # heatmap(H,axis = (;aspect=1))
 ##
-sol = SW.SolveH(H)
-
-mag = [SW.getMagnetization(res.AllConfigs,sol,CartesianIndex(i,j)) for i in axes(Stair,1),j in axes(Stair,2)] 
+GC.gc()
+@time sol = SW.SolveH(H)
+GC.gc()
+mag = [SW.getMagnetization(res.AllConfigs,sol,CartesianIndex(i,j)) for i in axes(Stair,1),j in axes(Stair,2)]
 @info "" mavg = sum(abs,mag)/length(mag)
-fig,ax,hm = heatmap(mag;axis = (;aspect=1))
-Colorbar(fig[1,2],hm)
-fig
-##
-using LatticeFFTs
-using LatticeFFTs.Interpolations
-function getStructureFac(AllStates,eigen)
-    plan = getLatticeFFTPlan(AllStates[1].Mat,0)
-    Psi = eigen.vectors[:,1]
-    
-    Sq = [getInterpolatedFFT(abs2(psin)* c.Mat,0,plan;Interpolation = BSpline(Constant())) for (c,psin) in zip( AllStates,Psi)]
-    SSq(kx,ky) = real(sum(s(kx,ky)*s(-kx,-ky) for s in Sq))
+with_theme(theme_SimpleTicks()) do 
+    fig,ax,hm = heatmap(mag;axis = (;aspect=1,title = L"μ = %$μ",SW.getConfigAxis(Stair)...,xticks = [1,6,12],yticks = [1,6,12]),figure = (;size = 0.8 .*(400,300)))
+    Colorbar(fig[1,2],hm,label = L"\langle S^z \rangle")
+    save("exactFig/mag_mu=$μ.png",fig)
+    fig
 end
-
-Sq = getStructureFac(res.AllConfigs,sol)
 ##
-k = LinRange(-0,2pi,100)
-Sq_k = [Sq(kx,ky) for kx in k, ky in k]
-fig,ax,hm = heatmap(Sq_k;axis = (;aspect=1))
-Colorbar(fig[1,2],hm)
-fig
+using MakieHelpers
+
+Sq = SW.getStructureFac(res.AllConfigs,sol)
+##
+# k = LinRange(0,2pi,40)
+k = Sq.Sq[1].itp.ranges[1]
+Sq_k = fetch.([Threads.@spawn Sq(kx,ky) for kx in k, ky in k])
+with_theme(theme_PiTicks()) do 
+    fig,ax,hm = heatmap(k,k,Sq_k;axis = (;aspect=1,title = L"μ = %$μ"),figure = (;size = 0.8 .*(400,300)))
+    Colorbar(fig[1,2],hm,label = L"\mathcal{S}(\mathbf{q})")
+    save("exactFig/Sq_mu=$μ.png",fig)
+    fig
+end

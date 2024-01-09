@@ -1,3 +1,4 @@
+using LinearAlgebra, SparseArrays, Arpack
 const P1 =  SA[
     -1.0  1.0   1.0;
     -1.0  0.0  -1.0;
@@ -122,8 +123,7 @@ function H(AllStates,neighborplus,neighborminus,mu=0)
         end
     end
 
-    # return Hermitian(H)
-    return H
+    return sparse(Hermitian(H))
 end
 
 
@@ -171,11 +171,15 @@ end
 #     end
 
 # end
-SolveH(H) = eigen(H)
+SolveH(H,range=1:1) = eigen(H,range)
+function SolveH(H::SparseMatrixCSC;kwargs...)
+    values,vectors = eigs(H,nev=1,which=:SR;kwargs...)
+    return (;values,vectors)
+end
 
-function SolveH(AllConfigs,Nplus,Nminus,mu)
-    H = Hermitian(H(AllConfigs,Nplus,Nminus,mu))
-    return SolveH(H)
+function SolveH(AllConfigs,Nplus,Nminus,mu,range = 1:1)
+    H = H(AllConfigs,Nplus,Nminus,mu)
+    return SolveH(H,range)
 end
 
 function getMagnetization(AllConfigs,eigen,i)
@@ -188,12 +192,20 @@ function getMagnetization(AllConfigs,eigen,i)
     return mag
 end
 
-function getStructureFac(AllConfigs,eigen,i)
-    ψ0 = eigen.vectors[:,1]
-    mag = zero(eltype(eigen.vectors))
-    for n in eachindex(ψ0)
-        Si = AllConfigs[n][i]
-        mag += ψ0[n]'*Si*ψ0[n]
-    end
-    return mag
+function plotApplPlaquettes!(ax,State,op;kwargs...)
+    plaqs = getApplicablePlaquettes_ns(State,op)
+    points = Point2f.(plaqs)
+    scatter!(ax,points,markersize = 13,color = :red;kwargs...)
+
+end
+
+function plotApplPlaquettes!(ax,State;kwargs...)
+    plotApplPlaquettes!(ax,State,P1;kwargs...)
+    plotApplPlaquettes!(ax,State,P2;color = :blue,kwargs...)
+end
+
+function plotApplPlaquettes(State;kwargs...)
+    fig = plotSpinConfig(State)
+    plotApplPlaquettes!(current_axis(),State;kwargs...)
+    fig
 end

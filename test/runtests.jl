@@ -22,3 +22,24 @@ end
     @test SW.canTileUpRight(T1,T2)
     @test !(SW.canTileUpRight(T1,Tend))
 end
+##
+@testset "Hashing arrays" begin
+    state = rand(-0.5:0.5,20,20)
+    StateSet = Set([state])
+    StateArr = [state]
+    for i in eachindex(state)
+        newstate = copy(state)
+        push!(StateArr,newstate)
+        newstate[i] = -newstate[i]
+        push!(StateSet,newstate)
+    end
+    @test length(StateSet) == length(StateArr)
+    
+    for i in eachindex(state)
+        newstate = copy(state)
+        newstate[i] = -newstate[i]
+        push!(StateSet,newstate)
+    end
+    
+    @test length(StateSet) == length(StateArr)
+end

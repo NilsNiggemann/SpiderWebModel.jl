@@ -45,6 +45,18 @@ version = "0.4.1"
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
 version = "1.1.1"
 
+[[deps.Arpack]]
+deps = ["Arpack_jll", "Libdl", "LinearAlgebra", "Logging"]
+git-tree-sha1 = "9b9b347613394885fd1c8c7729bfc60528faa436"
+uuid = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
+version = "0.5.4"
+
+[[deps.Arpack_jll]]
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "OpenBLAS_jll", "Pkg"]
+git-tree-sha1 = "5ba6c757e8feccf03a1554dfaf3e26b3cfc7fd5e"
+uuid = "68821587-b530-5797-8361-c406ea357684"
+version = "3.5.1+1"
+
 [[deps.ArrayInterface]]
 deps = ["Adapt", "LinearAlgebra", "Requires", "SparseArrays", "SuiteSparse"]
 git-tree-sha1 = "bbec08a37f8722786d87bedf84eae19c020c4efa"
@@ -786,7 +798,7 @@ version = "1.3.1"
 
 [[deps.LatticeFFTs]]
 deps = ["FFTViews", "FFTW", "Interpolations", "LoopVectorization", "PaddedViews", "PrecompileTools", "StaticArrays", "StructArrays"]
-path = "../../LatticeFFTs.jl"
+git-tree-sha1 = "eb16bc821695bfdd6a544258e1fbcc4d8cea65d9"
 uuid = "83e9f648-131d-4a3c-a1de-d155351cd207"
 version = "0.3.3"
 
@@ -1489,7 +1501,7 @@ weakdeps = ["ChainRulesCore"]
     SpecialFunctionsChainRulesCoreExt = "ChainRulesCore"
 
 [[deps.SpiderWebModel]]
-deps = ["CairoMakie", "LinearAlgebra", "LoopVectorization", "OrderedCollections", "Random", "StaticArrays", "Statistics", "Test"]
+deps = ["Arpack", "CairoMakie", "LatticeFFTs", "LinearAlgebra", "LoopVectorization", "OrderedCollections", "Random", "SparseArrays", "StaticArrays", "Statistics", "Test"]
 path = ".."
 uuid = "8e1b84da-b1d7-4311-a21b-52324f990117"
 version = "0.1.0"
