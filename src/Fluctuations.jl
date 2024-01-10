@@ -110,20 +110,30 @@ function invertDict(D)
     D2 = Dict(v => k for (k,v) in D)
 end
 
-function H(AllStates,neighborplus,neighborminus,mu=0)
+function H(AllStates,neighborplus,neighborminus,mu::T=0.) where {T<:Number}
     dim = length(AllStates)
-    H = zeros(dim,dim)
-    for n in axes(H,1), m in axes(H,2)
-        if m ∈ neighborplus[n] || m ∈ neighborminus[n] 
-            H[n,m] = -1
-        end
-
-        if n == m
-            H[n,m] = mu*(length(neighborplus[n] ∪ neighborminus[n]))
-        end
+    rows = Int[]
+    cols = Int[]
+    vals = T[]
+    function addTerm!(n,m,val)
+        push!(rows,n)
+        push!(cols,m)
+        push!(vals,val)
     end
 
-    return sparse(Hermitian(H))
+    for n in 1:dim
+        for m ∈ neighborplus[n]
+            addTerm!(n,m,-one(T))
+        end
+        for m ∈ neighborminus[n]
+            addTerm!(n,m,-one(T))
+        end
+
+        val = mu*(length(neighborplus[n] ∪ neighborminus[n]))
+        addTerm!(n,n,val)
+    end
+
+    return Hermitian(sparse(rows,cols,vals))
 end
 
 
@@ -172,7 +182,9 @@ end
 
 # end
 SolveH(H,range=1:1) = eigen(H,range)
-function SolveH(H::SparseMatrixCSC;kwargs...)
+const SparseMat = Union{SparseMatrixCSC,Hermitian{<:Number,<:SparseMatrixCSC}}
+
+function SolveH(H::SparseMat;kwargs...)
     values,vectors = eigs(H,nev=1,which=:SR;kwargs...)
     return (;values,vectors)
 end

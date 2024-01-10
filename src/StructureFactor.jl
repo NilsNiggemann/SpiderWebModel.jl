@@ -5,6 +5,7 @@ using LatticeFFTs.Interpolations
 function getStructureFac(AllStates,eigen,tol=0)
     plan = getLatticeFFTPlan(AllStates[1].Mat,0)
     Psi = eigen.vectors[:,1]
+    Nsites = length(AllStates[1])
     # weights = abs2.(Psi)
     # inds = findall(x->abs(x)>tol,weights)
 

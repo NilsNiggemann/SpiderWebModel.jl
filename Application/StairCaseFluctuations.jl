@@ -45,8 +45,7 @@ function adjFig(Flucs)
 end
 adjFig(Flucs)
 ##
-SW.plotSpinConfig(res.AllConfigs[1])
-plotApplPlaquettes!(current_axis(),res.AllConfigs[1])
+SW.plotApplPlaquettes(res.AllConfigs[1])
 display(current_figure())
 for s in res.Nminus[1]
     SW.plotApplPlaquettes(res.AllConfigs[s],SW.P2,color = :blue) |> display
@@ -77,17 +76,18 @@ Stair = getStairCase(12)
 GC.gc()
 ##
 μ = 1
-H = SW.H(res.AllConfigs,res.Nplus,res.Nminus,μ)
+@time H = SW.H(res.AllConfigs,res.Nplus,res.Nminus,μ)
 # SW.testNplusMinus(res.Nplus,res.Nminus)
 # @info "" SW.ishermitian(H) length(filter(!=(0),H - H'))
 
-# heatmap(H,axis = (;aspect=1))
+# heatmap(-H.data |> Array ,axis = (;aspect=1))
 ##
 GC.gc()
 @time sol = SW.SolveH(H)
 GC.gc()
 mag = [SW.getMagnetization(res.AllConfigs,sol,CartesianIndex(i,j)) for i in axes(Stair,1),j in axes(Stair,2)]
-@info "" mavg = sum(abs,mag)/length(mag)
+@info "" mavg = sum(abs,mag)/length(mag) mavgBulk = sum(abs,mag[3:end-2,3:end-2])/length(mag[3:end-2,3:end-2])
+
 with_theme(theme_SimpleTicks()) do 
     fig,ax,hm = heatmap(mag;axis = (;aspect=1,title = L"μ = %$μ",SW.getConfigAxis(Stair)...,xticks = [1,6,12],yticks = [1,6,12]),figure = (;size = 0.8 .*(400,300)))
     Colorbar(fig[1,2],hm,label = L"\langle S^z \rangle")
@@ -103,7 +103,7 @@ k = Sq.Sq[1].itp.ranges[1]
 Sq_k = fetch.([Threads.@spawn Sq(kx,ky) for kx in k, ky in k])
 with_theme(theme_PiTicks()) do 
     fig,ax,hm = heatmap(k,k,Sq_k;axis = (;aspect=1,title = L"μ = %$μ"),figure = (;size = 0.8 .*(400,300)))
-    Colorbar(fig[1,2],hm,label = L"\mathcal{S}(\mathbf{q})")
+    Colorbar(fig[1,2],hm,label = L"\mathcal{S}^{zz}(\mathbf{q})")
     save("exactFig/Sq_mu=$μ.png",fig)
     fig
 end
