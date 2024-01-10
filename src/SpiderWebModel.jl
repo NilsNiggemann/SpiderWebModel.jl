@@ -212,6 +212,7 @@ module SpiderWebModel
 
     function CanApplyNonStrict(Conf::SpinConfig,Op::AbstractMatrix,i,j)
         plaquetteIsInBounds(Conf,i,j) || return false
+        isodd(i+j) || return false
         P = getPlaquette(Conf,i,j)
         
         P .+= Op

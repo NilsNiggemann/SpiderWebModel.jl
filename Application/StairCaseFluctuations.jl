@@ -65,14 +65,18 @@ function plotPath()
 end
 plotPath()
 ##
+
+##
 Stair = getStairCase(12)
-res = SW.getAllNeighborStates(Stair)
+# @profview res = SW.getAllNeighborStates(Stair)
+##
+@time res = SW.getAllNeighborStates(Stair)
 
 # SW.swapStates!(res.AllConfigs,res.Nplus,res.Nminus,1,2)
 # SW.swapStates!(res.AllConfigs,res.Nplus,res.Nminus,2,12)
 GC.gc()
 ##
-μ = 0
+μ = 1
 H = SW.H(res.AllConfigs,res.Nplus,res.Nminus,μ)
 # SW.testNplusMinus(res.Nplus,res.Nminus)
 # @info "" SW.ishermitian(H) length(filter(!=(0),H - H'))
