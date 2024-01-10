@@ -1,5 +1,7 @@
 import SpiderWebModel as SW
 using StaticArrays, CairoMakie
+using MakieHelpers
+
 function getStairCase(L) 
     UC = SA[
         1 1 1 0;
@@ -47,10 +49,7 @@ SW.plotSpinConfig(res.AllConfigs[1])
 plotApplPlaquettes!(current_axis(),res.AllConfigs[1])
 display(current_figure())
 for s in res.Nminus[1]
-    SW.plotSpinConfig(res.AllConfigs[s]) 
-    plotApplPlaquettes!(current_axis(),res.AllConfigs[s],SW.P1)
-    plotApplPlaquettes!(current_axis(),res.AllConfigs[s],SW.P2,color = :blue)
-    display(current_figure())
+    SW.plotApplPlaquettes(res.AllConfigs[s],SW.P2,color = :blue) |> display
 end
 ##
 function plotPath()
@@ -92,7 +91,6 @@ with_theme(theme_SimpleTicks()) do
     fig
 end
 ##
-using MakieHelpers
 
 Sq = SW.getStructureFac(res.AllConfigs,sol)
 ##

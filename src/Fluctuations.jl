@@ -193,7 +193,7 @@ function getMagnetization(AllConfigs,eigen,i)
 end
 
 function plotApplPlaquettes!(ax,State,op;kwargs...)
-    plaqs = getApplicablePlaquettes_ns(State,op)
+    plaqs = getApplicablePlaquettes(State,op)
     points = Point2f.(plaqs)
     scatter!(ax,points,markersize = 13,color = :red;kwargs...)
 
