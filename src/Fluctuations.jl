@@ -53,7 +53,7 @@ function getNeighborStates!(AllConfigs,StartConfig,operator)
 
     NeighborStates = Int[]
 
-    plaqs = getApplicablePlaquettes(StartConfig,operator)
+    plaqs = getApplicablePlaquettes_ns(StartConfig,operator)
     
     for p in plaqs
         Conf2 = copy(StartConfig)
