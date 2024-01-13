@@ -5,41 +5,6 @@ const P1 =  SA[
     1.0  1.0  -1.0]
 const P2 = -P1
 
-function generateAllFluctuations(StartConfig,operator = findOps(StartConfig)[1];maxiter = 500)
-
-    Configs = [[copy(StartConfig)]]
-    uniqeConfs = Set([copy(StartConfig)])
-    for iter in 1:maxiter-1
-        Confs = Configs[iter]
-        newconf = empty(Confs)
-        for Conf in Confs
-            plaqs = getApplicablePlaquettes(Conf,operator)
-            # isempty(plaqs) && (@warn "no fluctuations possible"; break)
-            
-            for p in plaqs
-                Conf2 = copy(Conf)
-                pij = getPlaquette(Conf2,p...)
-                pij .+= operator
-                if Conf2 ∉ uniqeConfs
-                    push!(newconf,Conf2)
-                    push!(uniqeConfs,Conf2)
-                end
-            end
-            if isempty(newconf) 
-                @info "" length(uniqeConfs)
-                return Configs,uniqeConfs
-            end
-            # @assert i1 == i2 "i1 = $i1, i2 = $i2"
-        end
-        # @info "" length(newconf) length(uniqeConfs)
-        push!(Configs,newconf)
-    end
-    # filter!(x -> fulFillsConstraint(x,verbose = false),Configs)
-    # @assert all(fulFillsConstraint.(Configs,verbose = true))
-    @warn "max iterations reached" length(uniqeConfs)
-    return Configs,uniqeConfs
-end
-
 function getStateNum!(AllConfigs::Dict{T,Int},Conf::T) where T
     num = get(AllConfigs,Conf,0)
     if num == 0
@@ -53,7 +18,7 @@ function getNeighborStates!(AllConfigs,StartConfig,operator)
 
     NeighborStates = Int[]
 
-    plaqs = getApplicablePlaquettes_ns(StartConfig,operator)
+    plaqs = getApplicablePlaquettes(StartConfig,operator)
     
     for p in plaqs
         Conf2 = copy(StartConfig)
@@ -165,22 +130,6 @@ function testNplusMinus(nplus,nminus)
     end
 end
 
-# function swapStates!(AllStates,Nplus,Nminus,i,j)
-#     # temp = copy(AllStates[i])
-#     # AllStates[i] .= AllStates[j]
-#     # AllStates[j] .= temp
-#     AllStates[i],AllStates[j] = AllStates[j],AllStates[i]
-#     for neighborlist in (Nplus,Nminus)
-#         for (i_n,n) in enumerate(neighborlist)
-#             if n == i
-#                 neighborlist[i_n] = j
-#             elseif n == j
-#                 neighborlist[i_n] = i
-#             end
-#         end
-#     end
-
-# end
 SolveH(H,range=1:1) = eigen(H,range)
 const SparseMat = Union{SparseMatrixCSC,Hermitian{<:Number,<:SparseMatrixCSC}}
 
@@ -220,4 +169,82 @@ function plotApplPlaquettes(State;kwargs...)
     fig = plotSpinConfig(State)
     plotApplPlaquettes!(current_axis(),State;kwargs...)
     fig
+end
+
+function CanApplyPlaquette(Conf::SpinConfig,i::Integer,j::Integer)
+    plaquetteIsInBounds(Conf,i,j) || return false
+    P = getPlaquette(Conf,i,j)
+    □ = plaquetteOperator()
+    
+    P .+= □
+
+    applicable = fulFillsConstraint(Conf)
+
+    P .-= □
+
+    return applicable
+end
+
+function flipSpinsAlongLine!(Conf,org,slope)
+    slope ∈ (-Inf, Inf) && return flipSpinsAlongRow!(Conf,org[2])
+    for i in axes(Conf.Mat,1), j in axes(Conf.Mat,2)
+        if slope*(i-org[1]) == j-org[2]
+            Conf[i,j] *= -1
+        end
+    end
+    return Conf
+end
+
+function flipSpinsAlongRow!(Conf,i)
+    Conf[i,:] .*= -1
+    return Conf
+end
+
+function CanApply(Conf::SpinConfig,Op::AbstractMatrix,i,j)
+    plaquetteIsInBounds(Conf,i,j) || return false
+    P = getPlaquette(Conf,i,j)
+    
+    P .+= Op
+
+    applicable = fulFillsConstraint(Conf)
+
+    P .-= Op
+
+    return applicable
+end
+
+function CanApplyNonStrict(Conf::SpinConfig,Op::AbstractMatrix,i,j)
+    plaquetteIsInBounds(Conf,i,j) || return false
+    isodd(i+j) || return false
+    P = getPlaquette(Conf,i,j)
+    
+    P .+= Op
+
+    applicable = all(x->abs(x)<=Conf.S,P)
+
+    P .-= Op
+
+    return applicable
+end
+
+function CanApplyAnywhere(Conf::SpinConfig,Op::AbstractMatrix)
+    a1 = axes(Conf.Mat,1)
+    a2 = axes(Conf.Mat,2)
+
+    Opx,Opy = size(Op)
+    for i in a1, j in a2
+        firstindex(a1)+Opx <= i <= lastindex(a1)-Opx || continue
+        firstindex(a2)+Opy <= j <= lastindex(a2)-Opy || continue
+
+        if CanApply(Conf,Op,i,j)
+            return true
+        end
+    end
+    return false
+end
+
+"""assumes that Op is already an allowed operator"""
+function getApplicablePlaquettes(Conf::SpinConfig,Op::AbstractMatrix)
+    plaqPos = [(i,j) for i in axes(Conf.Mat,1) for j in axes(Conf.Mat,2) if CanApplyNonStrict(Conf,Op,i,j)]
+    return plaqPos
 end

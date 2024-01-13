@@ -97,8 +97,8 @@ end
 ##
 function plotApplPlaquettes(State)
     b = findOps(State)
-    plaqs = SW.getApplicablePlaquettes_ns(State,b[1])
-    plaqs2 = SW.getApplicablePlaquettes_ns(State,b[3])
+    plaqs = SW.getApplicablePlaquettes(State,b[1])
+    plaqs2 = SW.getApplicablePlaquettes(State,b[3])
     fig = plotSpinConfig(State,markersize = 23)
     ax = current_axis()
     points = Point2f.(plaqs)
@@ -132,18 +132,7 @@ function generateRandomGroundState(L,S=1/2;maxiter = 1_000_000)
     error("Could not find a ground state")
 end
 generateRandomGroundState(5)
-##
-function getStepDeleter(L,default = 5,tries = 5)
-    function deleter(x,counter)
-        counter[] += 1
-        # println(counter[])
-        if counter[] > tries
-            counter[] = 0
-            return L
-        end
-        return default
-    end
-end
+
 ##
 function getLevels(path)
     origin = first(path)
@@ -204,7 +193,7 @@ function getConfigs(L,numConfigs = 10;kwargs...)
     tries = 60
     maxiter = 10_500_000
     
-    S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, setup(path),maxiter = 200_000,deleteSteps = getStepDeleter(L+2,1,15),verbose = false;kwargs...) for _ in 1:numConfigs for path in Paths])
+    S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),L,L,SW.ALLGS_S12, setup(path),maxiter = 200_000,deleteSteps = SW.getStepDeleter(L+2,1,15),verbose = false;kwargs...) for _ in 1:numConfigs for path in Paths])
 
 
     filter!(x -> SW.fulFillsConstraint(x,verbose = false) && !any(isnan,x),S)
@@ -292,8 +281,8 @@ function generateFluctuations(StartConfig,b1,b3,maxiter = 500)
     for i in 1:maxiter
 
         Conf = copy(rand(Configs))
-        plaqs1 = SW.getApplicablePlaquettes_ns(Conf,b1)
-        plaqs3 = SW.getApplicablePlaquettes_ns(Conf,b3)
+        plaqs1 = SW.getApplicablePlaquettes(Conf,b1)
+        plaqs3 = SW.getApplicablePlaquettes(Conf,b3)
         isempty(plaqs1) && isempty(plaqs3) && (@warn "no fluctuations possible"; break)
 
         if !isempty(plaqs1)
@@ -326,7 +315,7 @@ a = SW.constructConfigPath(6,6,SW.ALLGS_S12,SW.ydirecPathReverse(6))
 display.(plotSpinConfig.(a))
 ##
 function takeFluctuations(Confs,b1 = findOps(Confs[1])[1])
-    findNumFlucs = [length(SW.getApplicablePlaquettes_ns(c,b1)) for c in Confs]
+    findNumFlucs = [length(SW.getApplicablePlaquettes(c,b1)) for c in Confs]
 
     inds = sortperm(findNumFlucs)
     Confs = Confs[inds[end-50:end]]

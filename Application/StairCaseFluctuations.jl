@@ -22,28 +22,8 @@ function getStairCase(L)
 end
 ##
 Stair = getStairCase(8)
-Flucs,_ = SW.generateAllFluctuations(Stair,SW.P1)
-##
 res = SW.getAllNeighborStates(Stair)
 
-
-
-function adjFig(Flucs)
-    dims1 = length(Flucs)
-    dims2 = maximum(length.(Flucs))
-    fig = Figure(size = 200 .*(dims2,dims1))
-    S_ex = first(first(Flucs))
-    suppresskwargs(i,j) = checkbounds(Bool,Flucs[i],j) ? (;) : (backgroundcolor = (:white,0.),xticklabelsvisible = false,yticklabelsvisible = false,xminorgridvisible = false,yminorgridvisible = false)
-    axes = [Axis(fig[i,j];SW.getConfigAxis(S_ex)...,suppresskwargs(i,j)...) for i in 1:dims1,j in 1:dims2]
-    for i in eachindex(Flucs)
-        for j in eachindex(Flucs[i])
-            SW.plotSpinConfig!(axes[i,j],Flucs[i][j])
-            SW.plotApplPlaquettes!(axes[i,j],Flucs[i][j])
-        end
-    end
-    fig
-end
-adjFig(Flucs)
 ##
 SW.plotApplPlaquettes(res.AllConfigs[1])
 display(current_figure())
@@ -56,7 +36,8 @@ function plotPath()
 
     display(SW.plotApplPlaquettes(res.AllConfigs[current]))
     for i in 1:50
-        neighbor = rand((res.Nminus,res.Nplus))
+        neighbor = (res.Nminus)
+        # neighbor = rand((res.Nminus,res.Nplus))
         isempty(neighbor[current]) && (i -=1;continue)
         current = rand(neighbor[current])
         display(SW.plotApplPlaquettes(res.AllConfigs[current]))

@@ -95,27 +95,7 @@ module SpiderWebModel
         Pij[3,3] = Tile[3,3]
         return Pij
     end
-    
-    function getCorrel(Conf::SpinConfig)
-        S_ij = [si*sj for si in Conf.Mat, sj in Conf.Mat]
-        return S_ij
-    end
 
-    plaquetteOperator() = SpinConfig(
-        float(SA[
-            +1 +1 -1;
-            -1  0 -1;
-            -1 +1 +1
-        ]),
-        1/2
-    )
-
-    function PlaquetteOperator!(Conf::SpinConfig, i::Integer,j::Integer)
-        P = getPlaquette(Conf,i,j)
-        Op = plaquetteOperator()
-        P .+= Op
-        return Conf
-    end
 
     function plaquetteIsInBounds(Conf::AbstractMatrix,iCenter::Integer,jCenter::Integer)
         for i in iCenter-1:iCenter+1, j in jCenter-1:jCenter+1
@@ -161,126 +141,6 @@ module SpiderWebModel
     function fulFillsConstraint(Conf::SpinConfig;verbose = false)
         allSpinsInBounds(Conf;verbose) || return false
         return fulFillsConstraint_nonStrict(Conf;verbose)
-    end
-
-    function CanApplyPlaquette(Conf::SpinConfig,i::Integer,j::Integer)
-        plaquetteIsInBounds(Conf,i,j) || return false
-        P = getPlaquette(Conf,i,j)
-        □ = plaquetteOperator()
-        
-        P .+= □
-
-        applicable = fulFillsConstraint(Conf)
-
-        P .-= □
-
-        return applicable
-    end
-
-    function PlaquetteOperatorSave!(Conf::SpinConfig, i::Integer,j::Integer)
-        CanApplyPlaquette(Conf,i,j) || return Conf
-        PlaquetteOperator!(Conf,i,j)
-    end
-
-    function flipSpinsAlongLine!(Conf,org,slope)
-        slope ∈ (-Inf, Inf) && return flipSpinsAlongRow!(Conf,org[2])
-        for i in axes(Conf.Mat,1), j in axes(Conf.Mat,2)
-            if slope*(i-org[1]) == j-org[2]
-                Conf[i,j] *= -1
-            end
-        end
-        return Conf
-    end
-
-    function flipSpinsAlongRow!(Conf,i)
-        Conf[i,:] .*= -1
-        return Conf
-    end
-
-    function CanApply(Conf::SpinConfig,Op::AbstractMatrix,i,j)
-        plaquetteIsInBounds(Conf,i,j) || return false
-        P = getPlaquette(Conf,i,j)
-        
-        P .+= Op
-
-        applicable = fulFillsConstraint(Conf)
-
-        P .-= Op
-
-        return applicable
-    end
-
-    function CanApplyNonStrict(Conf::SpinConfig,Op::AbstractMatrix,i,j)
-        plaquetteIsInBounds(Conf,i,j) || return false
-        isodd(i+j) || return false
-        P = getPlaquette(Conf,i,j)
-        
-        P .+= Op
-
-        applicable = all(x->abs(x)<=Conf.S,P)
-
-        P .-= Op
-
-        return applicable
-    end
-
-    function CanApplyAnywhere(Conf::SpinConfig,Op::AbstractMatrix)
-        a1 = axes(Conf.Mat,1)
-        a2 = axes(Conf.Mat,2)
-
-        Opx,Opy = size(Op)
-        for i in a1, j in a2
-            firstindex(a1)+Opx <= i <= lastindex(a1)-Opx || continue
-            firstindex(a2)+Opy <= j <= lastindex(a2)-Opy || continue
-
-            if CanApply(Conf,Op,i,j)
-                return true
-            end
-        end
-        return false
-    end
-    
-    function getApplicablePlaquettes(Conf::SpinConfig,Op::AbstractMatrix)
-        plaqPos = [(i,j) for i in axes(Conf.Mat,1) for j in axes(Conf.Mat,2) if CanApply(Conf,Op,i,j)]
-        return plaqPos
-    end
-    
-    """assumes that Op is already an allowed operator"""
-    function getApplicablePlaquettes_ns(Conf::SpinConfig,Op::AbstractMatrix)
-        plaqPos = [(i,j) for i in axes(Conf.Mat,1) for j in axes(Conf.Mat,2) if CanApplyNonStrict(Conf,Op,i,j)]
-        return plaqPos
-    end
-    
-    function canTileUpRight(T1,T2)
-        T1´ = T1[1:2,2:3]
-        T2´ = T2[2:3,1:2]
-        return all(_isZeroOrNaN,T1´-T2´)
-    end
-    
-    function canTileUpLeft(T1,T2)
-        T1´ = T1[1:2,1:2]
-        T2´ = T2[2:3,2:3]
-        return all(_isZeroOrNaN,T1´-T2´)
-    end
-    
-    function canTileDownRight(T1,T2)
-        T1´ = T1[2:3,2:3]
-        T2´ = T2[1:2,1:2]
-        return all(_isZeroOrNaN,T1´-T2´)
-    end
-
-    function canTileDownLeft(T1,T2)
-        T1´ = T1[2:3,1:2]
-        T2´ = T2[1:2,2:3]
-        return all(_isZeroOrNaN,T1´-T2´)
-    end
-    
-    function getTilings(T1,AllTilings)
-        UpRight = [i for (i,T2) in enumerate(AllTilings) if canTileUpRight(T1,T2)]
-        UpLeft = [i for (i,T2) in enumerate(AllTilings) if canTileUpLeft(T1,T2)]
-        DownRight = [i for (i,T2) in enumerate(AllTilings) if canTileDownRight(T1,T2)]
-        DownLeft = [i for (i,T2) in enumerate(AllTilings) if canTileDownLeft(T1,T2)]
-        return (;UpRight,UpLeft,DownRight,DownLeft)
     end
 
     # function canPlaceTile(P::SpinConfig,T1)
@@ -631,9 +491,19 @@ module SpiderWebModel
 
     #     return fittingTilesDict
     # end
-
-    function constructConfigPath(::DictAlgorithm,LPx,LPy,PlaquetteList,
-        setup = setupCalc!(xdirecPath(LPx,LPy),LPx,LPy,PlaquetteList);
+    function getStepDeleter(L,default = 5,tries = 5)
+        function deleter(x,counter)
+            counter[] += 1
+            # println(counter[])
+            if counter[] > tries
+                counter[] = 0
+                return L
+            end
+            return default
+        end
+    end
+    
+    function constructConfigPath(::DictAlgorithm, P::SpinConfig,PlaquetteList,setup;
         maxiter= 10000,
         deleteSteps = i->LPx,
         verbose = true,
@@ -642,13 +512,6 @@ module SpiderWebModel
         
         path = setup.path
         emptyTilesList = setup.emptyTilesList
-        
-        Lx = 2*LPx+1
-        Ly = 2*LPy+1
-        Mat = fill(NaN,Lx,Ly)
-        
-        El = PlaquetteList[begin]
-        P = SpinConfig(Mat,El.S)
         
         # path = spiralPath(LPx)
         tilingHistory = Int[]
@@ -714,6 +577,21 @@ module SpiderWebModel
         end
         return P
     end
+        
+    function constructConfigPath(Algo::DictAlgorithm,LPx,LPy,PlaquetteList,
+        setup = setupCalc!(xdirecPath(LPx,LPy),LPx,LPy,PlaquetteList);
+        kwargs...
+        )
+        
+        Lx = 2*LPx+1
+        Ly = 2*LPy+1
+        Mat = fill(NaN,Lx,Ly)
+        
+        El = PlaquetteList[begin]
+        P = SpinConfig(Mat,El.S)
+        return constructConfigPath(Algo,P,PlaquetteList,setup; kwargs...)
+    end
+
     using CairoMakie.Makie.ColorSchemes
     function plotSpinConfig!(ax,S::SpinConfig;kwargs...)
         vals = filter!(x-> !ismissing(x) && !isnan(x),unique(S.Mat))
