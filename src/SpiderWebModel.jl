@@ -119,10 +119,10 @@ module SpiderWebModel
     end
 
     """Assumes that constraint are only defined on every alternating site, starting from the first index"""
-    function fulFillsConstraint_nonStrict(Conf::SpinConfig;verbose = false)
+    function fulFillsConstraint_nonStrict(Conf::SpinConfig,flipParity=false;verbose = false)
 
         for i in axes(Conf.Mat,1), j in axes(Conf.Mat,2)
-            iseven(i+j) || continue 
+            iseven(i+j+flipParity) || continue 
             plaquetteIsInBounds(Conf,i,j) || continue
             P = getPlaquette(Conf,i,j)
             any(isnan,P) && continue
@@ -138,9 +138,9 @@ module SpiderWebModel
         return true
     end
 
-    function fulFillsConstraint(Conf::SpinConfig;verbose = false)
+    function fulFillsConstraint(Conf::SpinConfig,flipParity=false;verbose = false)
         allSpinsInBounds(Conf;verbose) || return false
-        return fulFillsConstraint_nonStrict(Conf;verbose)
+        return fulFillsConstraint_nonStrict(Conf,flipParity;verbose)
     end
 
     # function canPlaceTile(P::SpinConfig,T1)
@@ -651,6 +651,7 @@ module SpiderWebModel
         end
         return emptyTiles
     end
+    include("PeriodicTilings.jl")
     include("StructureFactor.jl")
     include("Fluctuations.jl")
 
