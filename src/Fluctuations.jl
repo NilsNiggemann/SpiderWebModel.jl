@@ -14,51 +14,55 @@ function getStateNum!(AllConfigs::AbstractDict{T,Int},Conf::T) where T
     return num
 end
 
-function getNeighborStates!(AllConfigs,StartConfig,operator)
+function getNeighborStates!(AllConfigs,State,operator)
 
     NeighborStates = Int[]
 
-    plaqs = getApplicablePlaquettes(StartConfig,operator)
+    plaqs = getApplicablePlaquettes(State,operator)
     
     for p in plaqs
-        Conf2 = copy(StartConfig)
-        pij = getPlaquette(Conf2,p...)
+        NewState = copy(State)
+        pij = getPlaquette(NewState,p...)
         pij .+= operator
         
-        num = getStateNum!(AllConfigs,Conf2)
+        num = getStateNum!(AllConfigs,NewState)
         push!(NeighborStates,num)
     end
     
     return NeighborStates
 end
 
+function generateAllConfigs(InitialState)
+    alreadyDone = Set(Int[])
+    AllConfigs = Dict(copy(InitialState) => 1)
+
+    while length(alreadyDone) < length(AllConfigs)
+        for (Conf,num) in AllConfigs
+            num in alreadyDone && continue
+            getNeighborStates!(AllConfigs,Conf,P1)
+            getNeighborStates!(AllConfigs,Conf,P2)
+
+            push!(alreadyDone,num)
+        end
+    end
+    return AllConfigs
+end
+
 function getAllNeighborStates(StartConfig)
-    AllConfigs = Dict(StartConfig => 1)
+    AllConfigs = generateAllConfigs(StartConfig)
     
     Nplus = empty(Dict(1 => Int[]))
     Nminus = empty(Dict(1 => Int[]))
 
-    numConfigs_last = 0
-    convergenceCounter = 0
-    while true
-        for (Conf,num) in AllConfigs
-            # num in keys(Nplus) && continue
-            neighbors = getNeighborStates!(AllConfigs,Conf,P1)
-            Nplus[num] = neighbors
-            
-            neighbors = getNeighborStates!(AllConfigs,Conf,P2)
-            Nminus[num] = neighbors
-        end
-        if length(AllConfigs) == numConfigs_last
-            convergenceCounter +=1 
-            convergenceCounter >= 2 && break
-        end
-        numConfigs_last = length(AllConfigs)
+    len = length(AllConfigs)
+    for (Conf,num) in AllConfigs
+        neighbors = getNeighborStates!(AllConfigs,Conf,P1)
+        Nplus[num] = neighbors
+        
+        neighbors = getNeighborStates!(AllConfigs,Conf,P2)
+        Nminus[num] = neighbors
     end
-    # @info "" length(AllConfigs) length(Nplus) length(Nminus) 
-    
-    # return (;AllConfigs,Nplus,Nminus)
-
+    @assert length(AllConfigs) == len "new Configs were generated!"
     return (;
     AllConfigs = sortByValueOrder(AllConfigs),
     Nplus = sortbyKeyOrder(Nplus),
