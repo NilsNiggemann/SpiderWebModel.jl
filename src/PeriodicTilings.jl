@@ -14,7 +14,7 @@ function getTilings(Lx,Ly)
     Configs = empty([SpinConfig(UC,1/2)])
 
     for i in eachindex(UC)
-
+    end
     tileMatrix!(Mat,UC)
 end
 

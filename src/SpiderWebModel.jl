@@ -2,7 +2,7 @@ module SpiderWebModel
     using StaticArrays,Random,Statistics,LoopVectorization
     using OrderedCollections, LinearAlgebra
     using Test
-    import Base:size,getindex,setindex!,iterate,show,copy
+    import Base:size,getindex,setindex!,iterate,show,copy,hash
 
     struct SpinConfig{T,MatType <: AbstractMatrix{T},T1<:Real} <:AbstractMatrix{T}
         Mat::MatType
@@ -16,6 +16,9 @@ module SpiderWebModel
 
     Base.size(S::SpinConfig) = size(S.Mat)
     Base.copy(S::SpinConfig) = SpinConfig(copy(S.Mat),S.S)
+    # function Base.hash(S::SpinConfig)
+    #     S.S != 1/2 && return hash((S.Mat,S.S))
+    # end
     # Base.show(io::IO, ::MIME"text/plain", S::SpinConfig) = show(io,S.Mat)
     # Base.show(io::IO, S::SpinConfig) = show(io,S.Mat)
     
@@ -651,7 +654,7 @@ module SpiderWebModel
         end
         return emptyTiles
     end
-    include("PeriodicTilings.jl")
+    # include("PeriodicTilings.jl")
     include("StructureFactor.jl")
     include("Fluctuations.jl")
 
