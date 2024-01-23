@@ -5,7 +5,7 @@ const P1 =  SA[
     1.0  1.0  -1.0]
 const P2 = -P1
 
-function getStateNum!(AllConfigs::Dict{T,Int},Conf::T) where T
+function getStateNum!(AllConfigs::AbstractDict{T,Int},Conf::T) where T
     num = get(AllConfigs,Conf,0)
     if num == 0
         push!(AllConfigs,Conf => length(AllConfigs)+1)
@@ -38,7 +38,9 @@ function getAllNeighborStates(StartConfig)
     Nplus = empty(Dict(1 => Int[]))
     Nminus = empty(Dict(1 => Int[]))
 
-    while length(Nplus) < length(AllConfigs)
+    numConfigs_last = 0
+    convergenceCounter = 0
+    while true
         for (Conf,num) in AllConfigs
             # num in keys(Nplus) && continue
             neighbors = getNeighborStates!(AllConfigs,Conf,P1)
@@ -47,6 +49,11 @@ function getAllNeighborStates(StartConfig)
             neighbors = getNeighborStates!(AllConfigs,Conf,P2)
             Nminus[num] = neighbors
         end
+        if length(AllConfigs) == numConfigs_last
+            convergenceCounter +=1 
+            convergenceCounter >= 2 && break
+        end
+        numConfigs_last = length(AllConfigs)
     end
     # @info "" length(AllConfigs) length(Nplus) length(Nminus) 
     
