@@ -596,14 +596,18 @@ module SpiderWebModel
     end
 
     using CairoMakie.Makie.ColorSchemes
-    function plotSpinConfig!(ax,S::SpinConfig;kwargs...)
+    function plotSpinConfig!(ax,S::SpinConfig;plotConstraints=true,kwargs...)
         vals = filter!(x-> !ismissing(x) && !isnan(x),unique(S.Mat))
         isempty(vals) && (vals = [-1,1])
         Amin = min(minimum(vals),-S.S)
         Amax = max(maximum(vals),S.S)
         us = Amin:Amax
-        hm = heatmap!(ax,Array(S.Mat),colorrange = (Amin,Amax),colormap = cgrad(:linear_bgy_10_95_c74_n256, length(us), categorical = true))
-    
+        # hm = heatmap!(ax,Array(S.Mat),colorrange = (Amin,Amax),colormap = cgrad(:linear_bgy_10_95_c74_n256, length(us), categorical = true);kwargs...)
+        hm = heatmap!(ax,Array(S.Mat),colorrange = (Amin,Amax),colormap = cgrad(:grays, length(us), categorical = true);kwargs...)
+        if plotConstraints
+            points = [Point(Tuple(I)...) for I in CartesianIndices(S.Mat) if iseven(sum(Tuple(I)))]
+            scatter!(ax,points,marker = '×',  color = :gray, markersize = 20)
+        end
         translate!(hm, 0, 0, -100)
         return hm
     end

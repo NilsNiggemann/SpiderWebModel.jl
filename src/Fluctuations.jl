@@ -176,8 +176,8 @@ function plotApplPlaquettes!(ax,State;kwargs...)
     plotApplPlaquettes!(ax,State,P2;color = :blue,kwargs...)
 end
 
-function plotApplPlaquettes(State;kwargs...)
-    fig = plotSpinConfig(State)
+function plotApplPlaquettes(State;heatmapkwargs = (;),kwargs...)
+    fig = plotSpinConfig(State;heatmapkwargs...)
     plotApplPlaquettes!(current_axis(),State;kwargs...)
     fig
 end

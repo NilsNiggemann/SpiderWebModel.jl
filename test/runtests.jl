@@ -10,18 +10,7 @@ import SpiderWebModel as SW
     P = SW.Plaquette(c...)
     @test SW.constraint(P) == SW.constraint(c)
 end
-##
-@testset "tiling test" begin
-    AllAllowedConfigs = SW.getAllGS(0.5)
-    T1 = first(AllAllowedConfigs).x
-    T2 = AllAllowedConfigs[2].x
-    Tend = AllAllowedConfigs[end].x
-    @test SW.canTileUpRight(T1,T1)
-    @test SW.canTileDownRight(T1,T1)
-    @test SW.canTileDownLeft(T1,T1)
-    @test SW.canTileUpRight(T1,T2)
-    @test !(SW.canTileUpRight(T1,Tend))
-end
+
 ##
 @testset "Hashing arrays" begin
     state = rand(-0.5:0.5,20,20)

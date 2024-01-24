@@ -47,7 +47,7 @@ plotPath()
 ##
 
 ##
-Stair = getStairCase(12)
+Stair = getStairCase(14)
 # @profview res = SW.getAllNeighborStates(Stair)
 ##
 @time res = SW.getAllNeighborStates(Stair)
@@ -87,4 +87,28 @@ with_theme(theme_PiTicks()) do
     Colorbar(fig[1,2],hm,label = L"\mathcal{S}^{zz}(\mathbf{q})")
     save("exactFig/Sq_mu=$μ.png",fig)
     fig
+end
+
+##
+function EnergyScaling(L)
+    Stair = getStairCase(L)
+    res = SW.getAllNeighborStates(Stair)
+    μ = 0
+    H = SW.H(res.AllConfigs,res.Nplus,res.Nminus,μ)
+    sol = SW.SolveH(H)
+    return sol.values[1]
+end
+
+Ls = 4:1:14
+Es = ([EnergyScaling(L) for L in Ls])
+
+##
+let 
+    fig = Figure()
+    ax = Axis(fig[1,1],xlabel = L"L",ylabel = L"-E_0(L)",xscale = log10,yscale = log10)
+    scatterlines!(ax,Ls,-Es,label = L"Staircase$$")
+    lines!(ax,Ls,Ls.^2 ./16,label = L"E_0 =-L²/16",linestyle = :dash, color = :grey)
+    axislegend(ax,position = :rb)
+    fig
+    save("exactFig/EnergyScaling.png",fig)
 end
