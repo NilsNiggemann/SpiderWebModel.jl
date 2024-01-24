@@ -5,6 +5,36 @@ const P1 =  SA[
     1.0  1.0  -1.0]
 const P2 = -P1
 
+struct PlaquetteOperator{T<:AbstractMatrix}
+    pos::Tuple{Int,Int}
+    op::T
+end
+
+function applyOperator!(Conf::AbstractMatrix,□::PlaquetteOperator)
+    i,j = □.pos
+    P = getPlaquette(Conf,i,j)
+
+    P .+= □.op
+    return Conf
+end
+
+struct LazyConfig{T<:SpinConfig,op}
+    parent::T
+    path::Vector{op}
+end
+
+function spinConfig!(Conf::AbstractMatrix,L::LazyConfig)
+    for op in L.path
+        applyOperator!(Conf,op)
+    end
+    return Conf
+end
+
+function spinConfig(L::LazyConfig)
+    Conf = copy(L.parent)
+    spinConfig!(Conf,L)
+end
+
 function getStateNum!(AllConfigs::AbstractDict{T,Int},Conf::T) where T
     num = get(AllConfigs,Conf,0)
     if num == 0
