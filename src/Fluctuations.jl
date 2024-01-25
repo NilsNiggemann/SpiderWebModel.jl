@@ -30,6 +30,7 @@ function flipPlaquette!(Conf::AbstractMatrix,i,j)
     return Conf
 end
 
+
 function flipPlaquette!(Conf::AbstractMatrix,pos::Tuple)
     i,j = pos
     flipPlaquette!(Conf,i,j)
@@ -40,6 +41,11 @@ function flipPlaquette!(Conf::AbstractMatrix,pos::CartesianIndex{2})
     flipPlaquette!(Conf,i,j)
 end
 
+function flipPlaquette!(Conf::AbstractMatrix,pos::Int)
+    ij = CartesianIndices(Conf)[pos]
+    flipPlaquette!(Conf,ij)
+end
+
 struct LazyPath{P}
     path::Set{P}
 end
@@ -47,39 +53,52 @@ end
 Base.copy(L::LazyPath) = LazyPath(copy(L.path))
 Base.empty!(L::LazyPath) = LazyPath(empty!(L.path))
 
-function Base.push!(L::LazyPath,pos)
-    if pos ∈ L.path
-        delete!(L.path,pos)
+function appendToPath!(path,pos)
+    if pos ∈ path
+        delete!(path,pos)
     else
-        push!(L.path,pos)
+        push!(path,pos)
     end
+    return path
+end
+
+function Base.push!(L::LazyPath,pos)
+    appendToPath!(L.path,pos)
     return L
 end
 
-function spinConfig!(Conf::AbstractMatrix,L::LazyPath)
-    for op in L.path
+function spinConfig!(Conf::AbstractMatrix,path,InitConf::AbstractMatrix)
+    Conf .= InitConf
+    for op in path
         flipPlaquette!(Conf,op)
     end
     return Conf
 end
+spinConfig!(Conf::AbstractMatrix,L::LazyPath,InitConf::AbstractMatrix) = spinConfig!(Conf,L.path,InitConf)
+
+function spinConfig(InitConf::AbstractMatrix,L)
+    NewConf = copy(InitConf)
+    spinConfig!(NewConf,L,InitConf)
+end
 
 function generateAllConfigs(InitialState)
     alreadyDone = Set(Int[])
-    startpath = empty(Set([(1,1)]))
+    startpath = empty(Set(1))
 
     AllPaths = Dict(
-        LazyPath(startpath) => 1
+        startpath => 1
     )
     Conf = copy(InitialState)
-
     while length(alreadyDone) < length(AllPaths)
         for (path,num) in AllPaths
+            # println(length(alreadyDone),"/",length(AllPaths))
             num in alreadyDone && continue
-
-            Conf = spinConfig!(Conf,path)
+            
+            Conf = spinConfig!(Conf,path,InitialState)
             appendToPaths!(AllPaths,Conf,path)
 
             push!(alreadyDone,num)
+
         end
     end
     return AllPaths
@@ -88,11 +107,16 @@ end
 function appendToPaths!(AllPaths,Conf,path)
 
     plaqs = getApplicablePlaquettes(Conf)
-    
+    LI = LinearIndices(Conf)
     for p in plaqs
         newpath = copy(path)
-        push!(newpath,p)
-        AllPaths[newpath] = length(AllPaths)+1
+        pInt = LI[CartesianIndex(p)]
+        push!(newpath,pInt)
+        
+        ind = get(AllPaths,newpath,0)
+        if ind == 0 
+            AllPaths[newpath] = length(AllPaths)+1
+        end
     end
     
     return AllPaths
