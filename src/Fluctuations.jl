@@ -50,8 +50,7 @@ struct LazyConfig{T,P}
     parent::T
     path::Set{P}
 end
-Base.show(io::IO,::MIME"text/plain",L::LazyConfig) = print(io,L.path)
-
+Base.show(io::IO,::MIME"text/plain",L::LazyConfig) = print(io,"LazyConfig: ",L.path)
 function appendToPath!(path,pos)
     if pos ∈ path
         delete!(path,pos)
@@ -69,6 +68,10 @@ function spinConfig!(Conf::AbstractMatrix,path,InitConf::AbstractMatrix)
     return Conf
 end
 
+function spinConfig!(Conf::AbstractMatrix,L::LazyConfig)
+    spinConfig!(Conf,L.path,L.parent)
+end
+
 function spinConfig(InitConf::AbstractMatrix,path)
     NewConf = copy(InitConf)
     spinConfig!(NewConf,path,InitConf)
@@ -77,6 +80,12 @@ end
 function spinConfig(L::LazyConfig)
     spinConfig(L.parent,L.path)
 end
+
+plotSpinConfig!(ax,L::LazyConfig,args...;kwargs...) = plotSpinConfig(spinConfig(L),args...;kwargs...)
+plotSpinConfig(L::LazyConfig;kwargs...) = plotSpinConfig(spinConfig(L),kwargs...)
+plotApplPlaquettes!(ax,L::LazyConfig;kwargs...) = plotApplPlaquettes(spinConfig(L),ax;kwargs...)
+plotApplPlaquettes(L::LazyConfig;kwargs...) = plotApplPlaquettes(spinConfig(L);kwargs...)
+
 
 function generateAllPaths(InitialState)
     alreadyDone = Set(Int[])
@@ -109,7 +118,7 @@ function appendToPaths!(AllPaths,Conf,path)
     for p in plaqs
         newpath = copy(path)
         pInt = LI[CartesianIndex(p)]
-        push!(newpath,pInt)
+        appendToPath!(newpath,pInt)
         
         ind = get(AllPaths,newpath,0)
         if ind == 0 
@@ -120,44 +129,47 @@ function appendToPaths!(AllPaths,Conf,path)
     return AllPaths
 end
 
-function getNeighborsFromPaths(Allpaths::AbstractVector{<:AbstractSet})
-    NeighborStates = [Int[] for i in eachindex(Allpaths)]
 
-    for i in eachindex(Allpaths)
-        Ni = NeighborStates[i]
-        path_i = Allpaths[i]
-        len_i = length(path_i)
-        i > 1000 && return NeighborStates
-        for j in eachindex(Allpaths)
-            Nj = NeighborStates[j]
-            path_j = Allpaths[j]
-
-            lengthdiff = length(path_i) - length(path_j)
-            if lengthdiff == 1
-                pathdiff = setdiff(path_i,path_j)
-                if length(pathdiff) == 1
-                    push!(Ni,j)
-                end
-            elseif lengthdiff == -1
-                pathdiff = setdiff(path_j,path_i)
-                if length(pathdiff) == 1
-                    push!(Ni,j)
-                end
-            end
-
+function getNeighbors(Conf,AllPaths,path)
+    Neighbors = Int[]
+    plaqs = getApplicablePlaquettes(Conf)
+    LI = LinearIndices(Conf)
+    for p in plaqs
+        newpath = copy(path)
+        pInt = LI[CartesianIndex(p)]
+        appendToPath!(newpath,pInt)
+        
+        ind = get(AllPaths,newpath,0)
+        if ind == 0 
+            error("new Config found")
         end
+
+        push!(Neighbors,ind)
+
     end
-    return NeighborStates
+    
+    return Neighbors
+end
+
+function getAllNeighborStates(AllPaths,InitialState)
+    Neighbors = [Int[] for i in eachindex(AllPaths)]
+    Conf = copy(InitialState)
+    for (path,num) in AllPaths
+        Conf = spinConfig!(Conf,path,InitialState)
+        neighs = getNeighbors(Conf,AllPaths,path)
+        Neighbors[num] = neighs
+    end
+    return Neighbors
 end
 
 function getAllNeighborStates(StartConfig)
     AllConfigs = generateAllPaths(StartConfig)
+    Neighbors = getAllNeighborStates(AllConfigs,StartConfig)
     AllConfigsList = sortByValueOrder(AllConfigs)
 
-    Neighbors = getNeighborsFromPaths(AllConfigsList)
-    # AllStates = LazyConfig.(Ref(StartConfig),AllConfigsList)
+    AllStates = LazyConfig.(Ref(StartConfig),AllConfigsList)
 
-    # return (;AllStates,Neighbors)
+    return (;AllStates,Neighbors)
 end
 
 function sortByValueOrder(D::Dict)
@@ -176,7 +188,7 @@ function invertDict(D)
     D2 = Dict(v => k for (k,v) in D)
 end
 
-function H(AllStates,neighborplus,neighborminus,mu::T=0.) where {T<:Number}
+function H(AllStates,neighbors,mu::T=0.) where {T<:Number}
     dim = length(AllStates)
     rows = Int[]
     cols = Int[]
@@ -188,47 +200,15 @@ function H(AllStates,neighborplus,neighborminus,mu::T=0.) where {T<:Number}
     end
 
     for n in 1:dim
-        for m ∈ neighborplus[n]
-            addTerm!(n,m,-one(T))
-        end
-        for m ∈ neighborminus[n]
+        for m ∈ neighbors[n]
             addTerm!(n,m,-one(T))
         end
 
-        val = mu*(length(neighborplus[n] ∪ neighborminus[n]))
+        val = mu*(length(neighbors))
         addTerm!(n,n,val)
     end
 
     return Hermitian(sparse(rows,cols,vals))
-end
-
-
-function Hnonflip(AllStates,neighborplus,neighborminus)
-    dim = length(AllStates)
-    H = zeros(dim,dim)
-    for n in axes(H,1), m in axes(H,2)
-        if m ∈ neighborplus[n] || m ∈ neighborminus[n] 
-            H[n,m] = 1
-        end
-    end
-    return Hermitian(H)
-end
-
-function testNplusMinus(nplus,nminus)
-    @testset "test nplus" failfast = true begin
-        for (n,ns) in enumerate(nplus)
-            for m in ns
-                @test n in nminus[m]
-            end
-        end
-    end
-    @testset "test nminus" failfast = true begin
-        for (n,ns) in enumerate(nminus)
-            for m in ns
-                @test n in nplus[m]
-            end
-        end
-    end
 end
 
 SolveH(H,range=1:1) = eigen(H,range)
@@ -239,19 +219,59 @@ function SolveH(H::SparseMat;kwargs...)
     return (;values,vectors)
 end
 
-function SolveH(AllConfigs,Nplus,Nminus,mu,range = 1:1)
-    H = H(AllConfigs,Nplus,Nminus,mu)
+function SolveH(AllStates,Nplus,Nminus,mu,range = 1:1)
+    H = H(AllStates,Nplus,Nminus,mu)
     return SolveH(H,range)
 end
 
-function getMagnetization(AllConfigs,eigen,i)
+function getMagnetization(AllStates,eigen,i)
     ψ0 = eigen.vectors[:,1]
     mag = zero(eltype(eigen.vectors))
     for n in eachindex(ψ0)
-        Si = AllConfigs[n][i]
+        Si = AllStates[n][i]
         mag += abs2(ψ0[n])*Si
     end
     return mag
+end
+
+function getMagnetization(AllStates::AbstractVector{<:LazyConfig},eigen,i)
+    ψ0 = eigen.vectors[:,1]
+    mag = zero(eltype(eigen.vectors))
+    InitConfig = first(AllStates).parent
+    Conf = copy(InitConfig)
+
+    for n in eachindex(ψ0)
+        Conf = spinConfig!(Conf,AllStates[n])
+        Si = Conf[i]
+        mag += abs2(ψ0[n])*Si
+    end
+    return mag
+end
+
+function getStructureFac(AllStates::AbstractVector{<:LazyConfig},eigen,tol=0)
+    Conf = spinConfig(first(AllStates))
+
+    plan = getLatticeFFTPlan(Conf.Mat,0)
+    Psi = eigen.vectors[:,1]
+    Nsites = length(Conf)
+
+    function getSqi(state,ψn)
+        Conf = spinConfig!(Conf,state)
+        getInterpolatedFFT(abs2(ψn)* Conf.Mat,0,plan;Interpolation = BSpline(Constant()))
+    end
+    Sq = getSqi(first(AllStates),first(Psi))
+    k = Sq.itp.ranges[1]
+    Sq_k = zeros(length(k),length(k))
+
+    for (c,psin) in zip( AllStates,Psi)
+        Sqi = getSqi(c,psin)
+        for (i,kx) in enumerate(k)
+            for (j,ky) in enumerate(k)
+                Sq_k[i,j] += real(Sqi(kx,ky))
+            end
+        end
+    end
+    return (;k,Sq_k)
 end
 
 function plotApplPlaquettes!(ax,State;kwargs...)

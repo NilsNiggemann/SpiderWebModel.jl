@@ -3,12 +3,10 @@ import SpiderWebModel as SW
 ##
 @testset "plaquettes" begin
     c = [1,1,1,1,1,1,1,1] 
-    P = SW.Plaquette(c...)
-    @test SW.constraint(P) == SW.constraint(c) == 0
+    @test SW.constraint(c) == 0
 
     c = [1,1,1,-1,1,1,1,1] .* 0.5
-    P = SW.Plaquette(c...)
-    @test SW.constraint(P) == SW.constraint(c)
+    @test SW.constraint(c) == 1
 end
 
 ##

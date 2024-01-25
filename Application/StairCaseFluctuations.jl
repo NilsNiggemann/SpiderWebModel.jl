@@ -23,44 +23,34 @@ end
 ##
 Stair = getStairCase(8)
 ##
-res = SW.generateAllConfigs(Stair)
-##
-res = SW.getAllNeighborStates(Stair)
+@time res = SW.getAllNeighborStates(Stair)
 
-##
-SW.plotApplPlaquettes(res.AllConfigs[1])
-display(current_figure())
-for s in res.Nminus[1]
-    SW.plotApplPlaquettes(res.AllConfigs[s],SW.P2,color = :blue) |> display
-end
+
 ##
 function plotPath()
     current = 1
 
-    display(SW.plotApplPlaquettes(res.AllConfigs[current]))
-    for i in 1:50
-        neighbor = (res.Nminus)
-        # neighbor = rand((res.Nminus,res.Nplus))
-        isempty(neighbor[current]) && (i -=1;continue)
-        current = rand(neighbor[current])
-        display(SW.plotApplPlaquettes(res.AllConfigs[current]))
+    display(SW.plotApplPlaquettes(res.AllStates[current]))
+    for i in 1:20
+        current = rand(res.Neighbors[current])
+        display(SW.plotApplPlaquettes(res.AllStates[current]))
     end
 end
 plotPath()
 ##
 
 ##
-Stair = getStairCase(14)
+Stair = getStairCase(12)
 # @profview res = SW.getAllNeighborStates(Stair)
 ##
 @time res = SW.getAllNeighborStates(Stair)
 
-# SW.swapStates!(res.AllConfigs,res.Nplus,res.Nminus,1,2)
-# SW.swapStates!(res.AllConfigs,res.Nplus,res.Nminus,2,12)
+# SW.swapStates!(res.AllStates,res.Nplus,res.Nminus,1,2)
+# SW.swapStates!(res.AllStates,res.Nplus,res.Nminus,2,12)
 GC.gc()
 ##
 μ = 1
-@time H = SW.H(res.AllConfigs,res.Nplus,res.Nminus,μ)
+@time H = SW.H(res.AllStates,res.Neighbors,μ)
 # SW.testNplusMinus(res.Nplus,res.Nminus)
 # @info "" SW.ishermitian(H) length(filter(!=(0),H - H'))
 
@@ -69,7 +59,7 @@ GC.gc()
 GC.gc()
 @time sol = SW.SolveH(H)
 GC.gc()
-mag = [SW.getMagnetization(res.AllConfigs,sol,CartesianIndex(i,j)) for i in axes(Stair,1),j in axes(Stair,2)]
+mag = [SW.getMagnetization(res.AllStates,sol,CartesianIndex(i,j)) for i in axes(Stair,1),j in axes(Stair,2)]
 @info "" mavg = sum(abs,mag)/length(mag) mavgBulk = sum(abs,mag[3:end-2,3:end-2])/length(mag[3:end-2,3:end-2])
 
 with_theme(theme_SimpleTicks()) do 
@@ -80,7 +70,7 @@ with_theme(theme_SimpleTicks()) do
 end
 ##
 
-Sq = SW.getStructureFac(res.AllConfigs,sol)
+Sq = SW.getStructureFac(SW.spinConfig.(res.AllStates),sol)
 ##
 # k = LinRange(0,2pi,40)
 k = Sq.Sq[1].itp.ranges[1]
@@ -97,7 +87,7 @@ function EnergyScaling(L)
     Stair = getStairCase(L)
     res = SW.getAllNeighborStates(Stair)
     μ = 0
-    H = SW.H(res.AllConfigs,res.Nplus,res.Nminus,μ)
+    H = SW.H(res.AllStates,res.Nplus,res.Nminus,μ)
     sol = SW.SolveH(H)
     return sol.values[1]
 end
