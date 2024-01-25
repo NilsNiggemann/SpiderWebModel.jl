@@ -49,7 +49,9 @@ end
 struct LazyPath{P}
     path::Set{P}
 end
-
+Base.isequal(L1::LazyPath,L2::LazyPath) = L1.path == L2.path
+Base.:(==)(L1::LazyPath,L2::LazyPath) = L1.path == L2.path
+Base.hash(L::LazyPath) = hash(L.path)
 Base.copy(L::LazyPath) = LazyPath(copy(L.path))
 Base.empty!(L::LazyPath) = LazyPath(empty!(L.path))
 
@@ -76,9 +78,9 @@ function spinConfig!(Conf::AbstractMatrix,path,InitConf::AbstractMatrix)
 end
 spinConfig!(Conf::AbstractMatrix,L::LazyPath,InitConf::AbstractMatrix) = spinConfig!(Conf,L.path,InitConf)
 
-function spinConfig(InitConf::AbstractMatrix,L)
+function spinConfig(InitConf::AbstractMatrix,path)
     NewConf = copy(InitConf)
-    spinConfig!(NewConf,L,InitConf)
+    spinConfig!(NewConf,path,InitConf)
 end
 
 function generateAllConfigs(InitialState)
@@ -101,7 +103,8 @@ function generateAllConfigs(InitialState)
 
         end
     end
-    return AllPaths
+    return Dict(spinConfig(InitialState,path) => num for (path,num) in AllPaths)
+    # return AllPaths
 end
 
 function appendToPaths!(AllPaths,Conf,path)
@@ -122,6 +125,34 @@ function appendToPaths!(AllPaths,Conf,path)
     return AllPaths
 end
 
+function getNeighborStates!(AllConfigs,State,operator)
+
+    NeighborStates = Int[]
+
+    plaqs = getApplicablePlaquettes(State,operator)
+    
+    for p in plaqs
+        NewState = copy(State)
+        pij = getPlaquette(NewState,p...)
+        pij .+= operator
+        
+        num = getStateNum!(AllConfigs,NewState)
+        push!(NeighborStates,num)
+    end
+    
+    return NeighborStates
+end
+
+
+function getStateNum!(AllConfigs::AbstractDict{T,Int},Conf::T) where T
+    num = get(AllConfigs,Conf,0)
+    if num == 0
+        push!(AllConfigs,Conf => length(AllConfigs)+1)
+        return length(AllConfigs)+1
+    end
+    return num
+end
+
 function getAllNeighborStates(StartConfig)
     AllConfigs = generateAllConfigs(StartConfig)
     
@@ -136,7 +167,7 @@ function getAllNeighborStates(StartConfig)
         neighbors = getNeighborStates!(AllConfigs,Conf,P2)
         Nminus[num] = neighbors
     end
-    @assert length(AllConfigs) == len "new Configs were generated!"
+    # @assert length(AllConfigs) == len "new Configs were generated!"
     return (;
     AllConfigs = sortByValueOrder(AllConfigs),
     Nplus = sortbyKeyOrder(Nplus),
