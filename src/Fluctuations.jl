@@ -5,77 +5,97 @@ const P1 =  SA[
     1.0  1.0  -1.0]
 const P2 = -P1
 
-struct PlaquetteOperator{T<:AbstractMatrix}
-    pos::Tuple{Int,Int}
-    op::T
+const P1_SITES = -SVector(getSitesFromPlaquette(P1))/2
+const P2_SITES = -SVector(getSitesFromPlaquette(P2))/2
+
+struct PlaquetteFlip end
+
+function plaquetteFlippable(plaqSites::SVector{8})
+    return plaqSites == P1_SITES || plaqSites == P2_SITES    
 end
 
-function applyOperator!(Conf::AbstractMatrix,□::PlaquetteOperator)
-    i,j = □.pos
+function flipPlaquette!(Conf::AbstractMatrix,i,j)
     P = getPlaquette(Conf,i,j)
 
-    P .+= □.op
+    P[1,1] = -P[1,1]
+    P[1,2] = -P[1,2]
+    P[1,3] = -P[1,3]
+    P[2,1] = -P[2,1]
+    # P[2,2] = -P[2,2]
+    P[2,3] = -P[2,3]
+    P[3,1] = -P[3,1]
+    P[3,2] = -P[3,2]
+    P[3,3] = -P[3,3]
+
     return Conf
 end
 
-struct LazyConfig{T<:SpinConfig,op}
-    parent::T
-    path::Vector{op}
+function flipPlaquette!(Conf::AbstractMatrix,pos::Tuple)
+    i,j = pos
+    flipPlaquette!(Conf,i,j)
 end
 
-function spinConfig!(Conf::AbstractMatrix,L::LazyConfig)
+function flipPlaquette!(Conf::AbstractMatrix,pos::CartesianIndex{2})
+    i,j = Tuple(pos)
+    flipPlaquette!(Conf,i,j)
+end
+
+struct LazyPath{P}
+    path::Set{P}
+end
+
+Base.copy(L::LazyPath) = LazyPath(copy(L.path))
+Base.empty!(L::LazyPath) = LazyPath(empty!(L.path))
+
+function Base.push!(L::LazyPath,pos)
+    if pos ∈ L.path
+        delete!(L.path,pos)
+    else
+        push!(L.path,pos)
+    end
+    return L
+end
+
+function spinConfig!(Conf::AbstractMatrix,L::LazyPath)
     for op in L.path
-        applyOperator!(Conf,op)
+        flipPlaquette!(Conf,op)
     end
     return Conf
-end
-
-function spinConfig(L::LazyConfig)
-    Conf = copy(L.parent)
-    spinConfig!(Conf,L)
-end
-
-function getStateNum!(AllConfigs::AbstractDict{T,Int},Conf::T) where T
-    num = get(AllConfigs,Conf,0)
-    if num == 0
-        push!(AllConfigs,Conf => length(AllConfigs)+1)
-        return length(AllConfigs)+1
-    end
-    return num
-end
-
-function getNeighborStates!(AllConfigs,State,operator)
-
-    NeighborStates = Int[]
-
-    plaqs = getApplicablePlaquettes(State,operator)
-    
-    for p in plaqs
-        NewState = copy(State)
-        pij = getPlaquette(NewState,p...)
-        pij .+= operator
-        
-        num = getStateNum!(AllConfigs,NewState)
-        push!(NeighborStates,num)
-    end
-    
-    return NeighborStates
 end
 
 function generateAllConfigs(InitialState)
     alreadyDone = Set(Int[])
-    AllConfigs = Dict(copy(InitialState) => 1)
+    startpath = empty(Set([(1,1)]))
 
-    while length(alreadyDone) < length(AllConfigs)
-        for (Conf,num) in AllConfigs
+    AllPaths = Dict(
+        LazyPath(startpath) => 1
+    )
+    Conf = copy(InitialState)
+
+    while length(alreadyDone) < length(AllPaths)
+        for (path,num) in AllPaths
             num in alreadyDone && continue
-            getNeighborStates!(AllConfigs,Conf,P1)
-            getNeighborStates!(AllConfigs,Conf,P2)
+
+            Conf = spinConfig!(Conf,path)
+            appendToPaths!(AllPaths,Conf,path)
 
             push!(alreadyDone,num)
         end
     end
-    return AllConfigs
+    return AllPaths
+end
+
+function appendToPaths!(AllPaths,Conf,path)
+
+    plaqs = getApplicablePlaquettes(Conf)
+    
+    for p in plaqs
+        newpath = copy(path)
+        push!(newpath,p)
+        AllPaths[newpath] = length(AllPaths)+1
+    end
+    
+    return AllPaths
 end
 
 function getAllNeighborStates(StartConfig)
@@ -194,36 +214,17 @@ function getMagnetization(AllConfigs,eigen,i)
     return mag
 end
 
-function plotApplPlaquettes!(ax,State,op;kwargs...)
-    plaqs = getApplicablePlaquettes(State,op)
+function plotApplPlaquettes!(ax,State;kwargs...)
+    plaqs = getApplicablePlaquettes(State)
     points = Point2f.(plaqs)
     scatter!(ax,points,markersize = 13,color = :red;kwargs...)
 
-end
-
-function plotApplPlaquettes!(ax,State;kwargs...)
-    plotApplPlaquettes!(ax,State,P1;kwargs...)
-    plotApplPlaquettes!(ax,State,P2;color = :blue,kwargs...)
 end
 
 function plotApplPlaquettes(State;heatmapkwargs = (;),kwargs...)
     fig = plotSpinConfig(State;heatmapkwargs...)
     plotApplPlaquettes!(current_axis(),State;kwargs...)
     fig
-end
-
-function CanApplyPlaquette(Conf::SpinConfig,i::Integer,j::Integer)
-    plaquetteIsInBounds(Conf,i,j) || return false
-    P = getPlaquette(Conf,i,j)
-    □ = plaquetteOperator()
-    
-    P .+= □
-
-    applicable = fulFillsConstraint(Conf)
-
-    P .-= □
-
-    return applicable
 end
 
 function flipSpinsAlongLine!(Conf,org,slope)
@@ -254,7 +255,16 @@ function CanApply(Conf::SpinConfig,Op::AbstractMatrix,i,j)
     return applicable
 end
 
-function CanApplyNonStrict(Conf::SpinConfig,Op::AbstractMatrix,i,j)
+function canFlipPlaquette(Conf::SpinConfig,i,j)
+    plaquetteIsInBounds(Conf,i,j) || return false
+    isodd(i+j) || return false
+
+    P = getPlaquette(Conf,i,j)
+    sites = SVector(getSitesFromPlaquette(P))
+    return plaquetteFlippable(sites)
+end
+
+function CanApplyNonStrict(Conf::SpinConfig,Op,i,j)
     plaquetteIsInBounds(Conf,i,j) || return false
     isodd(i+j) || return false
     P = getPlaquette(Conf,i,j)
@@ -285,7 +295,12 @@ function CanApplyAnywhere(Conf::SpinConfig,Op::AbstractMatrix)
 end
 
 """assumes that Op is already an allowed operator"""
-function getApplicablePlaquettes(Conf::SpinConfig,Op::AbstractMatrix)
+function getApplicablePlaquettes(Conf::SpinConfig,Op)
     plaqPos = [(i,j) for i in axes(Conf.Mat,1) for j in axes(Conf.Mat,2) if CanApplyNonStrict(Conf,Op,i,j)]
+    return plaqPos
+end
+
+function getApplicablePlaquettes(Conf::SpinConfig)
+    plaqPos = [(i,j) for i in axes(Conf.Mat,1) for j in axes(Conf.Mat,2) if canFlipPlaquette(Conf,i,j)]
     return plaqPos
 end

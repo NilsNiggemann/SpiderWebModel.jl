@@ -22,6 +22,9 @@ function getStairCase(L)
 end
 ##
 Stair = getStairCase(8)
+##
+res = SW.generateAllConfigs(Stair)
+##
 res = SW.getAllNeighborStates(Stair)
 
 ##
