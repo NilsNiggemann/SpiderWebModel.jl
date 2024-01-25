@@ -46,14 +46,11 @@ function flipPlaquette!(Conf::AbstractMatrix,pos::Int)
     flipPlaquette!(Conf,ij)
 end
 
-struct LazyPath{P}
+struct LazyConfig{T,P}
+    parent::T
     path::Set{P}
 end
-Base.isequal(L1::LazyPath,L2::LazyPath) = L1.path == L2.path
-Base.:(==)(L1::LazyPath,L2::LazyPath) = L1.path == L2.path
-Base.hash(L::LazyPath) = hash(L.path)
-Base.copy(L::LazyPath) = LazyPath(copy(L.path))
-Base.empty!(L::LazyPath) = LazyPath(empty!(L.path))
+Base.show(io::IO,::MIME"text/plain",L::LazyConfig) = print(io,L.path)
 
 function appendToPath!(path,pos)
     if pos ∈ path
@@ -64,11 +61,6 @@ function appendToPath!(path,pos)
     return path
 end
 
-function Base.push!(L::LazyPath,pos)
-    appendToPath!(L.path,pos)
-    return L
-end
-
 function spinConfig!(Conf::AbstractMatrix,path,InitConf::AbstractMatrix)
     Conf .= InitConf
     for op in path
@@ -76,14 +68,17 @@ function spinConfig!(Conf::AbstractMatrix,path,InitConf::AbstractMatrix)
     end
     return Conf
 end
-spinConfig!(Conf::AbstractMatrix,L::LazyPath,InitConf::AbstractMatrix) = spinConfig!(Conf,L.path,InitConf)
 
 function spinConfig(InitConf::AbstractMatrix,path)
     NewConf = copy(InitConf)
     spinConfig!(NewConf,path,InitConf)
 end
 
-function generateAllConfigs(InitialState)
+function spinConfig(L::LazyConfig)
+    spinConfig(L.parent,L.path)
+end
+
+function generateAllPaths(InitialState)
     alreadyDone = Set(Int[])
     startpath = empty(Set(1))
 
@@ -103,8 +98,8 @@ function generateAllConfigs(InitialState)
 
         end
     end
-    return Dict(spinConfig(InitialState,path) => num for (path,num) in AllPaths)
-    # return AllPaths
+    # return Dict(spinConfig(InitialState,path) => num for (path,num) in AllPaths)
+    return AllPaths
 end
 
 function appendToPaths!(AllPaths,Conf,path)
@@ -125,54 +120,44 @@ function appendToPaths!(AllPaths,Conf,path)
     return AllPaths
 end
 
-function getNeighborStates!(AllConfigs,State,operator)
+function getNeighborsFromPaths(Allpaths::AbstractVector{<:AbstractSet})
+    NeighborStates = [Int[] for i in eachindex(Allpaths)]
 
-    NeighborStates = Int[]
+    for i in eachindex(Allpaths)
+        Ni = NeighborStates[i]
+        path_i = Allpaths[i]
+        len_i = length(path_i)
+        i > 1000 && return NeighborStates
+        for j in eachindex(Allpaths)
+            Nj = NeighborStates[j]
+            path_j = Allpaths[j]
 
-    plaqs = getApplicablePlaquettes(State,operator)
-    
-    for p in plaqs
-        NewState = copy(State)
-        pij = getPlaquette(NewState,p...)
-        pij .+= operator
-        
-        num = getStateNum!(AllConfigs,NewState)
-        push!(NeighborStates,num)
+            lengthdiff = length(path_i) - length(path_j)
+            if lengthdiff == 1
+                pathdiff = setdiff(path_i,path_j)
+                if length(pathdiff) == 1
+                    push!(Ni,j)
+                end
+            elseif lengthdiff == -1
+                pathdiff = setdiff(path_j,path_i)
+                if length(pathdiff) == 1
+                    push!(Ni,j)
+                end
+            end
+
+        end
     end
-    
     return NeighborStates
 end
 
-
-function getStateNum!(AllConfigs::AbstractDict{T,Int},Conf::T) where T
-    num = get(AllConfigs,Conf,0)
-    if num == 0
-        push!(AllConfigs,Conf => length(AllConfigs)+1)
-        return length(AllConfigs)+1
-    end
-    return num
-end
-
 function getAllNeighborStates(StartConfig)
-    AllConfigs = generateAllConfigs(StartConfig)
-    
-    Nplus = empty(Dict(1 => Int[]))
-    Nminus = empty(Dict(1 => Int[]))
+    AllConfigs = generateAllPaths(StartConfig)
+    AllConfigsList = sortByValueOrder(AllConfigs)
 
-    len = length(AllConfigs)
-    for (Conf,num) in AllConfigs
-        neighbors = getNeighborStates!(AllConfigs,Conf,P1)
-        Nplus[num] = neighbors
-        
-        neighbors = getNeighborStates!(AllConfigs,Conf,P2)
-        Nminus[num] = neighbors
-    end
-    # @assert length(AllConfigs) == len "new Configs were generated!"
-    return (;
-    AllConfigs = sortByValueOrder(AllConfigs),
-    Nplus = sortbyKeyOrder(Nplus),
-    Nminus = sortbyKeyOrder(Nminus),
-    )
+    Neighbors = getNeighborsFromPaths(AllConfigsList)
+    # AllStates = LazyConfig.(Ref(StartConfig),AllConfigsList)
+
+    # return (;AllStates,Neighbors)
 end
 
 function sortByValueOrder(D::Dict)
