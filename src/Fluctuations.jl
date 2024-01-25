@@ -204,7 +204,7 @@ function H(AllStates,neighbors,mu::T=0.) where {T<:Number}
             addTerm!(n,m,-one(T))
         end
 
-        val = mu*(length(neighbors))
+        val = mu*(length(neighbors[n]))
         addTerm!(n,n,val)
     end
 
@@ -219,8 +219,8 @@ function SolveH(H::SparseMat;kwargs...)
     return (;values,vectors)
 end
 
-function SolveH(AllStates,Nplus,Nminus,mu,range = 1:1)
-    H = H(AllStates,Nplus,Nminus,mu)
+function SolveH(AllStates,neighbors,mu,range = 1:1)
+    H = H(AllStates,neighbors,mu)
     return SolveH(H,range)
 end
 

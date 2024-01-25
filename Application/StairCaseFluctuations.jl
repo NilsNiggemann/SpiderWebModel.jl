@@ -102,6 +102,7 @@ let
     scatterlines!(ax,Ls,-Es,label = L"Staircase$$")
     lines!(ax,Ls,Ls.^2 ./16,label = L"E_0 =-L²/16",linestyle = :dash, color = :grey)
     axislegend(ax,position = :rb)
-    fig
     save("exactFig/EnergyScaling.png",fig)
+    fig
+
 end
