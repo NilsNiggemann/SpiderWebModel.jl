@@ -63,6 +63,7 @@ function constructAllConfigs(Lx,Ly,PlaquetteList)
         end
         AllConfigs_current = AllConfigs_next
         AllConfigs_next = empty(AllConfigs_current)
+        println("progress: ", iter, "/",length(path), " = ", round(iter*100/length(path),digits = 1), "% \tnumber of Configs: ",length(AllConfigs_current) )
     end
     return AllConfigs_current
 end
