@@ -25,11 +25,11 @@ function addFullTile!(Pij::SpinConfig,Tile::SpinConfig,)
     return Pij
 end
 
-function constructAllConfigs(LPx,LPy,PlaquetteList)
+function constructAllConfigs(Lx,Ly,PlaquetteList)
+    LPx = cld(Lx,2)
+    LPy = cld(Ly,2)
     path = xdirecPath(LPx,LPy);
     
-    Lx = 2*LPx+1
-    Ly = 2*LPy+1
     Mat = fill(NaN,Lx,Ly)
     
     El = PlaquetteList[begin]
