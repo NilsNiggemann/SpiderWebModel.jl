@@ -29,6 +29,7 @@ end
 
 getXPath(Lx,Ly) = correctPath!(xdirecPath(cld(Lx,2),cld(Ly,2)),SpinConfig(fill(NaN,Lx,Ly),1/2))
 
+
 function constructAllConfigs(Lx,Ly,PlaquetteList)
     LPx = cld(Lx,2)
     LPy = cld(Ly,2)
@@ -60,12 +61,68 @@ function constructAllConfigs(Lx,Ly,PlaquetteList)
                 newhistory[iter] = Tile
                 push!(AllConfigs_next,newhistory)
             end
+            # println(stack(AllConfigs_next))
         end
         AllConfigs_current = AllConfigs_next
         AllConfigs_next = empty(AllConfigs_current)
         println("progress: ", iter, "/",length(path), " = ", round(iter*100/length(path),digits = 1), "% \tnumber of Configs: ",length(AllConfigs_current) )
     end
     return AllConfigs_current
+end
+
+function constructAllConfigs_fast(Lx,Ly,PlaquetteList)
+    LPx = cld(Lx,2)
+    LPy = cld(Ly,2)
+    path = xdirecPath(LPx,LPy)
+    
+    Mat = fill(NaN,Lx,Ly)
+    
+    El = PlaquetteList[begin]
+    P = SpinConfig(Mat,El.S)
+
+    correctPath!(path,P)
+    
+    path_length = length(path)
+
+    AllConfigs = ElasticArray{Int}(undef, path_length, length(PlaquetteList))
+    fill!(AllConfigs,0)
+    AllConfigs[1,:] .= eachindex(PlaquetteList)
+
+    iter = 1
+    TileListBuffer = collect(eachindex(PlaquetteList))
+    
+    numConfigs = length(PlaquetteList)
+
+    while iter < lastindex(path)
+        iter += 1
+        i,j = path[iter]
+
+        CurrentConfigs = @view AllConfigs[1:iter-1,1:numConfigs]
+
+        @info "" size(AllConfigs) size(CurrentConfigs)
+        
+        for history in eachcol(CurrentConfigs)
+            println(history)
+            P = reconstructTiling!(P,history,PlaquetteList,path)
+            Pij = getPlaquette(P,i,j)
+            Tiles = getFittingTiles!(TileListBuffer,Pij,PlaquetteList)
+            
+            numConfigs_old = size(AllConfigs,2)
+            numConfigs_new = numConfigs_old + length(Tiles)
+
+            resize!(AllConfigs,path_length,numConfigs_new)
+
+            println("resizing from", (path_length,numConfigs_old)," to ",size(AllConfigs))
+            # AllConfigs[:,numConfigs_old+1:end] .= 0
+            AllConfigs[1:iter-1,numConfigs_old+1:end] .= history
+            
+            nextConfig = @view AllConfigs[iter+1,numConfigs_old+1:end]
+            nextConfig .= Tiles
+            return AllConfigs
+        end
+        println("progress: ", iter, "/",path_length, " = ", round(iter*100/path_length,digits = 1), "% \tnumber of Configs: ",size(AllConfigs,2) )
+    end
+    return AllConfigs
 end
 
 function applyStep!(P,tilingHistory,PlaquetteList,path,n)
@@ -100,3 +157,5 @@ function reconstructTiling_xDirec(Lx::Int,Ly::Int,tilingHistory,PlaquetteList)
     path = correctPath!(xdirecPath(LPx,LPy),P)
     reconstructTiling!(P,tilingHistory,PlaquetteList,path)
 end
+
+

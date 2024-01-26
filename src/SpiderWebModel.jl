@@ -1,6 +1,7 @@
 module SpiderWebModel
     using StaticArrays,Random,Statistics,LoopVectorization
     using OrderedCollections, LinearAlgebra
+    using ElasticArrays
     using Test
     import Base:size,getindex,setindex!,iterate,show,copy,hash
 
