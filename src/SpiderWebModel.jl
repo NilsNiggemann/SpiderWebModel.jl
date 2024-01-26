@@ -262,7 +262,18 @@ module SpiderWebModel
     end
 
     getFittingTiles(P,PlaquetteList) = [i for (i,t) in enumerate(PlaquetteList) if canPlaceTile(P,t)]
-    
+
+    function getFittingTiles!(TileList,P,PlaquetteList)
+        len = 0
+        for (i,t) in enumerate(PlaquetteList)
+            if canPlaceTile(P,t)
+                len += 1
+                TileList[len] = i
+            end
+        end
+        return @view TileList[1:len]
+    end
+
     function getfirstFittingTile(P,shuffleList,indices) 
         for (t,i) in zip(shuffleList,indices)
             if canPlaceTile(P,t)

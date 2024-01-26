@@ -41,20 +41,23 @@ function constructAllConfigs(Lx,Ly,PlaquetteList)
 
     correctPath!(path,P)
     
-    AllConfigs_current = [Int[]]
+    AllConfigs_current = [zeros(Int,length(path))]
+
     AllConfigs_next = empty(AllConfigs_current)
     iter = 0
+    TileListBuffer = collect(eachindex(PlaquetteList))
 
     while iter < lastindex(path)
         iter += 1
         i,j = path[iter]
-        for history in AllConfigs_current
+        for history_buff in AllConfigs_current
+            history = @view history_buff[1:iter-1]
             P = reconstructTiling!(P,history,PlaquetteList,path)
             Pij = getPlaquette(P,i,j)
-            Tiles = getFittingTiles(Pij,PlaquetteList)
+            Tiles = getFittingTiles!(TileListBuffer,Pij,PlaquetteList)
             for Tile in Tiles
-                newhistory = copy(history)
-                push!(newhistory,Tile)
+                newhistory = copy(history_buff)
+                newhistory[iter] = Tile
                 push!(AllConfigs_next,newhistory)
             end
         end
