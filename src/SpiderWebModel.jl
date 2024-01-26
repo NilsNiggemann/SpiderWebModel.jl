@@ -1,6 +1,7 @@
 module SpiderWebModel
     using StaticArrays,Random,Statistics,LoopVectorization
     using OrderedCollections, LinearAlgebra
+    using ElasticArrays
     using Test
     import Base:size,getindex,setindex!,iterate,show,copy,hash
 
@@ -262,7 +263,18 @@ module SpiderWebModel
     end
 
     getFittingTiles(P,PlaquetteList) = [i for (i,t) in enumerate(PlaquetteList) if canPlaceTile(P,t)]
-    
+
+    function getFittingTiles!(TileList,P,PlaquetteList)
+        len = 0
+        for (i,t) in enumerate(PlaquetteList)
+            if canPlaceTile(P,t)
+                len += 1
+                TileList[len] = i
+            end
+        end
+        return @view TileList[1:len]
+    end
+
     function getfirstFittingTile(P,shuffleList,indices) 
         for (t,i) in zip(shuffleList,indices)
             if canPlaceTile(P,t)
@@ -377,6 +389,14 @@ module SpiderWebModel
     xdirecPathReverse(LPx,LPy=LPx) = [(i,j) for j in 1:2LPy+1 for i in 2LPx+1:-1:1 if iseven(i+j) ]
     ydirecPath(LPx,LPy=LPx) = [(i,j) for i in 1:2LPx+1 for j in 1:2LPy+1 if iseven(i+j)]
     ydirecPathReverse(LPx,LPy=LPx) = [(i,j) for i in 1:2LPx+1 for j in 2LPy+1:-1:1 if iseven(i+j)]
+
+    function correctPath!(path,Config)
+        filter!(x -> plaquetteIsInBounds(Config,x...),path)
+    end
+
+    function correctPath(path,Config)
+        filter(x -> plaquetteIsInBounds(Config,x...),path)
+    end
 
     function constructConfigPath(LPx,LPy,PlaquetteList,
         path = xdirecPath(LPx,LPy);
@@ -658,7 +678,7 @@ module SpiderWebModel
         end
         return emptyTiles
     end
-    # include("PeriodicTilings.jl")
+    include("PeriodicTilings.jl")
     include("StructureFactor.jl")
     include("Fluctuations.jl")
 
