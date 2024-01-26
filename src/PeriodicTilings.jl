@@ -18,6 +18,13 @@ function getTilings(Lx,Ly)
     tileMatrix!(Mat,UC)
 end
 
+
+function addFullTile!(Pij::SpinConfig,Tile::SpinConfig,)
+    addTile!(Pij,Tile)
+    Pij[2,2] = Tile[2,2]
+    return Pij
+end
+
 function constructAllConfigs(LPx,LPy,PlaquetteList)
     path = xdirecPath(LPx,LPy);
     
@@ -29,23 +36,19 @@ function constructAllConfigs(LPx,LPy,PlaquetteList)
     P = SpinConfig(Mat,El.S)
     filter!(x -> plaquetteIsInBounds(P,x...),path)
     
-    indices = shuffle(collect(eachindex(PlaquetteList)))
-    
     AllConfigs_current = [P]
     AllConfigs_next = empty(AllConfigs_current)
+    iter = 0
 
-    while iter < lastindex(path)-1
-        
-        iter = lastindex(tilingHistory)
-        
-        i,j = path[iter+1]
-
-        for P in AllConfigs
+    while iter < lastindex(path)
+        iter += 1
+        i,j = path[iter]
+        for P in AllConfigs_current
             Pij = getPlaquette(P,i,j)
             Tiles = getFittingTiles(Pij,PlaquetteList)
             for tile in Tiles
+                addFullTile!(Pij,PlaquetteList[tile])
                 Pnew = copy(P)
-                addTile!(Pnew,tile)
                 push!(AllConfigs_next,Pnew)
             end
         end

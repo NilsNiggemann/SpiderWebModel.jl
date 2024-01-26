@@ -658,7 +658,7 @@ module SpiderWebModel
         end
         return emptyTiles
     end
-    # include("PeriodicTilings.jl")
+    include("PeriodicTilings.jl")
     include("StructureFactor.jl")
     include("Fluctuations.jl")
 
