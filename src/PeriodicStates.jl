@@ -69,6 +69,6 @@ function periodicState6x6(L)
         1 1 1 1 0 0;
     ] .- 1/2
     UC = vertical_flip(UC)
-    getPeriodicState(UC,L,L,2)
+    getPeriodicState(UC,L,L,-2)
 end
 
