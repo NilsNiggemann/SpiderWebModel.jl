@@ -378,6 +378,14 @@ module SpiderWebModel
     ydirecPath(LPx,LPy=LPx) = [(i,j) for i in 1:2LPx+1 for j in 1:2LPy+1 if iseven(i+j)]
     ydirecPathReverse(LPx,LPy=LPx) = [(i,j) for i in 1:2LPx+1 for j in 2LPy+1:-1:1 if iseven(i+j)]
 
+    function correctPath!(path,Config)
+        filter!(x -> plaquetteIsInBounds(Config,x...),path)
+    end
+
+    function correctPath(path,Config)
+        filter(x -> plaquetteIsInBounds(Config,x...),path)
+    end
+
     function constructConfigPath(LPx,LPy,PlaquetteList,
         path = xdirecPath(LPx,LPy);
         maxiter= 10000,

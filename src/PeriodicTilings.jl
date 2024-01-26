@@ -21,39 +21,78 @@ end
 
 function addFullTile!(Pij::SpinConfig,Tile::SpinConfig,)
     addTile!(Pij,Tile)
+    t22 = Tile[2,2]
+    isnan(t22) && return Pij
     Pij[2,2] = Tile[2,2]
     return Pij
 end
 
+getXPath(Lx,Ly) = correctPath!(xdirecPath(cld(Lx,2),cld(Ly,2)),SpinConfig(fill(NaN,Lx,Ly),1/2))
+
 function constructAllConfigs(Lx,Ly,PlaquetteList)
     LPx = cld(Lx,2)
     LPy = cld(Ly,2)
-    path = xdirecPath(LPx,LPy);
+    path = xdirecPath(LPx,LPy)
     
     Mat = fill(NaN,Lx,Ly)
     
     El = PlaquetteList[begin]
     P = SpinConfig(Mat,El.S)
-    filter!(x -> plaquetteIsInBounds(P,x...),path)
+
+    correctPath!(path,P)
     
-    AllConfigs_current = [P]
+    AllConfigs_current = [Int[]]
     AllConfigs_next = empty(AllConfigs_current)
     iter = 0
 
     while iter < lastindex(path)
         iter += 1
         i,j = path[iter]
-        for P in AllConfigs_current
+        for history in AllConfigs_current
+            P = reconstructTiling!(P,history,PlaquetteList,path)
             Pij = getPlaquette(P,i,j)
             Tiles = getFittingTiles(Pij,PlaquetteList)
-            for tile in Tiles
-                addFullTile!(Pij,PlaquetteList[tile])
-                Pnew = copy(P)
-                push!(AllConfigs_next,Pnew)
+            for Tile in Tiles
+                newhistory = copy(history)
+                push!(newhistory,Tile)
+                push!(AllConfigs_next,newhistory)
             end
         end
         AllConfigs_current = AllConfigs_next
         AllConfigs_next = empty(AllConfigs_current)
     end
     return AllConfigs_current
+end
+
+function applyStep!(P,tilingHistory,PlaquetteList,path,n)
+    i,j = path[n]
+    T = PlaquetteList[tilingHistory[n]]
+    Pij = getPlaquette(P,i,j)
+    addFullTile!(Pij,T)
+    return P
+end
+
+function reconstructTiling!(P,tilingHistory,PlaquetteList,path)
+    fill!(P,NaN)
+    for i in eachindex(tilingHistory)
+        P = applyStep!(P,tilingHistory,PlaquetteList,path,i)
+    end
+    return P
+end
+
+function reconstructTiling(tilingHistory,PlaquetteList,path)
+    Lx = maximum(p[1] for p in path)+1
+    Ly = maximum(p[2] for p in path)+1
+    
+    P = SpinConfig(fill(NaN,Lx,Ly),1/2)
+    path = correctPath(path,P)
+    reconstructTiling!(P,tilingHistory,PlaquetteList,path)
+end
+
+function reconstructTiling_xDirec(Lx::Int,Ly::Int,tilingHistory,PlaquetteList)
+    P = SpinConfig(fill(NaN,Lx,Ly),1/2)
+    LPx = cld(Lx,2)
+    LPy = cld(Ly,2)
+    path = correctPath!(xdirecPath(LPx,LPy),P)
+    reconstructTiling!(P,tilingHistory,PlaquetteList,path)
 end
