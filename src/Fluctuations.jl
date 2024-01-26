@@ -121,16 +121,17 @@ function appendToPaths!(AllPaths,Conf,path)
 
     plaqs = getApplicablePlaquettes(Conf)
     LI = LinearIndices(Conf)
+    newpath = copy(path)
     for p in plaqs
         pInt = LI[CartesianIndex(p)]
-        updatePath!(path,pInt)
+        updatePath!(newpath,pInt)
         
-        ind = get(AllPaths,path,0)
+        ind = get(AllPaths,newpath,0)
         if ind == 0 
-            newpath = copy(path)
-            AllPaths[newpath] = length(AllPaths)+1
+            newpath2 = copy(newpath)
+            AllPaths[newpath2] = length(AllPaths)+1
         end
-        updatePath!(path,pInt) #undo the path change
+        updatePath!(newpath,pInt) #undo the path change
 
     end
     
@@ -141,13 +142,14 @@ end
 function getNeighbors(Conf,AllPaths,path)
     Neighbors = Int[]
     plaqs = getApplicablePlaquettes(Conf)
-    LI = LinearIndices(Conf)
+    LI = LinearIndices(Conf)#
+    newpath = copy(path)
     for p in plaqs
         pInt = LI[CartesianIndex(p)]
-        updatePath!(path,pInt)
+        updatePath!(newpath,pInt)
         
-        ind = get(AllPaths,path,0)
-        updatePath!(path,pInt) # undo the path change
+        ind = get(AllPaths,newpath,0)
+        updatePath!(newpath,pInt) # undo the path change
         if ind == 0 
             error("new Config found")
         end
