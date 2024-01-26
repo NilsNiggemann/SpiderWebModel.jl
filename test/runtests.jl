@@ -30,3 +30,13 @@ end
     
     @test length(StateSet) == length(StateArr)
 end
+##
+@testset "appending path" begin
+    path = Set([134,13,67,87])
+    SW.updatePath!(path,341)
+    @test path == Set([134,341,13,67,87])
+
+    SW.updatePath!(path,341)
+    @test path == Set([134,13,67,87])
+
+end

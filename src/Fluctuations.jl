@@ -50,8 +50,14 @@ struct LazyConfig{T,P}
     parent::T
     path::Set{P}
 end
+
+Base.hash(L::LazyConfig) = hash(L.path)
+Base.isequal(L1::LazyConfig,L2::LazyConfig) = L1.path == L2.path
+Base.:(==)(L1::LazyConfig,L2::LazyConfig) = L1.path == L2.path
+
 Base.show(io::IO,::MIME"text/plain",L::LazyConfig) = print(io,"LazyConfig: ",L.path)
-function appendToPath!(path,pos)
+
+function updatePath!(path,pos)
     if pos ∈ path
         delete!(path,pos)
     else
@@ -116,14 +122,16 @@ function appendToPaths!(AllPaths,Conf,path)
     plaqs = getApplicablePlaquettes(Conf)
     LI = LinearIndices(Conf)
     for p in plaqs
-        newpath = copy(path)
         pInt = LI[CartesianIndex(p)]
-        appendToPath!(newpath,pInt)
+        updatePath!(path,pInt)
         
-        ind = get(AllPaths,newpath,0)
+        ind = get(AllPaths,path,0)
         if ind == 0 
+            newpath = copy(path)
             AllPaths[newpath] = length(AllPaths)+1
         end
+        updatePath!(path,pInt) #undo the path change
+
     end
     
     return AllPaths
@@ -135,11 +143,11 @@ function getNeighbors(Conf,AllPaths,path)
     plaqs = getApplicablePlaquettes(Conf)
     LI = LinearIndices(Conf)
     for p in plaqs
-        newpath = copy(path)
         pInt = LI[CartesianIndex(p)]
-        appendToPath!(newpath,pInt)
+        updatePath!(path,pInt)
         
-        ind = get(AllPaths,newpath,0)
+        ind = get(AllPaths,path,0)
+        updatePath!(path,pInt) # undo the path change
         if ind == 0 
             error("new Config found")
         end

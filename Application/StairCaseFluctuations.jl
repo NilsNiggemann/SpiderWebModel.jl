@@ -40,7 +40,7 @@ plotPath()
 ##
 
 ##
-Stair = getStairCase(12)
+Stair = getStairCase(6)
 # @profview res = SW.getAllNeighborStates(Stair)
 ##
 @time res = SW.getAllNeighborStates(Stair)
