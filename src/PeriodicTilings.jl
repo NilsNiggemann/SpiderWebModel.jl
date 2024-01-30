@@ -1,23 +1,32 @@
-function tileMatrix!(Mat,UC)
-    Lx,Ly = size(UC)
+function getPeriodicState(UC,Lx,Ly,offset=0)
+    Lx_UC,Ly_UC = size(UC)
+    Mat = zeros(Float64,Lx,Ly)
+
+    _remapIndices(i,j) = remapIndices(i,j,Lx_UC,Ly_UC,offset)
+    
     for i in axes(Mat,1)
         for j in axes(Mat,2)
-            Mat[i,j] = UC[i%Lx+1,j%Ly+1]
+            x_i,y_j = _remapIndices(i,j)
+
+            Mat[i,j] = UC[x_i,y_j]
         end
     end
 
     S = SpinConfig(Mat,1/2)
 end
 
-function getTilings(Lx,Ly)
-    UC = zeros(Float64,Lx,Ly)
-    Configs = empty([SpinConfig(UC,1/2)])
-
-    for i in eachindex(UC)
+function remapIndices(x,y,Lx,Ly,offset)
+    xRegion = (x-1)÷Lx
+    
+    y = y - offset*xRegion
+    
+    x = (x-1)%Lx+1
+    y = (y-1)%Ly+1 
+    if y <=0 
+        y += Ly
     end
-    tileMatrix!(Mat,UC)
+    return x,y
 end
-
 
 function addFullTile!(Pij::SpinConfig,Tile::SpinConfig,)
     addTile!(Pij,Tile)
@@ -70,67 +79,6 @@ function constructAllConfigs(Lx,Ly,PlaquetteList)
     return AllConfigs_current
 end
 
-# function constructAllConfigs_fast(Lx,Ly,PlaquetteList)
-#     LPx = cld(Lx,2)
-#     LPy = cld(Ly,2)
-#     path = xdirecPath(LPx,LPy)
-    
-#     Mat = fill(NaN,Lx,Ly)
-    
-#     El = PlaquetteList[begin]
-#     P = SpinConfig(Mat,El.S)
-
-#     correctPath!(path,P)
-    
-#     path_length = length(path)
-
-#     CurrentConfigs = ElasticArray{Int}(undef, path_length, length(PlaquetteList))
-#     fill!(CurrentConfigs,0)
-#     NextConfigs = copy(CurrentConfigs)
-#     CurrentConfigs[1,:] .= eachindex(PlaquetteList)
-
-#     iter = 1
-#     TileListBuffer = collect(eachindex(PlaquetteList))
-    
-#     numConfigs = length(PlaquetteList)
-
-#     while iter < lastindex(path)
-#         iter += 1
-#         i,j = path[iter]
-
-#         CurrentConfigs = @view CurrentConfigs[1:iter-1,1:numConfigs]
-
-#         @info "" size(CurrentConfigs)
-        
-#         for (i,history) in enumerate(eachcol(CurrentConfigs))
-#             println(history)
-#             P = reconstructTiling!(P,history,PlaquetteList,path)
-#             Pij = getPlaquette(P,i,j)
-#             Tiles = getFittingTiles!(TileListBuffer,Pij,PlaquetteList)
-            
-#             numConfigs_old = size(CurrentConfigs,2)
-#             numConfigs_new = numConfigs_old + length(Tiles)
-
-#             resize!(NextConfigs,path_length,numConfigs_new)
-#             fill!(NextConfigs,0)
-
-#             # println("resizing from", (path_length,numConfigs_old)," to ",size(CurrentConfigs))
-            
-#             for Tile in Tiles
-#                 NextConfigs[1:iter-1,i] .= history
-#                 numConfigs_old += 1
-#             end
-#             CurrentConfigs[1:iter-1,numConfigs_old+1:end] .= history
-            
-#             nextConfig = @view CurrentConfigs[iter+1,numConfigs_old+1:end]
-#             nextConfig .= Tiles
-#             return CurrentConfigs
-#         end
-#         println("progress: ", iter, "/",path_length, " = ", round(iter*100/path_length,digits = 1), "% \tnumber of Configs: ",size(CurrentConfigs,2) )
-#     end
-#     return CurrentConfigs
-# end
-
 function applyStep!(P,tilingHistory,PlaquetteList,path,n)
     i,j = path[n]
     T = PlaquetteList[tilingHistory[n]]
@@ -164,4 +112,45 @@ function reconstructTiling_xDirec(Lx::Int,Ly::Int,tilingHistory,PlaquetteList)
     reconstructTiling!(P,tilingHistory,PlaquetteList,path)
 end
 
+function fillEmptyState(State::SpinConfig)
+    NaNPos = findall(isnan,State)
+    AllPossibilities =  Iterators.product((-State.S:State.S for i in NaNPos)...)
+    newStates = [copy(State) for _ in 1:length(AllPossibilities)]
+    for (i,conf) in enumerate(AllPossibilities)
+        State = newStates[i]
+        for (j,pos) in  enumerate(NaNPos)
+            State[pos] = conf[j]
+        end
+    end
+    return newStates
+end
 
+function fillEmptyStates(States,Lx,Ly,PlaquetteList)
+    newStates = empty([reconstructTiling_xDirec(Lx,Ly,first(States),PlaquetteList)])
+    for State in States
+        spinState = reconstructTiling_xDirec(Lx,Ly,State,PlaquetteList)
+        FilledStates = fillEmptyState(spinState)
+        append!(newStates,FilledStates)
+    end
+    return newStates
+end
+
+function getPeriodicState_history(Lx,Ly,ULx,ULy,tilingHistory,PlaquetteList,offset=0)
+    UC = reconstructTiling_xDirec(ULx,ULy,tilingHistory,PlaquetteList)
+    State = getPeriodicState(UC,Lx,Ly,offset)
+end
+
+function isPeriodicTiling(Lx,Ly,tilingHistory,PlaquetteList,offset=0)
+    State = getPeriodicState_history((2+1*offset)*Lx,(2+1*offset)*Ly,Lx,Ly,tilingHistory,PlaquetteList,offset)
+    return fulFillsConstraint_nonStrict(State)
+end
+
+function isPeriodicTiling(UC::AbstractMatrix,Lx,Ly,offset=0)
+
+    State = getPeriodicState(UC,Lx,Ly,offset)
+    return fulFillsConstraint_nonStrict(State)
+end
+
+function getAllPeriodicStates(Lx,Ly)
+    AllStates = constructAllConfigs(Lx,Ly,PlaquetteList)
+end

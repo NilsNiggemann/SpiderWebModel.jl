@@ -1,7 +1,6 @@
 module SpiderWebModel
     using StaticArrays,Random,Statistics,LoopVectorization
     using OrderedCollections, LinearAlgebra
-    using ElasticArrays
     using Test
     import Base:size,getindex,setindex!,iterate,show,copy,hash
 
@@ -679,9 +678,9 @@ module SpiderWebModel
         return emptyTiles
     end
     
+    include("PeriodicTilings.jl")
     include("PeriodicStates.jl")
 
-    include("PeriodicTilings.jl")
     include("StructureFactor.jl")
     include("Fluctuations.jl")
 

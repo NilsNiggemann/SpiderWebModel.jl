@@ -89,7 +89,7 @@ end
 
 plotSpinConfig!(ax,L::LazyConfig,args...;kwargs...) = plotSpinConfig(spinConfig(L),args...;kwargs...)
 plotSpinConfig(L::LazyConfig;kwargs...) = plotSpinConfig(spinConfig(L),kwargs...)
-plotApplPlaquettes!(ax,L::LazyConfig;kwargs...) = plotApplPlaquettes(spinConfig(L),ax;kwargs...)
+plotApplPlaquettes!(ax,L::LazyConfig;kwargs...) = plotApplPlaquettes!(ax,spinConfig(L);kwargs...)
 plotApplPlaquettes(L::LazyConfig;kwargs...) = plotApplPlaquettes(spinConfig(L);kwargs...)
 
 

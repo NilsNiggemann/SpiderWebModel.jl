@@ -1,33 +1,3 @@
-function getPeriodicState(UC,Lx,Ly,offset=0)
-    Lx_UC,Ly_UC = size(UC)
-    Mat = zeros(Float64,Lx,Ly)
-
-    _remapIndices(i,j) = remapIndices(i,j,Lx_UC,Ly_UC,offset)
-    
-    for i in axes(Mat,1)
-        for j in axes(Mat,2)
-            x_i,y_j = _remapIndices(i,j)
-
-            Mat[i,j] = UC[x_i,y_j]
-        end
-    end
-
-    S = SpinConfig(Mat,1/2)
-end
-
-function remapIndices(x,y,Lx,Ly,offset)
-    xRegion = (x-1)÷Lx
-    
-    y = y - offset*xRegion
-    
-    x = (x-1)%Lx+1
-    y = (y-1)%Ly+1 
-    if y <=0 
-        y += Ly
-    end
-    return x,y
-end
-
 function horizontal_flip(UC)
     UCnew = stack([UC[:,i] for i in reverse(axes(UC,2))])
 end
