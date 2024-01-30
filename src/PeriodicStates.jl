@@ -42,3 +42,18 @@ function periodicState6x6(L)
     getPeriodicState(UC,L,L,-2)
 end
 
+
+
+function periodicState6x6_3(L)
+
+    UC = SA[
+        0 0 0 1 0 0;
+        0 0 0 1 1 1;
+        0 0 0 0 0 1;
+        0 1 1 1 0 1;
+        0 1 0 0 1 0;
+        1 1 0 1 0 1;
+    ] .- 1/2
+    getPeriodicState(UC,L,L,0)
+end
+

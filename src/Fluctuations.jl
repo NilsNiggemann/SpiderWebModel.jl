@@ -287,9 +287,16 @@ function getStructureFac(AllStates::AbstractVector{<:LazyConfig},eigen,tol=0)
     return (;k,Sq_k)
 end
 
-function plotApplPlaquettes!(ax,State;kwargs...)
+function plotApplPlaquettes!(ax,State;square = false,heatmapkwargs=(;),kwargs...)
     plaqs = getApplicablePlaquettes(State)
     points = Point2f.(plaqs)
+    plotSpinConfig!(ax,State;heatmapkwargs...)
+    if square
+        for p in points
+            px,py = p
+            band!(ax,[px-1.5,px+1.5],[py-1.5,py-1.5],[py+1.5,py+1.5],color = (:red,0.5))
+        end
+    end
     scatter!(ax,points,markersize = 13,color = :red;kwargs...)
 
 end

@@ -1,17 +1,20 @@
+struct PeriodicMatrix{T,Mat<:AbstractMatrix{T}} <: AbstractMatrix{T}
+    UC::Mat
+    Lx::Int
+    Ly::Int
+    offset::Int
+end
+
+# Base.getindex(P::PeriodicMatrix,i,j) = P.UC[remapIndices(i,j,size(P)...,P.offset)...]
+function Base.getindex(P::PeriodicMatrix,i,j)
+    Lx,Ly = size(P.UC)
+    i,j = remapIndices(i,j,Lx,Ly,P.offset)
+    P.UC[i,j]
+end
+Base.size(P::PeriodicMatrix) = (P.Lx,P.Ly)
+
 function getPeriodicState(UC,Lx,Ly,offset=0)
-    Lx_UC,Ly_UC = size(UC)
-    Mat = zeros(Float64,Lx,Ly)
-
-    _remapIndices(i,j) = remapIndices(i,j,Lx_UC,Ly_UC,offset)
-    
-    for i in axes(Mat,1)
-        for j in axes(Mat,2)
-            x_i,y_j = _remapIndices(i,j)
-
-            Mat[i,j] = UC[x_i,y_j]
-        end
-    end
-
+    Mat = PeriodicMatrix(UC,Lx,Ly,offset)
     S = SpinConfig(Mat,1/2)
 end
 

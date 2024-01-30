@@ -3,12 +3,12 @@ using StaticArrays, CairoMakie
 using MakieHelpers
 import SpiderWebModel: getStairCase
 
-##
+
 
 
 ##
 function plotPath()
-    state = SW.periodicState5x5(12)
+    state = SW.periodicState6x6_3(12)
     @time res = SW.getAllNeighborStates(state)
     current = 1
 
@@ -95,12 +95,15 @@ SolStair = solveED(SW.getStairCase(14),μ)
 plotOverview(SolStair.res,SolStair.sol,title = L"stair state, $μ = %$μ$")
 ##
 StairEnergy(L) = getEnergy(getStairCase(L))
+# Energy5x5(L) = -L^2/10
 Energy5x5(L) = getEnergy(SW.periodicState5x5(L))
 Energy6x6(L) = getEnergy(SW.periodicState6x6(L))
-Ls = 5:1:14
-StairEs = ([StairEnergy(L) for L in Ls])
+Energy6x6_3(L) = getEnergy(SW.periodicState6x6_3(L))
+Ls = 5:1:13
+# StairEs = ([StairEnergy(L) for L in Ls])
 Ens_5x5 = ([Energy5x5(L) for L in Ls])
 Ens_6x6 = ([Energy6x6(L) for L in Ls])
+Ens_6x6_3 = ([Energy6x6_3(L) for L in Ls])
 
 ##
 with_theme(theme_SimpleTicks()) do
@@ -108,11 +111,13 @@ with_theme(theme_SimpleTicks()) do
     ax = Axis(fig[1,1],xlabel = L"L",ylabel = L"-E_0(L)",
     # xscale = log10,yscale = log10
     )
-    scatterlines!(ax,Ls,-StairEs,label = L"Staircase$$")
+    # scatterlines!(ax,Ls,-StairEs,label = L"Staircase$$")
     scatterlines!(ax,Ls,-Ens_5x5,label = L"5×5")
     scatterlines!(ax,Ls,-Ens_6x6,label = L"6×6")
+    scatterlines!(ax,Ls,-Ens_6x6_3,label = L"⋱_{6×6}")
+    lines!(ax,Ls,Ls.^2 ./10,label = L"E_0 =-L²/10",linestyle = :dash, color = :grey)
     lines!(ax,Ls,Ls.^2 ./16,label = L"E_0 =-L²/16",linestyle = :dash, color = :grey)
-    axislegend(ax,position = :rb)
+    axislegend(ax,position = :lt)
     save("exactFig/EnergyScaling.png",fig)
     fig
 
