@@ -3,9 +3,6 @@ using StaticArrays, CairoMakie
 using MakieHelpers
 import SpiderWebModel: getStairCase
 
-
-
-
 ##
 function plotPath()
     state = SW.periodicState6x6_3(12)
@@ -96,28 +93,31 @@ plotOverview(SolStair.res,SolStair.sol,title = L"stair state, $μ = %$μ$")
 ##
 StairEnergy(L) = getEnergy(getStairCase(L))
 # Energy5x5(L) = -L^2/10
-Energy5x5(L) = getEnergy(SW.periodicState5x5(L))
+# Energy5x5(L) = getEnergy(SW.periodicState5x5(L))
+Energy5x5(L) = -length(SW.getApplicablePlaquettes(SW.periodicState5x5(L)))
 Energy6x6(L) = getEnergy(SW.periodicState6x6(L))
 Energy6x6_3(L) = getEnergy(SW.periodicState6x6_3(L))
-Ls = 5:1:13
-# StairEs = ([StairEnergy(L) for L in Ls])
-Ens_5x5 = ([Energy5x5(L) for L in Ls])
-Ens_6x6 = ([Energy6x6(L) for L in Ls])
-Ens_6x6_3 = ([Energy6x6_3(L) for L in Ls])
+Ls_small = 5:1:13
+Ls_medium = 5:1:16
+Ls_large = 5:1:50
+StairEs = ([StairEnergy(L)/L^2 for L in Ls_small])
+Ens_5x5 = ([Energy5x5(L)/L^2 for L in Ls_large])
+Ens_6x6 = ([Energy6x6(L)/L^2 for L in Ls_medium])
+Ens_6x6_3 = ([Energy6x6_3(L)/L^2 for L in Ls_medium])
 
 ##
 with_theme(theme_SimpleTicks()) do
     fig = Figure(size = 0.8 .*(600,400))
-    ax = Axis(fig[1,1],xlabel = L"L",ylabel = L"-E_0(L)",
-    # xscale = log10,yscale = log10
+    ax = Axis(fig[1,1],xlabel = L"L",ylabel = L"-E_0(L)/L^2",
+    xscale = log10,yscale = log10
     )
-    # scatterlines!(ax,Ls,-StairEs,label = L"Staircase$$")
-    scatterlines!(ax,Ls,-Ens_5x5,label = L"5×5")
-    scatterlines!(ax,Ls,-Ens_6x6,label = L"6×6")
-    scatterlines!(ax,Ls,-Ens_6x6_3,label = L"⋱_{6×6}")
-    lines!(ax,Ls,Ls.^2 ./10,label = L"E_0 =-L²/10",linestyle = :dash, color = :grey)
-    lines!(ax,Ls,Ls.^2 ./16,label = L"E_0 =-L²/16",linestyle = :dash, color = :grey)
-    axislegend(ax,position = :lt)
+    scatterlines!(ax,Ls_small,-StairEs,label = L"Staircase$$")
+    scatterlines!(ax,Ls_large,-Ens_5x5,label = L"5×5")
+    scatterlines!(ax,Ls_medium,-Ens_6x6,label = L"6×6")
+    scatterlines!(ax,Ls_medium,-Ens_6x6_3,label = L"⋱_{6×6}")
+    lines!(ax,Ls_large,ones(length(Ls_large)) ./10,label = L"E_0 =-L^2/10",linestyle = :dash, color = :grey)
+    lines!(ax,Ls_large,ones(length(Ls_large)) ./16,label = L"E_0 =-L^2/16",linestyle = :dashdot, color = :grey)
+    axislegend(ax,position = :rb,nbanks = 2)
     save("exactFig/EnergyScaling.png",fig)
     fig
 
