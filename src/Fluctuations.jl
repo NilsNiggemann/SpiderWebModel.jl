@@ -92,6 +92,7 @@ plotSpinConfig(L::LazyConfig;kwargs...) = plotSpinConfig(spinConfig(L),kwargs...
 plotApplPlaquettes!(ax,L::LazyConfig;kwargs...) = plotApplPlaquettes!(ax,spinConfig(L);kwargs...)
 plotApplPlaquettes(L::LazyConfig;kwargs...) = plotApplPlaquettes(spinConfig(L);kwargs...)
 
+# using ChunkSplitters
 
 function generateAllPaths(InitialState)
     alreadyDone = Set(Int[])
@@ -100,21 +101,32 @@ function generateAllPaths(InitialState)
     AllPaths = Dict(
         startpath => 1
     )
+    NewPaths = [startpath]
+    AppendPaths = empty([startpath])
+
     Conf = copy(InitialState)
-    while length(alreadyDone) < length(AllPaths)
-        for (path,num) in AllPaths
-            # println(length(alreadyDone),"/",length(AllPaths))
-            num in alreadyDone && continue
+    while length(NewPaths) > 0
+        for (path) in NewPaths
             
             Conf = spinConfig!(Conf,path,InitialState)
-            appendToPaths!(AllPaths,Conf,path)
-
-            push!(alreadyDone,num)
-
+            getNewPaths!(AppendPaths,AllPaths,Conf,path)
         end
+        appendPaths!(AllPaths,NewPaths,AppendPaths)
     end
     # return Dict(spinConfig(InitialState,path) => num for (path,num) in AllPaths)
     return AllPaths
+end
+
+function appendPaths!(AllPaths,NewPaths,AppendPaths)
+    deleteInds = Int[]
+    empty!(NewPaths)
+    for (i,path) in enumerate(AppendPaths)
+        if path ∉ keys(AllPaths)
+            AllPaths[path] = length(AllPaths)+1
+            push!(NewPaths,path)
+        end
+    end
+    return AllPaths,NewPaths
 end
 
 function appendToPaths!(AllPaths,Conf,path)
@@ -136,6 +148,27 @@ function appendToPaths!(AllPaths,Conf,path)
     end
     
     return AllPaths
+end
+
+function getNewPaths!(AllNewPaths,AllPaths,Conf,path)
+
+    plaqs = getApplicablePlaquettes(Conf)
+    LI = LinearIndices(Conf)
+    newpath = copy(path)
+    for p in plaqs
+        pInt = LI[CartesianIndex(p)]
+        updatePath!(newpath,pInt)
+        
+        ind = get(AllPaths,newpath,0)
+        if ind == 0 
+            newpath2 = copy(newpath)
+            push!(AllNewPaths,newpath2)
+        end
+        updatePath!(newpath,pInt) #undo the path change
+
+    end
+    
+    return AllNewPaths
 end
 
 
