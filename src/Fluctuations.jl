@@ -92,8 +92,6 @@ plotSpinConfig(L::LazyConfig;kwargs...) = plotSpinConfig(spinConfig(L),kwargs...
 plotApplPlaquettes!(ax,L::LazyConfig;kwargs...) = plotApplPlaquettes!(ax,spinConfig(L);kwargs...)
 plotApplPlaquettes(L::LazyConfig;kwargs...) = plotApplPlaquettes(spinConfig(L);kwargs...)
 
-# using ChunkSplitters
-
 function generateAllPaths(InitialState)
     alreadyDone = Set(Int[])
     startpath = empty(Set(1))
@@ -102,16 +100,32 @@ function generateAllPaths(InitialState)
         startpath => 1
     )
     NewPaths = [startpath]
-    AppendPaths = empty([startpath])
+    
+    nThreads = Threads.nthreads()
+    Conf_buffer = [copy(InitialState) for _ in 1:nThreads]
+    AppendPaths_buffer = [empty([startpath]) for _ in 1:nThreads]
 
-    Conf = copy(InitialState)
     while length(NewPaths) > 0
-        for (path) in NewPaths
-            
-            Conf = spinConfig!(Conf,path,InitialState)
-            getNewPaths!(AppendPaths,AllPaths,Conf,path)
+
+        batches = ChunkSplitters.chunks(NewPaths,n=nThreads,split= :batch)
+        
+        Threads.@threads for (iChunk,inds) in enumerate(batches)
+            # for (path) in NewPaths
+            Conf = Conf_buffer[iChunk]
+            AppendPaths = AppendPaths_buffer[iChunk]
+            empty!(AppendPaths)
+
+            for i in inds
+                path = NewPaths[i]
+                Conf = spinConfig!(Conf,path,InitialState)
+                getNewPaths!(AppendPaths,AllPaths,Conf,path)
+            end
         end
-        appendPaths!(AllPaths,NewPaths,AppendPaths)
+        empty!(NewPaths)
+
+        for AppendPaths in AppendPaths_buffer
+            appendPaths!(AllPaths,NewPaths,AppendPaths)
+        end
     end
     # return Dict(spinConfig(InitialState,path) => num for (path,num) in AllPaths)
     return AllPaths
@@ -119,7 +133,6 @@ end
 
 function appendPaths!(AllPaths,NewPaths,AppendPaths)
     deleteInds = Int[]
-    empty!(NewPaths)
     for (i,path) in enumerate(AppendPaths)
         if path ∉ keys(AllPaths)
             AllPaths[path] = length(AllPaths)+1
