@@ -46,9 +46,9 @@ function flipPlaquette!(Conf::AbstractMatrix,pos::Int)
     flipPlaquette!(Conf,ij)
 end
 
-struct LazyConfig{T,P}
+struct LazyConfig{T}
     parent::T
-    path::Set{P}
+    path::BitSet
 end
 
 Base.hash(L::LazyConfig) = hash(L.path)
@@ -93,7 +93,7 @@ plotApplPlaquettes!(ax,L::LazyConfig;kwargs...) = plotApplPlaquettes!(ax,spinCon
 plotApplPlaquettes(L::LazyConfig;kwargs...) = plotApplPlaquettes(spinConfig(L);kwargs...)
 
 function generateAllPaths(InitialState)
-    startpath = empty(Set(1))
+    startpath = empty(BitSet(1))
 
     AllPaths = Dictionary(
         [startpath], [1]
