@@ -136,7 +136,7 @@ function appendPaths!(AllPaths,NewPaths,AppendPaths)
         haskey,token = gettoken!(AllPaths,path)
         if !haskey
             # AllPaths[path] = length(AllPaths)+1
-            settokenvalue!(AllPaths,token,length(AllPaths)+1)
+            settokenvalue!(AllPaths,token,length(AllPaths))
             push!(NewPaths,path)
         end
     end
@@ -194,7 +194,6 @@ function getAllNeighborStates(AllPaths,AllPaths_array,InitialState)
     Conf_buffer = [copy(InitialState) for _ in 1:nThreads]
 
     batches = ChunkSplitters.chunks(AllPaths_array,n=nThreads,split= :batch)
-    
     Threads.@threads for (iChunk,inds) in enumerate(batches)
         # for (path) in NewPaths
         Conf = Conf_buffer[iChunk]
