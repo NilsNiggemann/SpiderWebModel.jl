@@ -95,9 +95,16 @@ plotApplPlaquettes(L::LazyConfig;kwargs...) = plotApplPlaquettes(spinConfig(L);k
 function generateAllPaths(InitialState)
     startpath = empty(BitSet(1))
 
-    AllPaths = Dictionary(
-        [startpath], [1]
+    # AllPaths = RobinDict(
+    #    startpath => 1
+    # )
+    AllPaths = DataStructures.SwissDict(
+       startpath => 1
     )
+
+    # AllPaths = Dictionary(
+    #    [startpath] , [1]
+    # )
     NewPaths = [startpath]
     
     nThreads = Threads.nthreads()
@@ -131,12 +138,23 @@ function generateAllPaths(InitialState)
     return AllPaths
 end
 
-function appendPaths!(AllPaths,NewPaths,AppendPaths)
+function appendPaths!(AllPaths::Dictionaries.Dictionary,NewPaths,AppendPaths)
     for path in AppendPaths
         haskey,token = gettoken!(AllPaths,path)
         if !haskey
             # AllPaths[path] = length(AllPaths)+1
             settokenvalue!(AllPaths,token,length(AllPaths))
+            push!(NewPaths,path)
+        end
+    end
+    return AllPaths,NewPaths
+end
+
+function appendPaths!(AllPaths,NewPaths,AppendPaths)
+    for path in AppendPaths
+        ind  = get(AllPaths,path,0)
+        if ind == 0
+            AllPaths[path] = length(AllPaths)+1
             push!(NewPaths,path)
         end
     end

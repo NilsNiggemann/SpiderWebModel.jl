@@ -2,8 +2,8 @@ module SpiderWebModel
     using StaticArrays,Random,Statistics,LoopVectorization
     using OrderedCollections, Dictionaries, LinearAlgebra
     using Test
-    using ChunkSplitters, ThreadsX
-    
+    import ChunkSplitters
+    import DataStructures
     import Base:size,getindex,setindex!,iterate,show,copy,hash
 
     struct SpinConfig{T,MatType <: AbstractMatrix{T},T1<:Real} <:AbstractMatrix{T}
