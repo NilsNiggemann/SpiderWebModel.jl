@@ -93,11 +93,10 @@ plotApplPlaquettes!(ax,L::LazyConfig;kwargs...) = plotApplPlaquettes!(ax,spinCon
 plotApplPlaquettes(L::LazyConfig;kwargs...) = plotApplPlaquettes(spinConfig(L);kwargs...)
 
 function generateAllPaths(InitialState)
-    alreadyDone = Set(Int[])
     startpath = empty(Set(1))
 
-    AllPaths = Dict(
-        startpath => 1
+    AllPaths = Dictionary(
+        [startpath], [1]
     )
     NewPaths = [startpath]
     
@@ -120,6 +119,7 @@ function generateAllPaths(InitialState)
                 Conf = spinConfig!(Conf,path,InitialState)
                 getNewPaths!(AppendPaths,AllPaths,Conf,path)
             end
+            unique!(AppendPaths)
         end
         empty!(NewPaths)
 
@@ -132,35 +132,15 @@ function generateAllPaths(InitialState)
 end
 
 function appendPaths!(AllPaths,NewPaths,AppendPaths)
-    deleteInds = Int[]
-    for (i,path) in enumerate(AppendPaths)
-        if path ∉ keys(AllPaths)
-            AllPaths[path] = length(AllPaths)+1
+    for path in AppendPaths
+        haskey,token = gettoken!(AllPaths,path)
+        if !haskey
+            # AllPaths[path] = length(AllPaths)+1
+            settokenvalue!(AllPaths,token,length(AllPaths)+1)
             push!(NewPaths,path)
         end
     end
     return AllPaths,NewPaths
-end
-
-function appendToPaths!(AllPaths,Conf,path)
-
-    plaqs = getApplicablePlaquettes(Conf)
-    LI = LinearIndices(Conf)
-    newpath = copy(path)
-    for p in plaqs
-        pInt = LI[CartesianIndex(p)]
-        updatePath!(newpath,pInt)
-        
-        ind = get(AllPaths,newpath,0)
-        if ind == 0 
-            newpath2 = copy(newpath)
-            AllPaths[newpath2] = length(AllPaths)+1
-        end
-        updatePath!(newpath,pInt) #undo the path change
-
-    end
-    
-    return AllPaths
 end
 
 function getNewPaths!(AllNewPaths,AllPaths,Conf,path)
@@ -204,37 +184,48 @@ function getNeighbors(Conf,AllPaths,path)
 
     end
     
+    
     return Neighbors
 end
 
-function getAllNeighborStates(AllPaths,InitialState)
+function getAllNeighborStates(AllPaths,AllPaths_array,InitialState)
     Neighbors = [Int[] for i in eachindex(AllPaths)]
-    Conf = copy(InitialState)
-    for (path,num) in AllPaths
-        Conf = spinConfig!(Conf,path,InitialState)
-        neighs = getNeighbors(Conf,AllPaths,path)
-        Neighbors[num] = neighs
+    nThreads = Threads.nthreads()
+    Conf_buffer = [copy(InitialState) for _ in 1:nThreads]
+
+    batches = ChunkSplitters.chunks(AllPaths_array,n=nThreads,split= :batch)
+    
+    Threads.@threads for (iChunk,inds) in enumerate(batches)
+        # for (path) in NewPaths
+        Conf = Conf_buffer[iChunk]
+        for i in inds
+            path = AllPaths_array[i]
+            Conf = spinConfig!(Conf,path,InitialState)
+            neighs = getNeighbors(Conf,AllPaths,path)
+            Neighbors[i] = neighs
+        end
     end
+
     return Neighbors
 end
 
 function getAllNeighborStates(StartConfig)
     AllConfigs = generateAllPaths(StartConfig)
-    Neighbors = getAllNeighborStates(AllConfigs,StartConfig)
     AllConfigsList = sortByValueOrder(AllConfigs)
+    Neighbors = getAllNeighborStates(AllConfigs,AllConfigsList,StartConfig)
 
     AllStates = LazyConfig.(Ref(StartConfig),AllConfigsList)
 
     return (;AllStates,Neighbors)
 end
 
-function sortByValueOrder(D::Dict)
+function sortByValueOrder(D)
     ks = collect(keys(D))
     vals = collect(values(D))
     return ks[sortperm(vals)]
 end
 
-function sortbyKeyOrder(D::Dict)
+function sortbyKeyOrder(D)
     ks = collect(keys(D))
     vals = collect(values(D))
     return vals[sortperm(ks)]

@@ -4,6 +4,14 @@ using MakieHelpers
 import SpiderWebModel: getStairCase
 
 ##
+let 
+    state = getStairCase(13) 
+    GC.gc()
+    @time SW.getAllNeighborStates(state)
+    # @time SW.generateAllPaths(state)
+    
+end
+##
 function plotPath()
     state = SW.periodicState6x6_3(12)
     @time res = SW.getAllNeighborStates(state)
