@@ -5,30 +5,59 @@ struct PeriodicMatrix{T,Mat<:AbstractMatrix{T}} <: AbstractMatrix{T}
     offset::Int
 end
 
+PeriodicMatrix(Mat,Lx,Ly) = PeriodicMatrix(Mat,Lx,Ly,0)
+PeriodicMatrix(Mat) = PeriodicMatrix(Mat,size(Mat)...,0)
+
+function remapIndex(i,L,offset)
+    Region = (i-1)÷L
+    
+    i = i - offset*Region
+
+    i = (i-1)%L+1
+    if i <=0 
+        i += L
+    end
+    return i
+end
+function remapIndex(i::UnitRange,L,offset)
+    remapIndex.(i,L,offset)
+end
+
+function remapIndices(i,j,Lx,Ly,offset)
+    i = remapIndex(i,Lx,0)
+    j = remapIndex(j,Ly,offset)
+    return i,j
+end
+
 # Base.getindex(P::PeriodicMatrix,i,j) = P.UC[remapIndices(i,j,size(P)...,P.offset)...]
-function Base.getindex(P::PeriodicMatrix,i,j)
+function Base.getindex(P::PeriodicMatrix,i,j) 
     Lx,Ly = size(P.UC)
     i,j = remapIndices(i,j,Lx,Ly,P.offset)
-    P.UC[i,j]
+
+    getindex(P.UC,i,j)
 end
+
+Base.setindex!(P::PeriodicMatrix,x,i::Integer) = setindex!(P.UC,x,CartesianIndices(P)[i])
+Base.setindex!(P::PeriodicMatrix,x,i,j) = setindex!(P.UC,x,remapIndices(i,j,size(P.UC)...,P.offset)...)
+
 Base.size(P::PeriodicMatrix) = (P.Lx,P.Ly)
+Base.copy(P::PeriodicMatrix) = PeriodicMatrix(copy(P.UC),P.Lx,P.Ly,P.offset)
+
+# function Base.checkbounds(A::PeriodicMatrix, i,j)
+#     @inline
+#     i,j = remapIndices(i,j,size(A)...,A.offset)
+#     checkbounds(Bool, A, i,j) || throw_boundserror(A, i,j)
+#     nothing
+# end
+@inline function Base.checkbounds(::Type{Bool},arr::PeriodicMatrix, I...)
+    i,j = remapIndices(I...,size(arr)...,arr.offset)
+    # checkbounds(Bool, arr, i,j) || throw_boundserror(arr, ij)
+    true
+end
 
 function getPeriodicState(UC,Lx,Ly,offset=0)
-    Mat = PeriodicMatrix(UC,Lx,Ly,offset)
+    Mat = PeriodicMatrix(UC,Lx,Ly,offset) |> Array
     S = SpinConfig(Mat,1/2)
-end
-
-function remapIndices(x,y,Lx,Ly,offset)
-    xRegion = (x-1)÷Lx
-    
-    y = y - offset*xRegion
-    
-    x = (x-1)%Lx+1
-    y = (y-1)%Ly+1 
-    if y <=0 
-        y += Ly
-    end
-    return x,y
 end
 
 function addFullTile!(Pij::SpinConfig,Tile::SpinConfig,)

@@ -94,7 +94,6 @@ plotApplPlaquettes(L::LazyConfig;kwargs...) = plotApplPlaquettes(spinConfig(L);k
 
 function generateAllPaths(InitialState)
     startpath = empty(BitSet(1))
-
     # AllPaths = RobinDict(
     #    startpath => 1
     # )
@@ -186,7 +185,7 @@ end
 function getNeighbors(Conf,AllPaths,path)
     Neighbors = Int[]
     plaqs = getApplicablePlaquettes(Conf)
-    LI = LinearIndices(Conf)#
+    LI = LinearIndices(Conf)
     newpath = copy(path)
     for p in plaqs
         pInt = LI[CartesianIndex(p)]

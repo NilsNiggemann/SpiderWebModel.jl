@@ -21,7 +21,7 @@ function getConfigs(L,numConfigs = 10;kwargs...)
     return S
 end
 ##
-confs = getConfigs(12,50)
+confs = getConfigs(12,10)
 
 
 ##

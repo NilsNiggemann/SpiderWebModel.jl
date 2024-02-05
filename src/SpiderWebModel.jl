@@ -103,13 +103,11 @@ module SpiderWebModel
 
 
     function plaquetteIsInBounds(Conf::AbstractMatrix,iCenter::Integer,jCenter::Integer)
-        for i in iCenter-1:iCenter+1, j in jCenter-1:jCenter+1
-            if !checkbounds(Bool,Conf,i,j)
-                return false
-            end
-        end
-        return true
+        i = iCenter-1:iCenter+1
+        j = jCenter-1:jCenter+1
+        return checkbounds(Bool,Conf,i,j)
     end
+    
     plaquetteIsInBounds(Conf::SpinConfig,iCenter::Integer,jCenter::Integer) = plaquetteIsInBounds(Conf.Mat,iCenter,jCenter)
 
     function allSpinsInBounds(Conf::SpinConfig;verbose=false)
@@ -529,7 +527,7 @@ module SpiderWebModel
     
     function constructConfigPath(::DictAlgorithm, P::SpinConfig,PlaquetteList,setup;
         maxiter= 10000,
-        deleteSteps = i->LPx,
+        deleteSteps = getStepDeleter(size(P,2)+2,1,15),
         verbose = true,
         plotSteps = false,
         )
