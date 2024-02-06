@@ -290,26 +290,26 @@ function SolveH(AllStates,neighbors,mu,range = 1:1)
     return SolveH(H,range)
 end
 
-function getMagnetization(AllStates,eigen,i)
+function getMagnetization(AllStates,eigen)
     ψ0 = eigen.vectors[:,1]
-    mag = zero(eltype(eigen.vectors))
+    mag = zeros(AllStates |> first |> size)
     for n in eachindex(ψ0)
-        Si = AllStates[n][i]
-        mag += abs2(ψ0[n])*Si
+        Si = AllStates[n]
+        mag .+= abs2(ψ0[n]).*Si
     end
     return mag
 end
 
-function getMagnetization(AllStates::AbstractVector{<:LazyConfig},eigen,i)
+function getMagnetization(AllStates::AbstractVector{<:LazyConfig},eigen)
     ψ0 = eigen.vectors[:,1]
-    mag = zero(eltype(eigen.vectors))
+    
     InitConfig = first(AllStates).parent
     Conf = copy(InitConfig)
+    mag = zeros(size(Conf))
 
     for n in eachindex(ψ0)
-        Conf = spinConfig!(Conf,AllStates[n])
-        Si = Conf[i]
-        mag += abs2(ψ0[n])*Si
+        Si = spinConfig!(Conf,AllStates[n])
+        mag .+= abs2(ψ0[n]).*Si
     end
     return mag
 end

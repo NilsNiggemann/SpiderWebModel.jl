@@ -10,10 +10,15 @@ function getStructureFac(AllStates,eigen,tol=0)
     # inds = findall(x->abs(x)>tol,weights)
 
     # state_weight = collect(zip( AllStates,weights))[inds]
-    Sq = [getInterpolatedFFT(abs2(psin)* c.Mat,0,plan;Interpolation = BSpline(Constant())) for (c,psin) in zip( AllStates,Psi)]
+    Sq = fetch.([Threads.@spawn getInterpolatedFFT(abs2(psin)* c.Mat,0,plan;Interpolation = BSpline(Constant())) for (c,psin) in zip( AllStates,Psi)])
     # Sq = [getInterpolatedFFT(weight* c.Mat,0,plan;Interpolation = BSpline(Constant())) for (c,weight) in state_weight]
-    SSq(kx,ky) = real(sum(s(kx,ky)*s(-kx,-ky) for s in Sq))
+    SSq(kx,ky) = sum(s(kx,ky)*s(-kx,-ky) for s in Sq)
+    k = Sq[1].itp.ranges[1]
+    Sq_k = fetch.([Threads.@spawn SSq(kx,ky) for kx in k, ky in k])
+
+    return (;k,Sq = SSq,Sq_k)
 end
+
 
 getR(ij::CartesianIndex{2}) = float(SA[ij[1],ij[2]])
 

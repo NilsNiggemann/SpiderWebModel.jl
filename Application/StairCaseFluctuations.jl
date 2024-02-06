@@ -2,7 +2,11 @@ import SpiderWebModel as SW
 using StaticArrays, CairoMakie
 using MakieHelpers
 import SpiderWebModel: getStairCase
-
+##
+function getPeriodic(parent)
+    state = parent |> Array
+    SW.SpinConfig(SW.PeriodicMatrix(state),parent.S)
+end
 ##
 let 
     state = getStairCase(13) 
@@ -13,7 +17,8 @@ let
 end
 ##
 function plotPath()
-    state = SW.getStairCase(8)
+    # state = SW.getStairCase(8)
+    state = getPeriodic(SW.periodicState5x5(12))
     # state = SW.SpinConfig(SW.PeriodicMatrix(state),1/2)
 
     @time res = SW.getAllNeighborStates(state)
@@ -40,54 +45,67 @@ function solveED(state,μ,args...;kwargs...)
     @time sol = SW.SolveH(H,args...;kwargs...)
     return (;res,sol,H)
 end
+
+function getObservables(res,sol)
+    # state = res.AllStates[1].parent
+
+    AllStates = fetch.([Threads.@spawn SW.spinConfig(state) for state in res.AllStates ])
+
+    m = SW.getMagnetization(AllStates,sol)
+
+    mavg = sum(abs,m)/length(m)
+    mavgBulk = sum(abs,m[3:end-2,3:end-2])/length(m[3:end-2,3:end-2])
+    magnetization = (;m,mavg,mavgBulk)
+
+
+    structureFac = SW.getStructureFac(AllStates,sol)
+
+    return (;magnetization...,structureFac...)
+
+end
 ##
-function plotMagnetization!(ax,res,sol)
-    state = res.AllStates[1].parent
-    mag = [SW.getMagnetization(res.AllStates,sol,CartesianIndex(i,j)) for i in axes(state,1),j in axes(state,2)]
-    @info "" mavg = sum(abs,mag)/length(mag) mavgBulk = sum(abs,mag[3:end-2,3:end-2])/length(mag[3:end-2,3:end-2])
-
-    heatmap!(ax,mag)
+function plotMagnetization!(ax,observables)
+    heatmap!(ax,observables.m,colormap = :grays)
 end
 
-function plotStructureFac!(ax,res,sol;axkwargs=(;))
-    Sq = SW.getStructureFac(SW.spinConfig.(res.AllStates),sol)
-
-    k = Sq.Sq[1].itp.ranges[1]
-    Sq_k = fetch.([Threads.@spawn Sq(kx,ky) for kx in k, ky in k])
-    heatmap!(ax,k,k,Sq_k)
+function plotStructureFac!(ax,observables)
+    (;k,Sq_k) = observables
+    heatmap!(ax,k,k,real(Sq_k))
 end
 
-function plotOverview(res,sol;title=L"")
+function plotOverview(Observables;title=L"")
     with_theme(theme_SimpleTicks()) do  
         fig = Figure(;size = 0.8 .*(450,600))
 
         axmag = Axis(fig[1,1];title,xlabel = L"x",ylabel = L"y",aspect = 1)
         axSq = Axis(fig[2,1],xlabel = L"q_x",ylabel = L"q_y",aspect = 1,xticks = PiTicks(0:0.5pi:2pi),yticks = PiTicks(0:0.5pi:2pi))
         
-        hm = plotMagnetization!(axmag,res,sol)
+        hm = plotMagnetization!(axmag,Observables)
         Colorbar(fig[1,2],hm,label = L"\langle S^z \rangle")
-        hm = plotStructureFac!(axSq,res,sol)
+        hm = plotStructureFac!(axSq,Observables)
         Colorbar(fig[2,2],hm,label = L"\mathcal{S}^{zz}(\mathbf{q})")
         fig
     end
 
 end
 
+plotOverview(res,sol;kwargs...) = plotOverview(getObservables(res,sol);kwargs...)
 
 ##
 
 μ = 0
 Sol5x5 = solveED(SW.periodicState5x5(14),μ)
 ##
-plotOverview(Sol5x5.res,Sol5x5.sol,title = L"$5×5$ state, $μ = %$μ$")
+# @profview plotOverview(Sol5x5.res,Sol5x5.sol,title = L"$5×5$ state, $μ = %$μ$")
+@time plotOverview(Sol5x5.res,Sol5x5.sol,title = L"$5×5$ state, $μ = %$μ$")
 ##
 
 Sol6x6 = solveED(SW.periodicState6x6(14),μ)
-plotOverview(Sol6x6.res,Sol6x6.sol,title = L"$6×6$ state, $μ = %$μ$")
+@time plotOverview(Sol6x6.res,Sol6x6.sol,title = L"$6×6$ state, $μ = %$μ$")
 ##
 SolStair = solveED(SW.getStairCase(14),μ)
-
-plotOverview(SolStair.res,SolStair.sol,title = L"stair state, $μ = %$μ$")
+##
+@time plotOverview(SolStair.res,SolStair.sol,title = L"stair state, $μ = %$μ$")
 ##
 
 function getEnergy(sol)
@@ -138,10 +156,7 @@ with_theme(theme_SimpleTicks()) do
 
 end
 ##_______________________Periodic Boundaries_______________________
-function getPeriodic(parent)
-    state = parent |> Array
-    SW.SpinConfig(SW.PeriodicMatrix(parent),parent.S)
-end
+
 Stair = getPeriodic(getStairCase(8))
 SW.plotApplPlaquettes(Stair)
 ##
@@ -185,18 +200,18 @@ Ens_6x6_3 = ([Energy6x6_3(L) for L in Ls_6])
 ##
 with_theme(theme_SimpleTicks()) do
     fig = Figure(size = 0.8 .*(600,400))
-    ax = Axis(fig[1,1],xlabel = L"L",ylabel = L"-E_0(L)",
-    # xscale = log10,yscale = log10
+    ax = Axis(fig[1,1],xlabel = L"L",ylabel = L"-E_0(L)/L^2",
+    xscale = log10,yscale = log10
     )
-    scatterlines!(ax,Ls_4,-StairEs,label = L"Staircase$$",color = :red)
-    scatterlines!(ax,Ls_5,-Ens_5x5,label = L"5×5",color = :blue)
-    scatterlines!(ax,Ls_6,-Ens_6x6,label = L"6×6",color = :green)
-    scatterlines!(ax,Ls_6,-Ens_6x6_3,label = L"⋱_{6×6}", color = :black)
+    scatterlines!(ax,Ls_4,-StairEs ./Ls_4.^2 ,label = L"Staircase$$",color = :red)
+    scatterlines!(ax,Ls_5,-Ens_5x5 ./Ls_5.^2 ,label = L"5×5",color = :blue)
+    scatterlines!(ax,Ls_6,-Ens_6x6 ./Ls_6.^2 ,label = L"6×6",color = :green)
+    scatterlines!(ax,Ls_6,-Ens_6x6_3 ./Ls_6.^2 ,label = L"⋱_{6×6}", color = :black)
     LRange = LinRange(4,15,100)
-    lines!(ax,LRange,1/10 .*LRange.^2 ,label = L"E_0 =-L^2/10",linestyle = :dash, color = :grey)
-    lines!(ax,LRange,1/16 .*LRange.^2 ,label = L"E_0 =-L^2/16",linestyle = :dashdot, color = :grey)
+    lines!(ax,LRange,1/10 .*LRange.^0 ,label = L"E_0 =-L^2/10",linestyle = :dash, color = :grey)
+    lines!(ax,LRange,1/16 .*LRange.^0 ,label = L"E_0 =-L^2/16",linestyle = :dashdot, color = :grey)
     axislegend(ax,position = :lt,nbanks = 2)
-    save("exactFig/EnergyScaling.png",fig)
+    save("exactFig/EnergyScaling_periodic.png",fig)
     fig
 
 end
