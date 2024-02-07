@@ -8,33 +8,48 @@ end
 PeriodicMatrix(Mat,Lx,Ly) = PeriodicMatrix(Mat,Lx,Ly,0)
 PeriodicMatrix(Mat) = PeriodicMatrix(Mat,size(Mat)...,0)
 
-function remapIndex(i,L,offset)
-    Region = (i-1)÷L
-    
-    i = i - offset*Region
-
+function remapIndex(i,L)
     i = (i-1)%L+1
     if i <=0 
         i += L
     end
     return i
 end
-function remapIndex(i::UnitRange,L,offset)
-    remapIndex.(i,L,offset)
+
+function remapIndices(x,y,Lx,Ly,offset)
+    xRegion = (x-1)÷Lx
+    
+    y = y - offset*xRegion
+    
+    x = remapIndex(x,Lx)
+    y = remapIndex(y,Ly)
+    return x,y
 end
 
-function remapIndices(i,j,Lx,Ly,offset)
-    i = remapIndex(i,Lx,0)
-    j = remapIndex(j,Ly,offset)
-    return i,j
+function remapIndices(x::UnitRange,y::UnitRange,Lx,Ly,offset)
+    Inds = (remapIndices(i,j,Lx,Ly,offset) for i in x for j in y)
 end
+
+
+# function remapIndices(i,j,Lx,Ly,offset)
+#     i = remapIndex(i,Lx,0)
+#     j = remapIndex(j,Ly,offset)
+#     return i,j
+# end
 
 # Base.getindex(P::PeriodicMatrix,i,j) = P.UC[remapIndices(i,j,size(P)...,P.offset)...]
-function Base.getindex(P::PeriodicMatrix,i,j) 
+function Base.getindex(P::PeriodicMatrix,i::Integer,j::Integer) 
     Lx,Ly = size(P.UC)
     i,j = remapIndices(i,j,Lx,Ly,P.offset)
 
     getindex(P.UC,i,j)
+end
+
+function Base.getindex(P::PeriodicMatrix,i,j)
+    Lx,Ly = size(P.UC)
+    inds = [CartesianIndex(remapIndices(ii,jj,Lx,Ly,P.offset))  for ii in i, jj in j]
+
+    getindex(P.UC,inds)
 end
 
 Base.setindex!(P::PeriodicMatrix,x,i::Integer) = setindex!(P.UC,x,CartesianIndices(P)[i])
