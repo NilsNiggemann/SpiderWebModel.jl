@@ -18,7 +18,7 @@ end
 ##
 function plotPath()
     # state = SW.getStairCase(8)
-    state = getPeriodic(SW.periodicState5x5(12))
+    state = getPeriodic(SW.periodicState5x5(10))
     # state = SW.SpinConfig(SW.PeriodicMatrix(state),1/2)
 
     @time res = SW.getAllNeighborStates(state)
@@ -166,20 +166,26 @@ SW.plotApplPlaquettes(Stair)
 
 ##
 
-function plotSpectrum!(ax,L;kwargs...)
+function plotSpectrum!(ax,axgap,L;kwargs...)
     State = getStairCase(L)
     # Stair = SW.periodicState5x5(L) 
     eval = solveED(State,0,nev = 15).sol.values
+    Δ = eval[2] - eval[1]
     scatter!(ax,1:length(eval),eval;kwargs...)
+    scatter!(axgap,L,Δ;kwargs...)
 end
+
 let 
-    fig = Figure()
-    ax = Axis(fig[1,1],xlabel = L"n",ylabel = L"E_n")
-    plotSpectrum!(ax,8,markersize = 10)
-    plotSpectrum!(ax,10,markersize = 10;color = :blue)
-    plotSpectrum!(ax,12,markersize = 10;color = :red)
-    plotSpectrum!(ax,13,markersize = 10;color = :darkred)
-    plotSpectrum!(ax,14,markersize = 10;color = :black)
+    fig = Figure(size = 400 .* (1,1.5))
+    axgap = Axis(fig[1,1],xlabel = L"L",ylabel = L"Δ")
+    ax = Axis(fig[2,1],xlabel = L"n",ylabel = L"E_n")
+    plotSpectrum!(ax,axgap,8,markersize = 10,label = L"L=8")
+    plotSpectrum!(ax,axgap,10,markersize = 10;color = :blue,label = L"L=10")
+    plotSpectrum!(ax,axgap,12,markersize = 10;color = :red,label = L"L=12")
+    plotSpectrum!(ax,axgap,13,markersize = 10;color = :darkred,label = L"L=13")
+    plotSpectrum!(ax,axgap,14,markersize = 10;color = :black,label = L"L=14")
+    rowsize!(fig.layout,1,Relative(0.4))
+    axislegend(ax,position = :lt,nbanks = 2)
     fig
 end
 ##
@@ -211,10 +217,16 @@ with_theme(theme_SimpleTicks()) do
     lines!(ax,LRange,1/10 .*LRange.^0 ,label = L"E_0 =-L^2/10",linestyle = :dash, color = :grey)
     lines!(ax,LRange,1/16 .*LRange.^0 ,label = L"E_0 =-L^2/16",linestyle = :dashdot, color = :grey)
     axislegend(ax,position = :lt,nbanks = 2)
+    ylims!(ax,0.05,0.25)
     save("exactFig/EnergyScaling_periodic.png",fig)
     fig
 
 end
+##
+Sol5x5 = solveED(getPeriodic(SW.periodicState5x5(15)),μ)
+##
+@time plotOverview(Sol5x5.res,Sol5x5.sol,title = L"$5×5$ state, $μ = %$μ$")
+
 ##
 # Hardcore bosons
 function isAllowedState(state)
