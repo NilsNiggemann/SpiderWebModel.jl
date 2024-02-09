@@ -449,3 +449,4 @@ function getApplicablePlaquettes(Conf::SpinConfig)
     plaqPos = [(i,j) for i in axes(Conf.Mat,1) for j in axes(Conf.Mat,2) if canFlipPlaquette(Conf,i,j)]
     return plaqPos
 end
+

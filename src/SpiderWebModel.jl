@@ -683,5 +683,6 @@ module SpiderWebModel
 
     include("StructureFactor.jl")
     include("Fluctuations.jl")
+    include("Fluctuations_BitVector.jl")
     include("Fractons.jl")
 end # module SpiderWebModel

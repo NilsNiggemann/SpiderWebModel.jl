@@ -9,12 +9,14 @@ function getPeriodic(parent)
 end
 ##
 let 
-    state = getStairCase(13) 
+    state = getStairCase(14) 
     GC.gc()
-    @time SW.getAllNeighborStates(state)
-    # @time SW.generateAllPaths(state)
+    # @time SW.getAllNeighborStates(state)
+    @time SW.generateAllPaths(state)
     
 end
+##
+
 ##
 function plotPath()
     # state = SW.getStairCase(8)
