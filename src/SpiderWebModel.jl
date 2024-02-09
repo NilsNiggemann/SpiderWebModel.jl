@@ -680,7 +680,8 @@ module SpiderWebModel
     
     include("PeriodicTilings.jl")
     include("PeriodicStates.jl")
-
+    include("BigTilings.jl")
+    
     include("StructureFactor.jl")
     include("Fluctuations.jl")
     include("Fluctuations_BitVector.jl")

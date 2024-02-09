@@ -97,7 +97,8 @@ function generateHamiltonian(InitialState)
 
     CurrentStates = ([InitalState_rep])
     NewStates = ([InitalState_rep])
-    AllStates = (Dict(InitalState_rep => 1))
+    # AllStates = DataStructures.SwissDict(InitalState_rep => 1)
+    AllStates = Dict(InitalState_rep => 1)
 
     Conf = copy(InitialState)
     
@@ -106,6 +107,9 @@ function generateHamiltonian(InitialState)
 
     Hrows = SBitVector[]
     Hcols = SBitVector[]
+    
+    sizehint!(Hrows,2^(2Lx-2))
+    sizehint!(Hcols,2^(2Lx-2))
 
     while !isempty(CurrentStates)
         for State in CurrentStates
@@ -116,7 +120,7 @@ function generateHamiltonian(InitialState)
 
             append!(NewStates,neighbors_i)
         end
-        unique!(NewStates)
+        # unique!(NewStates)
         empty!(CurrentStates)
         
         for s in NewStates
@@ -133,8 +137,9 @@ function generateHamiltonian(InitialState)
     # return Hrows,Hcols,AllStates
     # return sparse(Hrows,Hcols)
     # return Hrows,Hcols
-    return AllStates
-    # H = constructSparseMatrix(Hrows,Hcols,AllStates)
+    # return AllStates
+    # H = Hermitian(constructSparseMatrix(Hrows,Hcols,AllStates))
+    @time H = Hermitian(constructSparseMatrix(Hrows,Hcols,AllStates))
 end
 
 function addVertex!(rows::AbstractVector,cols::AbstractVector,i,Neighbors)
@@ -145,12 +150,22 @@ function addVertex!(rows::AbstractVector,cols::AbstractVector,i,Neighbors)
 end
 
 function constructSparseMatrix(rows,cols,AllStates)
-    newrows = Int[]
-    newcols = Int[]
+    
+    nThreads = Threads.nthreads()
+    newrows = zeros(Int,length(rows))
+    newcols = zeros(Int,length(cols))
 
-    for (row,col) in zip(rows,cols)
-        push!(newrows,AllStates[row])
-        push!(newcols,AllStates[col])
+    batches = ChunkSplitters.chunks(newrows,n=nThreads,split= :batch)
+    
+    Threads.@threads for (iChunk,inds) in enumerate(batches)
+        for i in inds
+            row = rows[i]
+            col = cols[i]
+            row2 = AllStates[row]
+            col2 = AllStates[col]
+            newrows[i] = row2
+            newcols[i] = col2
+        end
     end
     # return newrows,newcols
     return (sparse(newrows,newcols,-1))
