@@ -346,13 +346,13 @@ function plotApplPlaquettes!(ax,State;square = (:red,0.0),heatmapkwargs=(;),kwar
     plotSpinConfig!(ax,State;heatmapkwargs...)
     
     if square === true
-        square = (:red,0.4)
+        square = (:green,0.4)
     end
     
     if square[2] != 0.0
         for p in points
             px,py = p
-            band!(ax,[px-1.5,px+1.5],[py-1.5,py-1.5],[py+1.5,py+1.5],color = square)
+            # band!(ax,[px-1.5,px+1.5],[py-1.5,py-1.5],[py+1.5,py+1.5],color = square)
             band!(ax,[px-1.5,px+1.5],[py+0.5,py+0.5],[py+1.5,py+1.5],color = square)
             band!(ax,[px-1.5,px+1.5],[py-1.5,py-1.5],[py-0.5,py-0.5],color = square)
             band!(ax,[px-1.5,px-0.5],[py-0.5,py-0.5],[py+0.5,py+0.5],color = square)
