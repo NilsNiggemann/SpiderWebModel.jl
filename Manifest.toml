@@ -2,7 +2,7 @@
 
 julia_version = "1.10.0"
 manifest_format = "2.0"
-project_hash = "752ee8f7e12ea50817efb4bd3f0d4ba6213f8181"
+project_hash = "5b879badd01b5f293e9a9dd64bed1dc620ac9dd5"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -102,6 +102,12 @@ version = "0.4.7"
 
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
+
+[[deps.BitIntegers]]
+deps = ["Random"]
+git-tree-sha1 = "a55462dfddabc34bc97d3a7403a2ca2802179ae6"
+uuid = "c3b6d118-76ef-56ca-8cc7-ebb389d030a1"
+version = "0.3.1"
 
 [[deps.BitTwiddlingConvenienceFunctions]]
 deps = ["Static"]

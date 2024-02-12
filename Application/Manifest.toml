@@ -103,6 +103,12 @@ version = "0.4.7"
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
+[[deps.BitIntegers]]
+deps = ["Random"]
+git-tree-sha1 = "a55462dfddabc34bc97d3a7403a2ca2802179ae6"
+uuid = "c3b6d118-76ef-56ca-8cc7-ebb389d030a1"
+version = "0.3.1"
+
 [[deps.BitTwiddlingConvenienceFunctions]]
 deps = ["Static"]
 git-tree-sha1 = "0c5f81f47bbbcf4aea7b2959135713459170798b"
@@ -1537,7 +1543,7 @@ weakdeps = ["ChainRulesCore"]
     SpecialFunctionsChainRulesCoreExt = "ChainRulesCore"
 
 [[deps.SpiderWebModel]]
-deps = ["Arpack", "CairoMakie", "ChunkSplitters", "DataStructures", "Dictionaries", "LatticeFFTs", "LinearAlgebra", "LoopVectorization", "OrderedCollections", "Random", "SparseArrays", "StaticArrays", "Statistics", "Test"]
+deps = ["Arpack", "BitIntegers", "CairoMakie", "ChunkSplitters", "DataStructures", "Dictionaries", "LatticeFFTs", "LinearAlgebra", "LoopVectorization", "OrderedCollections", "Random", "SparseArrays", "StaticArrays", "Statistics", "Test"]
 path = ".."
 uuid = "8e1b84da-b1d7-4311-a21b-52324f990117"
 version = "0.1.0"
