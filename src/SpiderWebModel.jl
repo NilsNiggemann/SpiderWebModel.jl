@@ -24,9 +24,11 @@ module SpiderWebModel
     # Base.show(io::IO, ::MIME"text/plain", S::SpinConfig) = show(io,S.Mat)
     # Base.show(io::IO, S::SpinConfig) = show(io,S.Mat)
     
-    constraintSigns() = (1,1,-1,-1,1,1,-1,-1)
+    CONSTRAINT_SIGNS = (1,1,-1,-1,1,1,-1,-1)
+    constraintSigns() = CONSTRAINT_SIGNS
+
     function constraint(sites)
-        cons = constraintSigns()
+        cons = CONSTRAINT_SIGNS
         return sum(sgn*S for (sgn,S) in zip(cons,sites))
     end
 
@@ -652,7 +654,7 @@ module SpiderWebModel
     end
 
     function plotSpinConfig(S;kwargs...) 
-        fig = Figure()
+        fig = Figure(size = 1.2 .*(450,400))
         ax = Axis(fig[1,1];
             getConfigAxis(S)...
         )
@@ -685,5 +687,6 @@ module SpiderWebModel
     include("StructureFactor.jl")
     include("Fluctuations.jl")
     include("Fluctuations_BitVector.jl")
+    include("RandomFluctuations.jl")
     include("Fractons.jl")
 end # module SpiderWebModel

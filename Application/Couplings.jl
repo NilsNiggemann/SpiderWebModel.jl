@@ -70,8 +70,8 @@ let
     inbox(x::Rvec_2D) = abs(x.n1) <= 1 && abs(x.n2) <= 1
     filter!(inbox,AllPoints)
 
-    fig = Figure()
-    ax = Axis(fig[1,1],aspect = 1,xgridcolor = :black,ygridcolor = :black,backgroundcolor = :white,xticks = [-1,0,1],yticks = [-1,0,1])
+    fig = Figure(size = (400,400),backgroundcolor = :transparent)
+    ax = Axis(fig[1,1],aspect = 1,xgridcolor = :black,ygridcolor = :black,backgroundcolor = (:white,0.),xticks = [-1,0,1],yticks = [-1,0,1], xticklabelsvisible = false, yticklabelsvisible = false,xticksvisible = false,yticksvisible = false,xgridvisible = false,ygridvisible = false,bottomspinevisible = false,topspinevisible = false,leftspinevisible = false,rightspinevisible = false)
 
     PlotPoints = Set(copy(AllPoints))
     for p0 in AllPoints
@@ -85,13 +85,16 @@ let
         col = Dict(0=>:black,2 => :red, -2 => :blue,4 => :darkred, -4 => :darkblue)
 
         for (i,p) in enumerate(p)
-            lines!([p0,p],linewidth=1*abs(aDF.fac[i]),color=col[aDF.fac[i]],label = string(aDF.fac[i]))
+            lines!([p0,p],linewidth=2*abs(aDF.fac[i]),
+            # color=col[aDF.fac[i]],
+            color = :black,
+            label = string(aDF.fac[i]))
             push!(PlotPoints,p)
         end
     end
-    scatter!(collect(PlotPoints),color = :black,markersize = 25)
+    scatter!(collect(PlotPoints),color = :black,markersize = 32)
 
-    axislegend(ax,unique=true)
+    # axislegend(ax,unique=true)
 
     save("couplings_All_plaq.png",fig)
     fig
@@ -149,11 +152,12 @@ let
 end
 ##
 
-let 
+using MakieHelpers
+with_theme(theme_PiTicks()) do
     # chi = getChiFunction(0.0001,getJMatrix,2,2;BZextent = float(2pi),nk=80)
     chi = getZeroTChi(getJMatrix)
-    q = LinRange(-pi,pi,700)
-    fig = Figure()
+    q = LinRange(0,2pi,700)
+    fig = Figure(size = (300,300))
     ax = Axis(fig[1,1],aspect = 1)
     chiq = [chi(q1,q2) for q1 in q, q2 in q]
     heatmap!(ax,q,q,chiq)

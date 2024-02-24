@@ -340,19 +340,19 @@ function getStructureFac(AllStates::AbstractVector{<:LazyConfig},eigen,tol=0)
     return (;k,Sq_k)
 end
 
-function plotApplPlaquettes!(ax,State;square = (:red,0.0),heatmapkwargs=(;),kwargs...)
+function plotApplPlaquettes!(ax,State;square = (:green,0.0),heatmapkwargs=(;),kwargs...)
     plaqs = getApplicablePlaquettes(State)
     points = Point2f.(plaqs)
     plotSpinConfig!(ax,State;heatmapkwargs...)
     
     if square === true
-        square = (:red,0.4)
+        square = (:green,0.4)
     end
     
     if square[2] != 0.0
         for p in points
             px,py = p
-            band!(ax,[px-1.5,px+1.5],[py-1.5,py-1.5],[py+1.5,py+1.5],color = square)
+            # band!(ax,[px-1.5,px+1.5],[py-1.5,py-1.5],[py+1.5,py+1.5],color = square)
             band!(ax,[px-1.5,px+1.5],[py+0.5,py+0.5],[py+1.5,py+1.5],color = square)
             band!(ax,[px-1.5,px+1.5],[py-1.5,py-1.5],[py-0.5,py-0.5],color = square)
             band!(ax,[px-1.5,px-0.5],[py-0.5,py-0.5],[py+0.5,py+0.5],color = square)
@@ -362,7 +362,7 @@ function plotApplPlaquettes!(ax,State;square = (:red,0.0),heatmapkwargs=(;),kwar
             # scatter!(ax,plapoints,markersize = 30,marker = :rect,color = square;kwargs...)
         end
     end
-    scatter!(ax,points,markersize = 13,color = :royalblue2;kwargs...)
+    scatter!(ax,points,markersize = 13,color = :red;kwargs...)
 
 end
 
@@ -382,8 +382,24 @@ function flipSpinsAlongLine!(Conf,org,slope)
     return Conf
 end
 
-function flipSpinsAlongRow!(Conf,i)
-    Conf[i,:] .*= -1
+function flipSpinsAlongDiagonal!(Conf,org,slope)
+    j = org
+    for i in axes(Conf.Mat,1)
+        j += slope
+        if checkbounds(Bool,Conf,i,j)
+            Conf[i,j] *= -1
+        end
+    end
+    return Conf
+end
+
+function flipSpinsAlongRow!(Conf,i,skip=2)
+    Conf[1:2:end,i] .*= -1
+    return Conf
+end
+
+function flipSpinsAlongCol!(Conf,i,skip=2)
+    Conf[i,1:2:end] .*= -1
     return Conf
 end
 
