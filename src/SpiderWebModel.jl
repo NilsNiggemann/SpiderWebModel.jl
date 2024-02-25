@@ -32,6 +32,16 @@ module SpiderWebModel
         return sum(sgn*S for (sgn,S) in zip(cons,sites))
     end
 
+    function booleanSpinConfig(S::AbstractMatrix)
+        S.S == 1/2 || error("S must be 1/2")
+        return SpinConfig(S .== 1/2,S.S)
+    end
+
+    function floatSpinConfig(S::AbstractMatrix{Bool})
+        S.S == 1/2 || error("S must be 1/2")
+        return SpinConfig(S .- 1/2,S.S)
+    end
+
     """Order in which the spins are stored in the plaquette corresponding to the numbering convention"""
     plaquetteOrder(S1,S2,S3,S4,S5,S6,S7,S8,S9) = SMatrix{3,3}(S4,S5,S6,S3,S9,S7,S2,S1,S8)
 
@@ -633,6 +643,8 @@ module SpiderWebModel
         return hm
     end
     
+    plotSpinConfig!(ax,S::SpinConfig{Bool};kwargs...) = plotSpinConfig!(ax,floatSpinConfig(S);kwargs...)
+
     function getConfigAxis(S;kwargs...)
         (;aspect = DataAspect(),
         backgroundcolor = :grey,

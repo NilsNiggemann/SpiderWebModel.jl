@@ -1,10 +1,8 @@
 
 import SpiderWebModel as SW
 
-
-Stair = SW.getStairCase(14)
-x = SW.PlaqMapping()
 ##
+Stair = SW.getStairCase(14)
 @time H = SW.generateHamiltonian(Stair,SW.SBitVector{UInt64}(0,0))
 # length(H.H)
 ##
@@ -20,7 +18,8 @@ end
 ##
 @profview H = SW.generateHamiltonian(Stair)
 # length(H)
-# @time SW.SolveH(H)
+##
+@time SW.SolveHKrylov(H.H)
 ##
 @time begin 
     a = SW.getAllNeighborStates(Stair)

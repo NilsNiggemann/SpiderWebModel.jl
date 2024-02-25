@@ -1,4 +1,5 @@
 using LinearAlgebra, SparseArrays, Arpack
+import KrylovKit 
 const P1 =  SA[
     -1.0  1.0   1.0;
     -1.0  0.0  -1.0;
@@ -8,10 +9,15 @@ const P2 = -P1
 const P1_SITES = -SVector(getSitesFromPlaquette(P1))/2
 const P2_SITES = -SVector(getSitesFromPlaquette(P2))/2
 
-struct PlaquetteFlip end
+const P1_SITES_BOOL = P1_SITES .== 1/2
+const P2_SITES_BOOL = P2_SITES .== 1/2
 
 function plaquetteFlippable(plaqSites::SVector{8})
     return plaqSites == P1_SITES || plaqSites == P2_SITES    
+end
+
+function plaquetteFlippable(plaqSites::SVector{8,Union{Integer,Bool}})
+    return plaqSites == P1_SITES_BOOL || plaqSites == P2_SITES_BOOL    
 end
 
 function flipPlaquette!(Conf::AbstractMatrix,i,j)
@@ -26,6 +32,23 @@ function flipPlaquette!(Conf::AbstractMatrix,i,j)
     P[3,1] = -P[3,1]
     P[3,2] = -P[3,2]
     P[3,3] = -P[3,3]
+
+    return Conf
+end
+
+
+function flipPlaquette!(Conf::AbstractMatrix{Bool},i,j)
+    P = getPlaquette(Conf,i,j)
+
+    P[1,1] = !P[1,1]
+    P[1,2] = !P[1,2]
+    P[1,3] = !P[1,3]
+    P[2,1] = !P[2,1]
+    # P[2,2] = !P[2,2]
+    P[2,3] = !P[2,3]
+    P[3,1] = !P[3,1]
+    P[3,2] = !P[3,2]
+    P[3,3] = !P[3,3]
 
     return Conf
 end
@@ -281,13 +304,16 @@ function SolveH(H::SparseMat;kwargs...)
     if size(H) == (1,1)
         return (;values = [float(real(only(H)))],vectors = [1.])
     end
-    values,vectors = eigs(H,nev=1,which=:SR;kwargs...)
+    values,vectors = eigs(H,nev=1,which=:SR,explicittransform=:none;kwargs...)
     return (;values,vectors)
 end
 
-function SolveH(AllStates,neighbors,mu,range = 1:1)
-    H = H(AllStates,neighbors,mu)
-    return SolveH(H,range)
+function SolveHKrylov(H;kwargs...)
+    # if size(H) == (1,1)
+    #     return (;values = [float(real(only(H)))],vectors = [1.])
+    # end
+    values,vectors, _ = KrylovKit.eigsolve(H,1,:SR;kwargs...)
+    # return (;values,vectors)
 end
 
 function getMagnetization(AllStates,eigen)
@@ -417,11 +443,12 @@ function CanApply(Conf::SpinConfig,Op::AbstractMatrix,i,j)
 end
 
 function canFlipPlaquette(Conf::SpinConfig,i,j)
-    plaquetteIsInBounds(Conf,i,j) || return false
     isodd(i+j) || return false
+    plaquetteIsInBounds(Conf,i,j) || return false
 
-    P = getPlaquette(Conf,i,j)
-    sites = SVector(getSitesFromPlaquette(P))
+    # P = getPlaquette(Conf,i,j)
+    # sites = SVector(Mat[2,3],Mat[1,3],Mat[1,2],Mat[1,1],Mat[2,1],Mat[3,1],Mat[3,2],Mat[3,3])
+    sites = SVector(Conf[i,j+1],Conf[i-1,j+1],Conf[i-1,j],Conf[i-1,j-1],Conf[i,j-1],Conf[i+1,j-1],Conf[i+1,j],Conf[i+1,j+1])
     return plaquetteFlippable(sites)
 end
 

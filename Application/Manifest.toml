@@ -859,6 +859,12 @@ git-tree-sha1 = "fee018a29b60733876eb557804b5b109dd3dd8a7"
 uuid = "5ab0869b-81aa-558d-bb23-cbf5423bbe9b"
 version = "0.6.8"
 
+[[deps.KrylovKit]]
+deps = ["ChainRulesCore", "GPUArraysCore", "LinearAlgebra", "Printf"]
+git-tree-sha1 = "5cebb47f472f086f7dd31fb8e738a8db728f1f84"
+uuid = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
+version = "0.6.1"
+
 [[deps.LAME_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "f6250b16881adf048549549fba48b1161acdac8c"
@@ -1624,7 +1630,7 @@ weakdeps = ["ChainRulesCore"]
     SpecialFunctionsChainRulesCoreExt = "ChainRulesCore"
 
 [[deps.SpiderWebModel]]
-deps = ["Arpack", "BitIntegers", "CairoMakie", "ChunkSplitters", "DataStructures", "Dictionaries", "LatticeFFTs", "LinearAlgebra", "LoopVectorization", "OrderedCollections", "Random", "SparseArrays", "StaticArrays", "Statistics", "Test"]
+deps = ["Arpack", "BitIntegers", "CairoMakie", "ChunkSplitters", "DataStructures", "Dictionaries", "KrylovKit", "LatticeFFTs", "LinearAlgebra", "LoopVectorization", "OrderedCollections", "Random", "SparseArrays", "StaticArrays", "Statistics", "Test"]
 path = ".."
 uuid = "8e1b84da-b1d7-4311-a21b-52324f990117"
 version = "0.1.0"

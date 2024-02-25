@@ -121,7 +121,7 @@ end
 
 function _generateHamiltonian(InitialState,::SBitVector{UIntType}) where {UIntType}
     plaqMapping = PlaqMapping()
-
+    # InitialState = booleanSpinConfig(InitialState) # is actually slower
     
     nThreads = 1 # multithreading not working yet as plaquette mapping is not thread safe
     # nThreads = Threads.nthreads()
@@ -224,6 +224,6 @@ function constructSparseMatrix(rows,cols,AllStates)
             newcols[i] = col2
         end
     end
-    return (sparse(newrows,newcols,-1.))
+    return Symmetric(sparse(newrows,newcols,-1.))
     # return SparseMatrixCSC(lenRows,lenCols,newrows,newcols,nzval)
 end
