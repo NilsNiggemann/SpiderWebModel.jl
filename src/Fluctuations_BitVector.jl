@@ -1,12 +1,13 @@
 using BitIntegers
+
 struct SBitVector{T} <: AbstractVector{Bool}
     x::T
     len::Int
 end
 
 Base.size(v::SBitVector) = (v.len,)
-Base.display(v::SBitVector) = println(bitstring(v.x))
-Base.show(io::IO,v::SBitVector) = println(io,bitstring(v.x))
+# Base.display(v::SBitVector) = println(bitstring(v.x))
+# Base.show(io::IO,v::SBitVector) = println(io,bitstring(v.x))
 Base.typemax(x::SBitVector) = typemax(x.x)
 
 Base.@propagate_inbounds function Base.getindex(v::SBitVector, i::Int)
@@ -15,63 +16,70 @@ Base.@propagate_inbounds function Base.getindex(v::SBitVector, i::Int)
 end
 
 Base.@propagate_inbounds function Base.setindex(v::SBitVector{UIntType}, i::Int, x::Bool) where {UIntType}
-    Base.@boundscheck 1 <= i <= length(v) || throw(BoundsError(v, i))
+    Base.@boundscheck 1 <= i <= typemax(v) || throw(BoundsError(v, i))
     mask = UIntType(1) << (i-1)
     res = ifelse(x, v.x | mask, v.x & ~mask)
-    return SBitVector(res, v.len)
+
+    newlen = _numberOfBits(UIntType) - leading_zeros(res) 
+    return SBitVector(res, newlen)
 end
 
-Base.:(==)(x::SBitVector,y::SBitVector) = x.x == y.x
-Base.hash(x::SBitVector, h::UInt) = hash(x.x, h) #is it possible to use 128 bit hash?
-# Base.hash(x::SBitVector, h::UInt128) = x.x #is it possible to use 128 bit hash?
+@inline _numberOfBits(::Type{UInt8}) = 8
+@inline _numberOfBits(::Type{UInt16}) = 16
+@inline _numberOfBits(::Type{UInt32}) = 32
+@inline _numberOfBits(::Type{UInt64}) = 64
+@inline _numberOfBits(::Type{UInt128}) = 128
+@inline _numberOfBits(x) = sizeof(x) * 8
 
-function spinConfig!(Conf,path::AbstractVector,InitialConf,plaqMap::AbstractVector)
+Base.:(==)(x::SBitVector,y::SBitVector) = x.x == y.x
+Base.hash(x::SBitVector, h::UInt) = hash(x.x, h) 
+
+struct PlaqMapping{I<:Integer}
+    d::OrderedDict{Tuple{I,I},I}
+end
+
+function (P::PlaqMapping)(ij::Tuple{I,I}) where {I <: Integer} 
+    index = get(P.d,ij,0)
+    if index == 0
+        index = updatePlaqMapping!(P,ij)
+    end
+    return index
+end
+
+(P::PlaqMapping)(i::I,j::I) where {I <: Integer} = P((i,j))
+(P::PlaqMapping)(i::Integer) = P.d.keys[i]
+
+Base.length(P::PlaqMapping) = length(P.d)
+
+"""constructs arrays for mapping between plaquette position (i,j) and integers"""
+function PlaqMapping()
+    d = OrderedDict{Tuple{Int,Int},Int}()
+    return PlaqMapping(d)
+end
+
+function updatePlaqMapping!(plaqMapping,plaqNum::Tuple{I,I}) where {I<:Integer}
+    if plaqNum ∉ keys(plaqMapping.d)
+        plaqMapping.d[plaqNum] = length(plaqMapping) + 1
+    end
+    return length(plaqMapping)
+end
+
+getPlaquettes(P::PlaqMapping) = P.d.keys
+
+function spinConfig!(Conf,path::AbstractVector,InitialConf,plaqMap::PlaqMapping)
     Conf .= InitialConf
     for (i,op) in enumerate(path) #this can probably be made faster
         if op
-            ij = plaqMap[i]
+            ij = plaqMap(i)
             flipPlaquette!(Conf,ij)
         end
     end
     return Conf
 end
-
 spinConfig(path,InitialConf,plaqMap) = spinConfig!(copy(InitialConf),path,InitialConf,plaqMap)
 
-"""constructs arrays for mapping between plaquette position (i,j) and integers"""
-function ConstructPlaqMapping(Lx,Ly)
-    i = 0
-    plaqMapping = zeros(Int,Lx,Ly)
-    for x in 1:Lx, y in 1:Ly
-        iseven(x+y) && continue
-        i += 1
-        plaqMapping[x,y] = i
-    end
 
-    inverseMapping = [findfirst(==(x),plaqMapping) for x in 1:i]
-
-    return (;plaqMapping,inverseMapping)
-
-end
-
-function ConstructPlaqMapping(Conf::SpinConfig)
-    i = 0
-    plaqMapping = zeros(Int,size(Conf))
-    for x in axes(plaqMapping,1), y in axes(plaqMapping,2)
-        iseven(x+y) && continue
-        plaquetteIsInBounds(Conf,x,y) || continue
-        i += 1
-        plaqMapping[x,y] = i
-    end
-
-    inverseMapping = [findfirst(==(x),plaqMapping) for x in 1:i]
-
-    return (;plaqMapping,inverseMapping)
-
-end
-
-
-function getNewStates!(states,Conf,StateRep::SBitVector,plaqMap::AbstractMatrix)
+function getNewStates!(states,Conf,StateRep::SBitVector,plaqMap::PlaqMapping)
     empty!(states)
 
     @inline function convertToStateRep(ij)
@@ -83,15 +91,14 @@ function getNewStates!(states,Conf,StateRep::SBitVector,plaqMap::AbstractMatrix)
     for i in axes(Conf.Mat,1),j in axes(Conf.Mat,2)
         iseven(i+j) && continue
         if canFlipPlaquette(Conf,i,j)
-            push!(states,convertToStateRep(plaqMap[i,j]))
+            push!(states,convertToStateRep(plaqMap(i,j)))
         end
     end
 
     states
 end
 
-function getNewStates!(states,Conf,StateRep::BitVector,plaqMap::AbstractMatrix)
-    empty!(states)
+function getNewStates!(states,Conf,StateRep::BitVector,plaqMap::PlaqMapping)
 
     @inline function convertToStateRep(ij)
         # ij = plaqMap[CartesianIndex(plaqNum)]
@@ -104,7 +111,7 @@ function getNewStates!(states,Conf,StateRep::BitVector,plaqMap::AbstractMatrix)
     for i in axes(Conf.Mat,1),j in axes(Conf.Mat,2)
         iseven(i+j) && continue
         if canFlipPlaquette(Conf,i,j)
-            push!(states,convertToStateRep(plaqMap[i,j]))
+            push!(states,convertToStateRep(plaqMap(i,j)))
         end
     end
 
@@ -113,17 +120,13 @@ end
 
 
 function _generateHamiltonian(InitialState,::SBitVector{UIntType}) where {UIntType}
-    Lx,Ly = size(InitialState)
-    (;plaqMapping,inverseMapping) = ConstructPlaqMapping(InitialState)
-
-    len = length(inverseMapping)
+    plaqMapping = PlaqMapping()
 
     
-    nThreads = Threads.nthreads()
+    nThreads = 1 # multithreading not working yet as plaquette mapping is not thread safe
+    # nThreads = Threads.nthreads()
     
-    InitalState_rep = SBitVector{UIntType}(0,len)
-
-    @assert 2. ^len < typemax(InitalState_rep) "Type $Type is too small to represent all states. Try a larger type, such as UInt128, UInt256."
+    InitalState_rep = SBitVector{UIntType}(0,0)
 
     CurrentStates = ([InitalState_rep])
 
@@ -139,26 +142,21 @@ function _generateHamiltonian(InitialState,::SBitVector{UIntType}) where {UIntTy
     Hrows_arr = [SBitVector{UIntType}[] for _ in 1:nThreads]
     Hcols_arr = [SBitVector{UIntType}[] for _ in 1:nThreads]
     
+    Conf = Conf_arr[1]
+    neighbors_i = neighbors_i_arr[1]
+    NewStates = NewStates_arr[1]
+    Hrows = Hrows_arr[1]
+    Hcols = Hcols_arr[1]
     
     while !isempty(CurrentStates)
-        batches = ChunkSplitters.chunks(CurrentStates,n=nThreads,split= :batch)
-        
-        Threads.@threads for (iChunk,inds) in enumerate(batches)
-            Conf = Conf_arr[iChunk]
-            neighbors_i = neighbors_i_arr[iChunk]
-            NewStates = NewStates_arr[iChunk]
-            Hrows = Hrows_arr[iChunk]
-            Hcols = Hcols_arr[iChunk]
+        for i in eachindex(CurrentStates)
+            StateRep = CurrentStates[i]
+            Conf = spinConfig!(Conf,StateRep,InitialState,plaqMapping)
 
-            for i in inds
-                StateRep = CurrentStates[i]
-                Conf = spinConfig!(Conf,StateRep,InitialState,inverseMapping)
+            neighbors_i = getNewStates!(neighbors_i,Conf,StateRep,plaqMapping)
+            addVertex!(Hrows,Hcols,StateRep,neighbors_i)
+            append!(NewStates,neighbors_i)
 
-                neighbors_i = getNewStates!(neighbors_i,Conf,StateRep,plaqMapping)
-                addVertex!(Hrows,Hcols,StateRep,neighbors_i)
-                append!(NewStates,neighbors_i)
-
-            end
         end
 
         empty!(CurrentStates)
@@ -175,16 +173,17 @@ function _generateHamiltonian(InitialState,::SBitVector{UIntType}) where {UIntTy
 
     end
 
-    return (;Hrows_arr,Hcols_arr,AllStates)
+    return (;Hrows_arr,Hcols_arr,AllStates,plaqMapping)
 
 end
 
 function generateHamiltonian(InitialState,type=SBitVector{UInt128}(0,0))
-    rowsArr,colsArr,AllStates = _generateHamiltonian(InitialState,type)
-    rows = vvcat(rowsArr)
-    cols = vvcat(colsArr)
+    (;Hrows_arr,Hcols_arr,AllStates,plaqMapping) = _generateHamiltonian(InitialState,type)
+    rows = vvcat(Hrows_arr)
+    cols = vvcat(Hcols_arr)
     H = constructSparseMatrix(rows,cols,AllStates)
-    return (;H,AllStates)
+    AllStates = sortByValueOrder(AllStates)
+    return (;H,AllStates,plaqMapping)
 end
 
 function vvcat(vv::Vector{Vector{T}}) where {T}
