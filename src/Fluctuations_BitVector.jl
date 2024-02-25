@@ -16,11 +16,12 @@ Base.@propagate_inbounds function Base.getindex(v::SBitVector, i::Int)
 end
 
 Base.@propagate_inbounds function Base.setindex(v::SBitVector{UIntType}, i::Int, x::Bool) where {UIntType}
-    Base.@boundscheck 1 <= i <= typemax(v) || throw(BoundsError(v, i))
+    numBits = _numberOfBits(UIntType)
+    Base.@boundscheck 1 <= i <= numBits || throw(BoundsError(v, i))
     mask = UIntType(1) << (i-1)
     res = ifelse(x, v.x | mask, v.x & ~mask)
 
-    newlen = _numberOfBits(UIntType) - leading_zeros(res) 
+    newlen = numBits - leading_zeros(res) 
     return SBitVector(res, newlen)
 end
 
@@ -177,7 +178,7 @@ function _generateHamiltonian(InitialState,::SBitVector{UIntType}) where {UIntTy
 
 end
 
-function generateHamiltonian(InitialState,type=SBitVector{UInt128}(0,0))
+function generateHamiltonian(InitialState,type=SBitVector{UInt64}(0,0))
     (;Hrows_arr,Hcols_arr,AllStates,plaqMapping) = _generateHamiltonian(InitialState,type)
     rows = vvcat(Hrows_arr)
     cols = vvcat(Hcols_arr)
