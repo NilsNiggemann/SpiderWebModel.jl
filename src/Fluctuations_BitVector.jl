@@ -82,14 +82,13 @@ spinConfig(path,InitialConf,plaqMap) = spinConfig!(copy(InitialConf),path,Initia
 
 function getNewStates!(states,Conf,StateRep::SBitVector,plaqMap::PlaqMapping)
     empty!(states)
-
     @inline function convertToStateRep(ij)
         # ij = plaqMap[CartesianIndex(plaqNum)]
         plaqstate = StateRep[ij]
         setindex(StateRep,ij,!plaqstate) 
     end
 
-    for i in axes(Conf.Mat,1),j in axes(Conf.Mat,2)
+    for i in axes(Conf.Mat,1), j in axes(Conf.Mat,2)
         iseven(i+j) && continue
         if canFlipPlaquette(Conf,i,j)
             push!(states,convertToStateRep(plaqMap(i,j)))
@@ -98,56 +97,33 @@ function getNewStates!(states,Conf,StateRep::SBitVector,plaqMap::PlaqMapping)
 
     states
 end
+const STAIRCASE_GROWTH_FACTOR = 4e-7
 
-function getNewStates!(states,Conf,StateRep::BitVector,plaqMap::PlaqMapping)
-
-    @inline function convertToStateRep(ij)
-        # ij = plaqMap[CartesianIndex(plaqNum)]
-        plaqstate = StateRep[ij]
-        newState = copy(StateRep)
-        newState[ij] = !plaqstate
-        return newState
-    end
-
-    for i in axes(Conf.Mat,1),j in axes(Conf.Mat,2)
-        iseven(i+j) && continue
-        if canFlipPlaquette(Conf,i,j)
-            push!(states,convertToStateRep(plaqMap(i,j)))
-        end
-    end
-
-    states
-end
-
-
-function _generateHamiltonian(InitialState,::SBitVector{UIntType}) where {UIntType}
+function _generateHamiltonian(InitialState,::SBitVector{UIntType},growthfactor = STAIRCASE_GROWTH_FACTOR) where {UIntType}
     plaqMapping = PlaqMapping()
     # InitialState = booleanSpinConfig(InitialState) # is actually slower
     
     nThreads = 1 # multithreading not working yet as plaquette mapping is not thread safe
     # nThreads = Threads.nthreads()
     
-    InitalState_rep = SBitVector{UIntType}(0,0)
+    InitialState_rep = SBitVector{UIntType}(0,0)
 
-    CurrentStates = ([InitalState_rep])
+    CurrentStates = ([InitialState_rep])
 
-    NewStates_arr = [ [InitalState_rep] for _ in 1:nThreads]
+    NewStates = [InitialState_rep]
 
-    AllStates = Dict(InitalState_rep => 1)
+    AllStates = DataStructures.SwissDict(InitialState_rep => 1)
 
-    Conf_arr = [copy(InitialState) for _ in 1:nThreads]
+    Conf = copy(InitialState)
     
-    neighbors_i_arr = [SBitVector{UIntType}[] for _ in 1:nThreads]
+    neighbors_i = SBitVector{UIntType}[]
 
 
-    Hrows_arr = [SBitVector{UIntType}[] for _ in 1:nThreads]
-    Hcols_arr = [SBitVector{UIntType}[] for _ in 1:nThreads]
+    Hrows = SBitVector{UIntType}[]
+    Hcols = SBitVector{UIntType}[]
     
-    Conf = Conf_arr[1]
-    neighbors_i = neighbors_i_arr[1]
-    NewStates = NewStates_arr[1]
-    Hrows = Hrows_arr[1]
-    Hcols = Hcols_arr[1]
+    sizehint!(Hrows,round(Int,growthfactor * exp10(size(Conf,1))))
+    sizehint!(Hcols,round(Int,growthfactor * exp10(size(Conf,1))))
     
     while !isempty(CurrentStates)
         for i in eachindex(CurrentStates)
@@ -156,33 +132,27 @@ function _generateHamiltonian(InitialState,::SBitVector{UIntType}) where {UIntTy
 
             neighbors_i = getNewStates!(neighbors_i,Conf,StateRep,plaqMapping)
             addVertex!(Hrows,Hcols,StateRep,neighbors_i)
-            append!(NewStates,neighbors_i)
-
-        end
-
-        empty!(CurrentStates)
-        
-        for NewStates in NewStates_arr
-            for s in NewStates
+            for s in neighbors_i
                 if s ∉ keys(AllStates)
-                    push!(CurrentStates,s)
+                    push!(NewStates,s)
                     AllStates[s] = length(AllStates) + 1
                 end
             end
-            empty!(NewStates)
         end
+
+        empty!(CurrentStates)
+        append!(CurrentStates,NewStates)
+        empty!(NewStates)
 
     end
 
-    return (;Hrows_arr,Hcols_arr,AllStates,plaqMapping)
+    return (;Hrows,Hcols,AllStates,plaqMapping)
 
 end
 
 function generateHamiltonian(InitialState,type=SBitVector{UInt64}(0,0))
-    (;Hrows_arr,Hcols_arr,AllStates,plaqMapping) = _generateHamiltonian(InitialState,type)
-    rows = vvcat(Hrows_arr)
-    cols = vvcat(Hcols_arr)
-    H = constructSparseMatrix(rows,cols,AllStates)
+    (;Hrows,Hcols,AllStates,plaqMapping) = _generateHamiltonian(InitialState,type)
+    H = constructSparseMatrix(Hrows,Hcols,AllStates)
     AllStates = sortByValueOrder(AllStates)
     return (;H,AllStates,plaqMapping)
 end
