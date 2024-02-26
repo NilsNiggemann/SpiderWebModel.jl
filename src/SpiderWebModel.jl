@@ -177,82 +177,12 @@ module SpiderWebModel
         return all(_isZeroOrNaN, p -t for (p,t) in zip(P,Tsites))
     end
 
-    
-    function TileFulFillsConstraint(S::SpinConfig,P,T1)
-        OldP = SMatrix{3,3}(P)
-        P .= T1
-        cons = fulFillsConstraint_nonStrict(S)
-        P .= OldP
-        return cons
-    end
-    getPossibleTiles(P,PlaquetteList,Config) = [i for (i,t) in enumerate(PlaquetteList) if canPlaceTile(P,t) && TileFulFillsConstraint(Config,P,t)]
-
     function t_delete(j)
         if j <= 5
             return 1
         else
             return j-2
         end
-    end
-    function constructSpinConfigFromPlaquettes_old(LPx,LPy,PlaquetteList;maxNumTries = 10_000,triesDeleteRow = 10)
-
-        Lx = 2*LPx+1
-        Ly = 2*LPy+1
-        Mat = fill(NaN,Lx,Ly)
-        
-        El = PlaquetteList[begin]
-        P = SpinConfig(Mat,El.S)
-        j = 2
-        it = 0
-        while j <= Ly-1
-            i = 2
-    
-            
-            tries = 0
-            while i <= Lx-1 
-                
-                Pij = getPlaquette(P,i,j)
-                it+=1
-                SubConf = SubConfig(P,i-3:i+3,j-3:j+3)
-                tileNums = getPossibleTiles(Pij,PlaquetteList,SubConf)
-                
-                if it > maxNumTries
-                    println((i,j))
-                    @warn "max Iterations reached" 
-                    if isempty(tileNums)
-                        @warn "no possible tiles"
-                    end
-                    return P
-                end
-                
-                if isempty(tileNums)
-                    tries += 1
-    
-                    if tries > triesDeleteRow
-                        jdelete = t_delete(j)
-                        
-                        
-                        P[:,jdelete:end] .= NaN
-                        
-                        j = max(jdelete,2)
-                        i = 2
-                        tries = 0
-                    else
-    
-                        P[:,j:end] .= NaN
-                        i = 2
-                    end
-    
-                    continue
-                end
-                T = PlaquetteList[rand(tileNums)]
-                Pij .= T
-                i += 2
-            end
-            j += 2
-        end
-        @assert fulFillsConstraint(P,verbose=true) "initial configuration does not fulfill constraint"
-        return P
     end
 
     function getIdxInBounds(i,L)
