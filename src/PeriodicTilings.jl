@@ -30,14 +30,6 @@ function remapIndices(x::UnitRange,y::UnitRange,Lx,Ly,offset)
     Inds = (remapIndices(i,j,Lx,Ly,offset) for i in x for j in y)
 end
 
-
-# function remapIndices(i,j,Lx,Ly,offset)
-#     i = remapIndex(i,Lx,0)
-#     j = remapIndex(j,Ly,offset)
-#     return i,j
-# end
-
-# Base.getindex(P::PeriodicMatrix,i,j) = P.UC[remapIndices(i,j,size(P)...,P.offset)...]
 function Base.getindex(P::PeriodicMatrix,i::Integer,j::Integer) 
     Lx,Ly = size(P.UC)
     i,j = remapIndices(i,j,Lx,Ly,P.offset)
@@ -58,12 +50,6 @@ Base.setindex!(P::PeriodicMatrix,x,i,j) = setindex!(P.UC,x,remapIndices(i,j,size
 Base.size(P::PeriodicMatrix) = (P.Lx,P.Ly)
 Base.copy(P::PeriodicMatrix) = PeriodicMatrix(copy(P.UC),P.Lx,P.Ly,P.offset)
 
-# function Base.checkbounds(A::PeriodicMatrix, i,j)
-#     @inline
-#     i,j = remapIndices(i,j,size(A)...,A.offset)
-#     checkbounds(Bool, A, i,j) || throw_boundserror(A, i,j)
-#     nothing
-# end
 @inline function Base.checkbounds(::Type{Bool},arr::PeriodicMatrix, I...)
     i,j = remapIndices(I...,size(arr)...,arr.offset)
     # checkbounds(Bool, arr, i,j) || throw_boundserror(arr, ij)

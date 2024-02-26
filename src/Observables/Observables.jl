@@ -64,3 +64,55 @@ function getSij(Configs::AbstractVector{<:SpinConfig})
     fac(i,j) = ifelse(i==j,1,2)
     return fetch.([Threads.@spawn fac(i,j)* getSij(Configs,i,j) for i in LinearIndices(Configs[1]) for j in 1:i])
 end
+
+
+
+function getMagnetization(AllStates,eigen)
+    ψ0 = eigen.vectors[:,1]
+    mag = zeros(AllStates |> first |> size)
+    for n in eachindex(ψ0)
+        Si = AllStates[n]
+        mag .+= abs2(ψ0[n]).*Si
+    end
+    return mag
+end
+
+function getMagnetization(AllStates::AbstractVector{<:LazyConfig},eigen)
+    ψ0 = eigen.vectors[:,1]
+    
+    InitConfig = first(AllStates).parent
+    Conf = copy(InitConfig)
+    mag = zeros(size(Conf))
+
+    for n in eachindex(ψ0)
+        Si = spinConfig!(Conf,AllStates[n])
+        mag .+= abs2(ψ0[n]).*Si
+    end
+    return mag
+end
+
+function getStructureFac(AllStates::AbstractVector{<:LazyConfig},eigen,tol=0)
+    Conf = spinConfig(first(AllStates))
+
+    plan = getLatticeFFTPlan(Conf.Mat,0)
+    Psi = eigen.vectors[:,1]
+    Nsites = length(Conf)
+
+    function getSqi(state,ψn)
+        Conf = spinConfig!(Conf,state)
+        getInterpolatedFFT(abs2(ψn)* Conf.Mat,0,plan;Interpolation = BSpline(Constant()))
+    end
+    Sq = getSqi(first(AllStates),first(Psi))
+    k = Sq.itp.ranges[1]
+    Sq_k = zeros(length(k),length(k))
+
+    for (c,psin) in zip( AllStates,Psi)
+        Sqi = getSqi(c,psin)
+        for (i,kx) in enumerate(k)
+            for (j,ky) in enumerate(k)
+                Sq_k[i,j] += real(Sqi(kx,ky))
+            end
+        end
+    end
+    return (;k,Sq_k)
+end
