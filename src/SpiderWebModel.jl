@@ -1,7 +1,7 @@
 module SpiderWebModel
 using StaticArrays, Random, Statistics
 using OrderedCollections, Dictionaries, LinearAlgebra
-using HDF5
+using HDF5, H5Zblosc
 import ChunkSplitters
 import DataStructures
 
