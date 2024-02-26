@@ -61,6 +61,7 @@ jobs:
   #     - run: |
   #         julia --project=docs -e '
   #           using Pkg
+  #           Pkg.Registry.add("https://github.com/NilsNiggemann/JuliaPMFRGRegistry.git")
   #           Pkg.develop(PackageSpec(path=pwd()))
   #           Pkg.instantiate()'
   #     - run: |
