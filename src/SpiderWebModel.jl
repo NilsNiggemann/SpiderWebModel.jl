@@ -1,5 +1,5 @@
 module SpiderWebModel
-using StaticArrays, Random, Statistics, LoopVectorization
+using StaticArrays, Random, Statistics
 using OrderedCollections, Dictionaries, LinearAlgebra
 using Test
 import ChunkSplitters
