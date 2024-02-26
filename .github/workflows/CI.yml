@@ -3,8 +3,7 @@ name: Run tests
 on: 
   push:
     branches:
-      - master
-      - CI-LFS
+      - main
   pull_request:
   workflow_dispatch:
   
