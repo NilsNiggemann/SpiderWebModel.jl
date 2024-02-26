@@ -1,8 +1,8 @@
 using LinearAlgebra, SparseArrays, Arpack
 import KrylovKit
 const P1 = SA[-1.0 1.0 1.0;
-    -1.0 0.0 -1.0;
-    1.0 1.0 -1.0]
+              -1.0 0.0 -1.0;
+              1.0 1.0 -1.0]
 const P2 = -P1
 
 const P1_SITES = -SVector(getSitesFromPlaquette(P1)) / 2
@@ -302,11 +302,8 @@ function SolveH(H::SparseMat; kwargs...)
 end
 
 function SolveHKrylov(H; kwargs...)
-    # if size(H) == (1,1)
-    #     return (;values = [float(real(only(H)))],vectors = [1.])
-    # end
     values, vectors, _ = KrylovKit.eigsolve(H, 1, :SR; kwargs...)
-    # return (;values,vectors)
+    return (; values, vectors)
 end
 
 function flipSpinsAlongLine!(Conf, org, slope)

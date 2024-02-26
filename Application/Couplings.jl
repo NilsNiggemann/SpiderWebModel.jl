@@ -17,7 +17,7 @@ function getCouplingsToS1(RefSite = Rvec(0, 0, 1))
             Rvec(n1 - 1, n2, 1),
             Rvec(n1 - 1, n2 - 1, 1),
             Rvec(n1, n2 - 1, 1),
-            Rvec(n1 + 1, n2 - 1, 1),
+            Rvec(n1 + 1, n2 - 1, 1)
         ]
         sgns = [1, 1, -1, -1, 1, 1, -1, -1]
         plaq = [spin(r, s) for (r, s) in zip(sgns, sites)]
@@ -169,7 +169,7 @@ function getJMatrix(q)
     J21 = J12
     J22 = -4cos(qx + qy) - 4cos(qx - qy) + 2cos(2qx) + 2cos(2qy)
     J = LargeN.Hermitian(SA[J11 J12;
-        J21 J22])
+                            J21 J22])
     return J
 end
 

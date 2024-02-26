@@ -17,13 +17,13 @@ let
     allij = Tuple.(CartesianIndices(layout))
     xticks = yticks = [-1, 0, 1]
     axes = [Axis(fig[fj, fi];
-        xticklabelsvisible = false,
-        yticklabelsvisible = false,
-        xgridvisible = false,
-        ygridvisible = false,
-        aspect = 1,
-        xticks,
-        yticks) for (i, (fi, fj)) in enumerate(allij)]
+                xticklabelsvisible = false,
+                yticklabelsvisible = false,
+                xgridvisible = false,
+                ygridvisible = false,
+                aspect = 1,
+                xticks,
+                yticks) for (i, (fi, fj)) in enumerate(allij)]
 
     for (ax, Plaq) in zip(axes, AllAllowedConfigs)
         heatmap!(ax, xticks, yticks, Array(Plaq.Mat), colorrange = (-0.5, 0.5))
@@ -40,7 +40,7 @@ function drawPlaquette!(ax, (i, j); kwargs...)
         (i + 1, j - 1),
         (i + 1, j + 1),
         (i - 1, j + 1),
-        (i - 1, j - 1),
+        (i - 1, j - 1)
     ])
     lines!(ax, points; linestyle = :dash, color = :white, kwargs...)
 end
@@ -69,9 +69,9 @@ SW.fulFillsConstraint(AFM)
 ##
 function getStairCase(L)
     UC = SA[1 1 1 0;
-        0 0 1 0;
-        1 0 1 1;
-        1 0 0 0]
+            0 0 1 0;
+            1 0 1 1;
+            1 0 0 0]
     Mat = zeros(Float64, L, L)
     mel(x) = x == 1 ? 1 / 2 : -1 / 2
     for i in axes(Mat, 1)
@@ -205,14 +205,14 @@ function getConfigs(L, numConfigs = 10; kwargs...)
     maxiter = 10_500_000
 
     S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),
-        L,
-        L,
-        SW.ALLGS_S12,
-        setup(path),
-        maxiter = 200_000,
-        deleteSteps = SW.getStepDeleter(L + 2, 1, 15),
-        verbose = false;
-        kwargs...) for _ in 1:numConfigs for path in Paths])
+                    L,
+                    L,
+                    SW.ALLGS_S12,
+                    setup(path),
+                    maxiter = 200_000,
+                    deleteSteps = SW.getStepDeleter(L + 2, 1, 15),
+                    verbose = false;
+                    kwargs...) for _ in 1:numConfigs for path in Paths])
 
     filter!(x -> SW.fulFillsConstraint(x, verbose = false) && !any(isnan, x), S)
     @info "" L defaultDelete tries maxiter length(S)
@@ -228,14 +228,14 @@ function getConfigsSpiral(L, numConfigs = 10; kwargs...)
     setup = SW.setupCalc!(path, L, L, SW.ALLGS_S12)
 
     S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),
-        L,
-        L,
-        SW.ALLGS_S12,
-        setup,
-        maxiter = maxiter,
-        deleteSteps = deleter,
-        verbose = false;
-        kwargs...) for _ in 1:numConfigs])
+                    L,
+                    L,
+                    SW.ALLGS_S12,
+                    setup,
+                    maxiter = maxiter,
+                    deleteSteps = deleter,
+                    verbose = false;
+                    kwargs...) for _ in 1:numConfigs])
 
     filter!(x -> SW.fulFillsConstraint(x, verbose = false) && !any(isnan, x), S)
     @info "" L defaultDelete tries maxiter length(S)

@@ -5,6 +5,12 @@ struct SBitVector{T} <: AbstractVector{Bool}
     len::Int
 end
 
+function getlen(x::T, numBits = _numberOfBits(T)) where {T}
+    return numBits - leading_zeros(x)
+end
+
+SBitVector(x) = SBitVector(x, getlen(x))
+
 Base.size(v::SBitVector) = (v.len,)
 # Base.display(v::SBitVector) = println(bitstring(v.x))
 # Base.show(io::IO,v::SBitVector) = println(io,bitstring(v.x))
@@ -23,7 +29,7 @@ Base.@propagate_inbounds function Base.setindex(v::SBitVector{UIntType},
     mask = UIntType(1) << (i - 1)
     res = ifelse(x, v.x | mask, v.x & ~mask)
 
-    newlen = numBits - leading_zeros(res)
+    newlen = getlen(res, numBits)
     return SBitVector(res, newlen)
 end
 

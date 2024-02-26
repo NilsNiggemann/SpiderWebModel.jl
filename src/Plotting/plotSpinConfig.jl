@@ -40,7 +40,7 @@ function getConfigAxis(S; kwargs...)
         # yticks = (axes(S,2),string.(axes(S,2))) ,
         xminorticks = 0.5 .+ axes(S, 1),
         yminorticks = 0.5 .+ axes(S, 2),
-        limits = (0.5, size(S, 1) + 0.5, 0.5, size(S, 2) + 0.5),)
+        limits = (0.5, size(S, 1) + 0.5, 0.5, size(S, 2) + 0.5))
 end
 
 function plotSpinConfig(S; kwargs...)

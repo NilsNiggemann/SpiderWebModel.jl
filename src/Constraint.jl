@@ -56,7 +56,8 @@ end
 function getAllGS(S)
     allCombs = [plaquette((i, j, k, l, m, n, o, p), S) for i in (-S):S for j in (-S):S
                 for k in (-S):S for l in (-S):S for m in (-S):S for n in (-S):S
-                for o in (-S):S for p in (-S):S if constraint((i, j, k, l, m, n, o, p)) == 0]
+                for o in (-S):S
+                for p in (-S):S if constraint((i, j, k, l, m, n, o, p)) == 0]
     return allCombs
 end
 

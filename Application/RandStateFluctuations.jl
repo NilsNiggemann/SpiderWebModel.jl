@@ -14,14 +14,14 @@ function getConfigs(L, numConfigs = 10; kwargs...)
     setup = SW.setupCalc!(path, L, L, SW.ALLGS_S12)
 
     S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),
-        L,
-        L,
-        SW.ALLGS_S12,
-        setup;
-        maxiter,
-        deleteSteps = SW.getStepDeleter(L + 2, 1, 15),
-        verbose = false,
-        kwargs...) for _ in 1:numConfigs])
+                    L,
+                    L,
+                    SW.ALLGS_S12,
+                    setup;
+                    maxiter,
+                    deleteSteps = SW.getStepDeleter(L + 2, 1, 15),
+                    verbose = false,
+                    kwargs...) for _ in 1:numConfigs])
 
     filter!(x -> SW.fulFillsConstraint(x, verbose = false) && !any(isnan, x), S)
     @info "" L defaultDelete tries maxiter length(S)

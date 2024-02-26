@@ -60,7 +60,7 @@ function constructConfigPath(P::SpinConfig, PlaquetteList, setup;
         maxiter = 10000,
         deleteSteps = getStepDeleter(size(P, 2) + 2, 1, 15),
         verbose = true,
-        plotSteps = false,)
+        plotSteps = false)
     path = setup.path
     emptyTilesList = setup.emptyTilesList
 
@@ -136,5 +136,16 @@ function constructConfigPath(LPx, LPy, PlaquetteList,
 
     El = PlaquetteList[begin]
     P = SpinConfig(Mat, El.S)
-    return constructConfigPath(Algo, P, PlaquetteList, setup; kwargs...)
+    return constructConfigPath(P, PlaquetteList, setup; kwargs...)
+end
+
+function constructConfigPath(LPx, LPy, PlaquetteList, path::AbstractVector; kwargs...)
+    setup = setupCalc!(copy(path), LPx, LPy, PlaquetteList)
+    constructConfigPath(LPx, LPy, PlaquetteList, setup; kwargs...)
+end
+
+function constructConfigPath(LPx, LPy, PlaquetteList, pathFunc::Function; kwargs...)
+    path = pathFunc(LPx, LPy)
+    setup = setupCalc!(path, LPx, LPy, PlaquetteList)
+    constructConfigPath(LPx, LPy, PlaquetteList, setup; kwargs...)
 end

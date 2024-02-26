@@ -1,3 +1,24 @@
+function xdirecPath(LPx, LPy = LPx)
+    [(i, j) for j in 1:(2LPy + 1) for i in 1:(2LPx + 1) if iseven(i + j)]
+end
+function xdirecPathReverse(LPx, LPy = LPx)
+    [(i, j) for j in 1:(2LPy + 1) for i in (2LPx + 1):-1:1 if iseven(i + j)]
+end
+function ydirecPath(LPx, LPy = LPx)
+    [(i, j) for i in 1:(2LPx + 1) for j in 1:(2LPy + 1) if iseven(i + j)]
+end
+function ydirecPathReverse(LPx, LPy = LPx)
+    [(i, j) for i in 1:(2LPx + 1) for j in (2LPy + 1):-1:1 if iseven(i + j)]
+end
+
+function correctPath!(path, Config)
+    filter!(x -> plaquetteIsInBounds(Config, x...), path)
+end
+
+function correctPath(path, Config)
+    filter(x -> plaquetteIsInBounds(Config, x...), path)
+end
+
 function spiralPath(L)
     num_points = 4L^2
     coords = [(0, 0)]
@@ -34,25 +55,9 @@ function spiralPath(L)
     return coords
 end
 
-function xdirecPath(LPx, LPy = LPx)
-    [(i, j) for j in 1:(2LPy + 1) for i in 1:(2LPx + 1) if iseven(i + j)]
-end
-function xdirecPathReverse(LPx, LPy = LPx)
-    [(i, j) for j in 1:(2LPy + 1) for i in (2LPx + 1):-1:1 if iseven(i + j)]
-end
-function ydirecPath(LPx, LPy = LPx)
-    [(i, j) for i in 1:(2LPx + 1) for j in 1:(2LPy + 1) if iseven(i + j)]
-end
-function ydirecPathReverse(LPx, LPy = LPx)
-    [(i, j) for i in 1:(2LPx + 1) for j in (2LPy + 1):-1:1 if iseven(i + j)]
-end
-
-function correctPath!(path, Config)
-    filter!(x -> plaquetteIsInBounds(Config, x...), path)
-end
-
-function correctPath(path, Config)
-    filter(x -> plaquetteIsInBounds(Config, x...), path)
+function spiralPath(Lx, Ly)
+    @assert Lx==Ly "Lx must be equal to Ly"
+    spiralPath(Lx)
 end
 
 function setupCalc!(path, LPx, LPy, PlaquetteList)

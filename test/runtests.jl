@@ -10,27 +10,6 @@ import SpiderWebModel as SW
 end
 
 ##
-@testset "Hashing arrays" begin
-    state = rand(-0.5:0.5, 20, 20)
-    StateSet = Set([state])
-    StateArr = [state]
-    for i in eachindex(state)
-        newstate = copy(state)
-        push!(StateArr, newstate)
-        newstate[i] = -newstate[i]
-        push!(StateSet, newstate)
-    end
-    @test length(StateSet) == length(StateArr)
-
-    for i in eachindex(state)
-        newstate = copy(state)
-        newstate[i] = -newstate[i]
-        push!(StateSet, newstate)
-    end
-
-    @test length(StateSet) == length(StateArr)
-end
-##
 @testset "appending path" begin
     path = Set([134, 13, 67, 87])
     SW.updatePath!(path, 341)
@@ -39,3 +18,5 @@ end
     SW.updatePath!(path, 341)
     @test path == Set([134, 13, 67, 87])
 end
+include("ConstructionTest.jl")
+include("FluctuationTest.jl")
