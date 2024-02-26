@@ -1,16 +1,11 @@
 # see documentation at https://juliadocs.github.io/Documenter.jl/stable/
 
-using Documenter, 
-
-makedocs(
+using Documenter, makedocs(
     modules = [],
     format = Documenter.HTML(; prettyurls = get(ENV, "CI", nothing) == "true"),
     authors = "Nils Niggemann",
     sitename = ".jl",
-    pages = Any["index.md"]
-    # strict = true,
-    # clean = true,
-    # checkdocs = :exports,
+    pages = Any["index.md"]    # strict = true,    # clean = true,    # checkdocs = :exports,
 )
 
 # Some setup is needed for documentation deployment, see “Hosting Documentation” and
