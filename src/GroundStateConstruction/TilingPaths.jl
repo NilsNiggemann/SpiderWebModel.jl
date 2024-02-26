@@ -27,42 +27,50 @@ function spiralPath(L)
             end
         end
     end
-    filter!(x -> iseven(x[1]+x[2]), coords)
+    filter!(x -> iseven(x[1] + x[2]), coords)
     for i in eachindex(coords)
-        coords[i] = coords[i] .+ (L,L)
+        coords[i] = coords[i] .+ (L, L)
     end
     return coords
 end
 
-xdirecPath(LPx,LPy=LPx) = [(i,j) for j in 1:2LPy+1 for i in 1:2LPx+1 if iseven(i+j) ]
-xdirecPathReverse(LPx,LPy=LPx) = [(i,j) for j in 1:2LPy+1 for i in 2LPx+1:-1:1 if iseven(i+j) ]
-ydirecPath(LPx,LPy=LPx) = [(i,j) for i in 1:2LPx+1 for j in 1:2LPy+1 if iseven(i+j)]
-ydirecPathReverse(LPx,LPy=LPx) = [(i,j) for i in 1:2LPx+1 for j in 2LPy+1:-1:1 if iseven(i+j)]
-
-function correctPath!(path,Config)
-    filter!(x -> plaquetteIsInBounds(Config,x...),path)
+function xdirecPath(LPx, LPy = LPx)
+    [(i, j) for j in 1:(2LPy + 1) for i in 1:(2LPx + 1) if iseven(i + j)]
+end
+function xdirecPathReverse(LPx, LPy = LPx)
+    [(i, j) for j in 1:(2LPy + 1) for i in (2LPx + 1):-1:1 if iseven(i + j)]
+end
+function ydirecPath(LPx, LPy = LPx)
+    [(i, j) for i in 1:(2LPx + 1) for j in 1:(2LPy + 1) if iseven(i + j)]
+end
+function ydirecPathReverse(LPx, LPy = LPx)
+    [(i, j) for i in 1:(2LPx + 1) for j in (2LPy + 1):-1:1 if iseven(i + j)]
 end
 
-function correctPath(path,Config)
-    filter(x -> plaquetteIsInBounds(Config,x...),path)
+function correctPath!(path, Config)
+    filter!(x -> plaquetteIsInBounds(Config, x...), path)
 end
 
-function setupCalc!(path,LPx,LPy,PlaquetteList)
-    Lx = 2*LPx+1
-    Ly = 2*LPy+1
-    Mat = fill(NaN,Lx,Ly)
+function correctPath(path, Config)
+    filter(x -> plaquetteIsInBounds(Config, x...), path)
+end
+
+function setupCalc!(path, LPx, LPy, PlaquetteList)
+    Lx = 2 * LPx + 1
+    Ly = 2 * LPy + 1
+    Mat = fill(NaN, Lx, Ly)
     El = PlaquetteList[begin]
-    P = SpinConfig(Mat,El.S)
-    filter!(x -> plaquetteIsInBounds(Mat,x...),path)
+    P = SpinConfig(Mat, El.S)
+    filter!(x -> plaquetteIsInBounds(Mat, x...), path)
 
-    emptyTilesList = getFreeTilesPath(P,path,PlaquetteList)
+    emptyTilesList = getFreeTilesPath(P, path, PlaquetteList)
 
     # TilesDict = getFittingTilesDict(PlaquetteList)
-    (;path,emptyTilesList)
+    (; path, emptyTilesList)
 end
 
-function getStepDeleter(L,default = 5,tries = 5)
-    function deleter(x,counter)
+function getStepDeleter(L, default = 5, tries = 5)
+    function deleter(x, counter)
         counter[] += 1
         if counter[] > tries
             counter[] = 0
@@ -72,17 +80,17 @@ function getStepDeleter(L,default = 5,tries = 5)
     end
 end
 
-function getFreeTilesPath(P,path,PlaquetteList)
+function getFreeTilesPath(P, path, PlaquetteList)
     # emptyTiles = Vector{Int}[]
     emptyTiles = Vector{CartesianIndex{2}}[]
     newP = copy(P)
     newP .= NaN
     testPlaq = first(PlaquetteList)
-    for (i,j) in path
-        Pij = getPlaquette(newP,i,j)
-        addTile!(Pij,testPlaq)
-        emptyTilesCurrent = findall(isnan,newP)
-        push!(emptyTiles,emptyTilesCurrent)
+    for (i, j) in path
+        Pij = getPlaquette(newP, i, j)
+        addTile!(Pij, testPlaq)
+        emptyTilesCurrent = findall(isnan, newP)
+        push!(emptyTiles, emptyTilesCurrent)
     end
     return emptyTiles
 end

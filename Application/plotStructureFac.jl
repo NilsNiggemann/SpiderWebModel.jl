@@ -1,14 +1,13 @@
 """given a matrix, rotate it by 90 degrees"""
 function rotate(Mat)
     Mat2 = zeros(size(Mat))
-    for i in axes(Mat,1)
-        row = Mat'[:,i]
-        Mat2[:,i] .= reverse(row)
+    for i in axes(Mat, 1)
+        row = Mat'[:, i]
+        Mat2[:, i] .= reverse(row)
     end
     return Mat2
-
 end
-function rotate(Mat,n)
+function rotate(Mat, n)
     if n == 0
         return Mat
     elseif n == 1
@@ -20,15 +19,15 @@ function rotate(Mat,n)
     end
     error("n must be 0,1,2,3")
 end
-rotate(S::SW.SpinConfig,n) = SW.SpinConfig(rotate(S.Mat,n),S.S)
+rotate(S::SW.SpinConfig, n) = SW.SpinConfig(rotate(S.Mat, n), S.S)
 
 function AllRots(Confs)
-    Confs2 = [rotate(c,n) for c in Confs for n in 0:3]
+    Confs2 = [rotate(c, n) for c in Confs for n in 0:3]
     return Confs2
 end
 
 function randRots(Confs)
-    Confs2 = [rotate(c,rand(0:3)) for c in Confs]
+    Confs2 = [rotate(c, rand(0:3)) for c in Confs]
     return Confs2
 end
 
@@ -39,17 +38,18 @@ using Statistics
 using LatticeFFTs.Interpolations
 ##
 function getStructureFac(Confs)
-    plan = getLatticeFFTPlan(Confs[1].Mat,0)
+    plan = getLatticeFFTPlan(Confs[1].Mat, 0)
 
-    Sq = [getInterpolatedFFT(c.Mat,0,plan;Interpolation = BSpline(Constant())) for c in Confs]
+    Sq = [getInterpolatedFFT(c.Mat, 0, plan; Interpolation = BSpline(Constant()))
+          for c in Confs]
 end
 ##
-function plotStructureFac(Confs;cbar = false,kwargs...)
+function plotStructureFac(Confs; cbar = false, kwargs...)
     Confs2 = Confs
     # Confs2 = randRots(Confs)
 
     Sq = getStructureFac(Confs2)
-    SSq(kx,ky) = mean(real(s(kx,ky)*s(-kx,-ky)) for s in Sq)
+    SSq(kx, ky) = mean(real(s(kx, ky) * s(-kx, -ky)) for s in Sq)
     # SSq(kx,ky) = mean(real(s(kx,ky)) for s in Sq)
 
     # i = size(Confs2[1],1) ÷ 2
@@ -65,14 +65,14 @@ function plotStructureFac(Confs;cbar = false,kwargs...)
     # append!(Rij,Rij2)
     # chik = FourierStruct(Sij,Rij,1)
 
-    kx = LinRange(-0,2pi,200)
-    ky = LinRange(-0,2pi,200)
-    chi = fetch.([Threads.@spawn SSq(kx,ky) for kx in kx, ky in ky])
+    kx = LinRange(-0, 2pi, 200)
+    ky = LinRange(-0, 2pi, 200)
+    chi = fetch.([Threads.@spawn SSq(kx, ky) for kx in kx, ky in ky])
     fig = Figure(fontsize = 22)
-    ax = Axis(fig[1,1],aspect = 1,xticks = PiTicks(),yticks = PiTicks())
-    hm = heatmap!(ax,kx,ky,chi;kwargs...)
-    if cbar 
-        Colorbar(fig[1,2],hm)
+    ax = Axis(fig[1, 1], aspect = 1, xticks = PiTicks(), yticks = PiTicks())
+    hm = heatmap!(ax, kx, ky, chi; kwargs...)
+    if cbar
+        Colorbar(fig[1, 2], hm)
     end
     fig
 end
