@@ -177,32 +177,6 @@ module SpiderWebModel
         return all(_isZeroOrNaN, p -t for (p,t) in zip(P,Tsites))
     end
 
-    function t_delete(j)
-        if j <= 5
-            return 1
-        else
-            return j-2
-        end
-    end
-
-    function getIdxInBounds(i,L)
-        return (i,j)
-    end
-
-    function SubConfig(S::SpinConfig,irange,jrange)
-        imin, imax = extrema(irange)
-
-        imin = max(imin,firstindex(S.Mat,1))
-        imax = min(imax,lastindex(S.Mat,1))
-
-        jmin, jmax = extrema(jrange)
-        jmin = max(jmin,firstindex(S.Mat,2))
-        jmax = min(jmax,lastindex(S.Mat,2))
-
-        Matview = @view S.Mat[imin:imax,jmin:jmax]
-        return SpinConfig(Matview,S.S)
-    end
-
     getFittingTiles(P,PlaquetteList) = [i for (i,t) in enumerate(PlaquetteList) if canPlaceTile(P,t)]
 
     function getFittingTiles!(TileList,P,PlaquetteList)
