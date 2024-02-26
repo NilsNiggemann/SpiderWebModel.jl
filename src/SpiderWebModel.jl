@@ -1,7 +1,7 @@
 module SpiderWebModel
-using StaticArrays, Random, Statistics, LoopVectorization
+using StaticArrays, Random, Statistics
 using OrderedCollections, Dictionaries, LinearAlgebra
-using Test
+using HDF5
 import ChunkSplitters
 import DataStructures
 
@@ -23,4 +23,6 @@ include("GroundStateConstruction/BigTilings.jl")
 
 include("Observables/Observables.jl")
 include("explicitStates/PeriodicStates.jl")
+
+include("IO/saveHilbertSpace.jl")
 end # module SpiderWebModel

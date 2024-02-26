@@ -59,6 +59,7 @@ end
 (P::PlaqMapping)(i::Integer) = P.d.keys[i]
 
 Base.length(P::PlaqMapping) = length(P.d)
+Base.:(==)(P1::PlaqMapping, P2::PlaqMapping) = P1.d == P2.d
 
 """constructs arrays for mapping between plaquette position (i,j) and integers"""
 function PlaqMapping()
@@ -108,7 +109,7 @@ function getNewStates!(states, Conf, StateRep::SBitVector, plaqMap::PlaqMapping)
 end
 const STAIRCASE_GROWTH_FACTOR = 4e-7
 
-function _generateHamiltonian(InitialState,
+function _generateHilbertSpace(InitialState,
         ::SBitVector{UIntType},
         growthfactor = STAIRCASE_GROWTH_FACTOR) where {UIntType}
     plaqMapping = PlaqMapping()
@@ -158,20 +159,17 @@ function _generateHamiltonian(InitialState,
     return (; Hrows, Hcols, AllStates, plaqMapping)
 end
 
-function generateHamiltonian(InitialState, type = SBitVector{UInt64}(0, 0))
-    (; Hrows, Hcols, AllStates, plaqMapping) = _generateHamiltonian(InitialState, type)
+function generateHilbertSpace(InitialState, type = SBitVector{UInt64}(0, 0))
+    (; Hrows, Hcols, AllStates, plaqMapping) = _generateHilbertSpace(InitialState, type)
     H = constructSparseMatrix(Hrows, Hcols, AllStates)
     AllStates = sortByValueOrder(AllStates)
-    return (; H, AllStates, plaqMapping)
+    return HilbertSpace(AllStates, H, plaqMapping)
 end
 
-function vvcat(vv::Vector{Vector{T}}) where {T}
-    out = Vector{T}(undef, sum(length, vv))
-    i = 0
-    for v in vv, x in v
-        @inbounds out[i += 1] = x
-    end
-    return out
+struct HilbertSpace{StatesType, HType <: AbstractMatrix, PlaqMapType}
+    AllStates::StatesType
+    H::HType
+    plaqMapping::PlaqMapType
 end
 
 function addVertex!(rows::AbstractVector, cols::AbstractVector, i, Neighbors)

@@ -13,7 +13,7 @@ Conf = SW.periodicState5x5(10)
            (9, 4)]
 end
 ##
-H = SW.generateHamiltonian(Conf)
+H = SW.generateHilbertSpace(Conf)
 
 eig = SW.SolveHKrylov(H.H)
 ##

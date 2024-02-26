@@ -3,21 +3,21 @@ import SpiderWebModel as SW
 
 ##
 Stair = SW.getStairCase(14)
-@time H = SW.generateHamiltonian(Stair, SW.SBitVector{UInt64}(0, 0))
+@time H = SW.generateHilbertSpace(Stair, SW.SBitVector{UInt64}(0, 0))
 # length(H.H)
 ##
 ls = let
     ls = Int[]
     for i in 1:15
         Stair = SW.getStairCase(i)
-        @time (; Hrows, AllStates) = SW._generateHamiltonian(Stair,
+        @time (; Hrows, AllStates) = SW._generateHilbertSpace(Stair,
             SW.SBitVector{UInt64}(0, 0))
         push!(ls, length(Hrows))
     end
     ls
 end
 ##
-@profview H = SW.generateHamiltonian(Stair)
+@profview H = SW.generateHilbertSpace(Stair)
 # length(H)
 ##
 @time SW.SolveHKrylov(H.H)
