@@ -19,8 +19,8 @@ jobs:
       - name: Install dependencies and Test
         run: |
           julia -e 'using Pkg                                                   
+                    Pkg.Registry.add(url = "https://github.com/NilsNiggemann/JuliaPMFRGRegistry.git")
                     Pkg.activate(".")
-                    Pkg.Registry.add("https://github.com/NilsNiggemann/JuliaPMFRGRegistry.git")
                     Pkg.test()'
 
                                 

@@ -20,7 +20,7 @@ jobs:
           version: '1.6'
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg;
-        Pkg.Registry.add("https://github.com/NilsNiggemann/JuliaPMFRGRegistry.git");
+        Pkg.Registry.add(url = "https://github.com/NilsNiggemann/JuliaPMFRGRegistry.git");
  Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
       - name: Build and deploy
         env:
