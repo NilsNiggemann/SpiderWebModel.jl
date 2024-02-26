@@ -1,4 +1,4 @@
-# .jl
+# SpiderWebModel.jl
 
 <!-- Tidyverse lifecycle badges, see https://www.tidyverse.org/lifecycle/ Uncomment or delete as needed. -->
 ![lifecycle](https://img.shields.io/badge/lifecycle-experimental-orange.svg)<!--
