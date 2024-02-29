@@ -3,8 +3,8 @@
 using Documenter
 using Pkg
 
-Pkg.activate("../")
-push!(LOAD_PATH,"../src/")
+Pkg.activate("docs/.")
+push!(LOAD_PATH, "src/")
 using SpiderWebModel
 
 makedocs(
