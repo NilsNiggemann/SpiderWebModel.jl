@@ -39,6 +39,7 @@ end
 
 function Base.getindex(P::PeriodicMatrix, i, j)
     Lx, Ly = size(P.UC)
+    checkbounds(Bool, P.UC, i, j) && return getindex(P.UC, i, j)
     inds = [CartesianIndex(remapIndices(ii, jj, Lx, Ly, P.offset)) for ii in i, jj in j]
 
     getindex(P.UC, inds)
@@ -48,6 +49,7 @@ function Base.setindex!(P::PeriodicMatrix, x, i::Integer)
     setindex!(P.UC, x, CartesianIndices(P)[i])
 end
 function Base.setindex!(P::PeriodicMatrix, x, i, j)
+    checkbounds(Bool, P.UC, i, j) && return setindex!(P.UC,x, i, j)
     setindex!(P.UC, x, remapIndices(i, j, size(P.UC)..., P.offset)...)
 end
 
@@ -55,14 +57,22 @@ Base.size(P::PeriodicMatrix) = (P.Lx, P.Ly)
 Base.copy(P::PeriodicMatrix) = PeriodicMatrix(copy(P.UC), P.Lx, P.Ly, P.offset)
 
 @inline function Base.checkbounds(::Type{Bool}, arr::PeriodicMatrix, I...)
-    i, j = remapIndices(I..., size(arr)..., arr.offset)
+    # i, j = remapIndices(I..., size(arr)..., arr.offset)
     # checkbounds(Bool, arr, i,j) || throw_boundserror(arr, ij)
+    
     true
 end
+
+plaquetteIsInBounds(Conf::PeriodicMatrix, iCenter::Integer, jCenter::Integer) = true
 
 function getPeriodicState(UC, Lx, Ly, offset = 0)
     Mat = PeriodicMatrix(UC, Lx, Ly, offset) |> Array
     S = SpinConfig(Mat, 1 / 2)
+end
+"""converts a state to a state with periodic boundary conditions"""
+function getPeriodic(parent::SpinConfig)
+    state = parent |> Array
+    SpinConfig(PeriodicMatrix(state),parent.S)
 end
 
 function addFullTile!(Pij::SpinConfig, Tile::SpinConfig)

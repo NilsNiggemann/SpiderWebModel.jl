@@ -17,3 +17,6 @@ ConfSpiral = SW.constructConfigPath(8, 8, SW.ALLGS_S12, SW.spiralPath)
     @test SW.fulFillsConstraint(Conf2)
     @test SW.fulFillsConstraint(ConfSpiral)
 end
+##
+getLowerConstr(plaq) = sum(SW.getSitesFromPlaquette(plaq)[[1,4,5,6,7,8]] .* SW.CONSTRAINT_SIGNS[[1,4,5,6,7,8]])
+Set(getLowerConstr.(SW.ALLGS_S12))

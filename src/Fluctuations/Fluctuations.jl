@@ -19,19 +19,33 @@ function plaquetteFlippable(plaqSites::SVector{8, Union{Integer, Bool}})
     return plaqSites == P1_SITES_BOOL || plaqSites == P2_SITES_BOOL
 end
 
+# function flipPlaquette!(Conf::AbstractMatrix, i, j)
+#     P = getPlaquette(Conf, i, j)
+
+#     P[1, 1] = -P[1, 1]
+#     P[1, 2] = -P[1, 2]
+#     P[1, 3] = -P[1, 3]
+#     P[2, 1] = -P[2, 1]
+#     # P[2,2] = -P[2,2]
+#     P[2, 3] = -P[2, 3]
+#     P[3, 1] = -P[3, 1]
+#     P[3, 2] = -P[3, 2]
+#     P[3, 3] = -P[3, 3]
+
+#     return Conf
+# end
+
 function flipPlaquette!(Conf::AbstractMatrix, i, j)
-    P = getPlaquette(Conf, i, j)
-
-    P[1, 1] = -P[1, 1]
-    P[1, 2] = -P[1, 2]
-    P[1, 3] = -P[1, 3]
-    P[2, 1] = -P[2, 1]
-    # P[2,2] = -P[2,2]
-    P[2, 3] = -P[2, 3]
-    P[3, 1] = -P[3, 1]
-    P[3, 2] = -P[3, 2]
-    P[3, 3] = -P[3, 3]
-
+    @inbounds begin
+        Conf[i, j + 1] *= -1
+        Conf[i - 1, j + 1] *= -1
+        Conf[i - 1, j] *= -1
+        Conf[i - 1, j - 1] *= -1
+        Conf[i, j - 1] *= -1
+        Conf[i + 1, j - 1] *= -1
+        Conf[i + 1, j] *= -1
+        Conf[i + 1, j + 1] *= -1
+    end
     return Conf
 end
 
@@ -350,22 +364,36 @@ function CanApply(Conf::SpinConfig, Op::AbstractMatrix, i, j)
     return applicable
 end
 
+@inline function getPlaqSites(Conf::AbstractMatrix,i,j)
+    sites = SVector(Conf[i, j + 1],
+    Conf[i - 1, j + 1],
+    Conf[i - 1, j],
+    Conf[i - 1, j - 1],
+    Conf[i, j - 1],
+    Conf[i + 1, j - 1],
+    Conf[i + 1, j],
+    Conf[i + 1, j + 1])
+end
+
+# @inline getPlaqSites(Conf::SpinConfig,i,j) = getPlaqSites(Conf.Mat, i, j)
+
 function canFlipPlaquette(Conf::SpinConfig, i, j)
     isodd(i + j) || return false
     plaquetteIsInBounds(Conf, i, j) || return false
 
     # P = getPlaquette(Conf,i,j)
     # sites = SVector(Mat[2,3],Mat[1,3],Mat[1,2],Mat[1,1],Mat[2,1],Mat[3,1],Mat[3,2],Mat[3,3])
-    sites = SVector(Conf[i, j + 1],
-        Conf[i - 1, j + 1],
-        Conf[i - 1, j],
-        Conf[i - 1, j - 1],
-        Conf[i, j - 1],
-        Conf[i + 1, j - 1],
-        Conf[i + 1, j],
-        Conf[i + 1, j + 1])
+    sites = getPlaqSites(Conf, i, j)
     return plaquetteFlippable(sites)
 end
+
+@inline function getPlaqSites(Conf::PeriodicMatrix,i,j)
+    i = remapIndex(i, Conf.Lx)
+    j = remapIndex(j, Conf.Ly)
+
+    sites = getPlaqSites(Conf.UC, i, j)
+end
+
 
 function CanApplyNonStrict(Conf::SpinConfig, Op, i, j)
     plaquetteIsInBounds(Conf, i, j) || return false

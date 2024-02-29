@@ -78,7 +78,7 @@ getPlaquettes(P::PlaqMapping) = P.d.keys
 
 function spinConfig!(Conf, path::AbstractVector, InitialConf, plaqMap::PlaqMapping)
     Conf .= InitialConf
-    for (i, op) in enumerate(path) #this can probably be made faster
+    for (i, op) in enumerate(path) 
         if op
             ij = plaqMap(i)
             flipPlaquette!(Conf, ij)
@@ -98,7 +98,7 @@ function getNewStates!(states, Conf, StateRep::SBitVector, plaqMap::PlaqMapping)
         setindex(StateRep, ij, !plaqstate)
     end
 
-    for i in axes(Conf.Mat, 1), j in axes(Conf.Mat, 2)
+    for i in axes(Conf, 1), j in axes(Conf, 2)
         iseven(i + j) && continue
         if canFlipPlaquette(Conf, i, j)
             push!(states, convertToStateRep(plaqMap(i, j)))
@@ -114,9 +114,6 @@ function _generateHilbertSpace(InitialState,
         growthfactor = STAIRCASE_GROWTH_FACTOR) where {UIntType}
     plaqMapping = PlaqMapping()
     # InitialState = booleanSpinConfig(InitialState) # is actually slower
-
-    nThreads = 1 # multithreading not working yet as plaquette mapping is not thread safe
-    # nThreads = Threads.nthreads()
 
     InitialState_rep = SBitVector{UIntType}(0, 0)
 
@@ -150,7 +147,7 @@ function _generateHilbertSpace(InitialState,
                 end
             end
         end
-
+        @info "" length(AllStates) length(NewStates)
         empty!(CurrentStates)
         append!(CurrentStates, NewStates)
         empty!(NewStates)
@@ -160,7 +157,7 @@ function _generateHilbertSpace(InitialState,
 end
 
 function generateHilbertSpace(InitialState, type = SBitVector{UInt64}(0, 0))
-    (; Hrows, Hcols, AllStates, plaqMapping) = _generateHilbertSpace(InitialState, type)
+    (; Hrows, Hcols, AllStates, plaqMapping) = _generateHilbertSpace(InitialState,type)
     H = constructSparseMatrix(Hrows, Hcols, AllStates)
     AllStates = sortByValueOrder(AllStates)
     return HilbertSpace(AllStates, H, plaqMapping)

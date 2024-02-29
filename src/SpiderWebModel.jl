@@ -4,6 +4,7 @@ using OrderedCollections, Dictionaries, LinearAlgebra
 using HDF5, H5Zblosc
 import ChunkSplitters
 import DataStructures
+import CircularArrays
 
 include("SpinConfig.jl")
 include("Constraint.jl")
@@ -24,5 +25,6 @@ include("GroundStateConstruction/BigTilings.jl")
 include("Observables/Observables.jl")
 include("explicitStates/PeriodicStates.jl")
 
+include("PaddedPeriodicArrays/PaddedPeriodicArrays.jl")
 include("IO/saveHilbertSpace.jl")
 end # module SpiderWebModel
