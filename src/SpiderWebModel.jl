@@ -4,6 +4,8 @@ using OrderedCollections, Dictionaries, LinearAlgebra
 using HDF5, H5Zblosc
 import ChunkSplitters
 import DataStructures
+import CircularArrays
+import DSP
 
 include("SpinConfig.jl")
 include("Constraint.jl")

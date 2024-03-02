@@ -29,7 +29,6 @@ function getConfigs(L, numConfigs = 10; kwargs...)
 end
 ##
 confs = getConfigs(12, 10)
-
 ##
 function DoEDs(confs, μ = 1)
     En = Float64[]
