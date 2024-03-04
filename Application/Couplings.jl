@@ -2,8 +2,23 @@ using SpinFRGLattices
 using SpinFRGLattices.Octochlore: spin
 using SpinFRGLattices.StructArrays
 using CairoMakie
+using StaticArrays
+using MakieHelpers
 ##
+Lm(qx,qy) = 2SVector(cos(qx+qy)-cos(qx-qy),cos(qx)-cos(qy))
 
+δ(n,m) = ifelse(n==m,1,0)
+Proj(n,m,L) = δ(n,m) - real(L[n] * L[m] /(L' * L))
+Proj(L) = sum((Proj(n,m,L) for n in 1:2 for m in 1:2) )
+with_theme(theme_PiTicks()) do
+    k = LinRange(0,2pi,300)
+    fig = Figure()
+    ax = Axis(fig[1,1],aspect = 1)
+    Sq = [Proj(1,2,Lm(qx,qy)) for qx in k, qy in k]
+    heatmap!(ax,k,k,Sq)
+    fig
+end
+##
 function getCouplingsToS1(RefSite = Rvec(0, 0, 1))
     L = 4
     S1Terms = spin{Int, Rvec_2D}[]

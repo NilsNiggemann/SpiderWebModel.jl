@@ -20,12 +20,12 @@ function textheatmap!(ax,data;kwargs...)
         isapprox(data[i, j],0,atol = 1e-2) && continue
         # txtcolor = data[i, j] < 0 ? :white : :black
         txtcolor = data[i, j] < 0 ? :white : :white
-        text!(ax, "$(round(data[i,j], digits = 2))", position = (i, j),
+        text!(ax, "$(MakieHelpers._simplify(data[i,j]))", position = (i, j),
             color = txtcolor, align = (:center, :center),fontsize=10;kwargs...)
     end
 end
 function plotCharges(Charge;kwargs...)
-    fig,ax,hm = heatmap(parent(Charge), colormap = :balance,colorrange= ±(Charge),axis = SW.getConfigAxis(Charge),figure = (;size=(800,800)))
+    fig,ax,hm = heatmap(parent(Charge), colormap = :balance,colorrange= ±(Charge),axis = SW.getConfigAxis(Charge),figure = (;size=(800,800));kwargs...)
     textheatmap!(ax,parent(Charge))
     Colorbar(fig[1, 2], hm)
     fig
@@ -98,21 +98,21 @@ end
 
 ##
 # SW.flipPlaquette!(Conf,10,9)
-Conf = SW.SpinConfig(-ones(20,20)/2,1/2)
+# Conf = SW.SpinConfig(-ones(20,20)/2,1/2)
 # Conf[11,9] = -Conf[11,9]
 # Conf = SW.SpinConfig(ones(20,20)/2,1/2)
 # Conf = SW.SpinConfig([-0.5+iseven(i+j) for i in 1:20,j in 1:20],1/2)
 
 # SW.flipPlaquette!(Conf,19,3)
 # Conf = SW.constructConfigPath(17,17,SW.ALLGS_S12)
-# Conf = SW.periodicState5x5(25)
+Conf = SW.periodicState5x5(25)
 # Conf = SW.periodicState6x6(24)
 # Conf = SW.periodicState6x6_3(18)
-Conf = SW.getStairCase(24)
-for i in 1:24
-    SW.flipPlaquette!(Conf,rand(SW.getApplicablePlaquettes(Conf))...)
-end
-# SW.flipPlaquette!(Conf,14,9)
+# Conf = SW.getStairCase(24)
+# for i in 1:24
+#     SW.flipPlaquette!(Conf,rand(SW.getApplicablePlaquettes(Conf))...)
+# end
+SW.flipPlaquette!(Conf,14,9)
 # SW.flipPlaquette!(Conf,7,16)
 # for i in 1:4:size(Conf,1)
 #     SW.flipSpinsAlongRow!(Conf,i)
@@ -125,6 +125,7 @@ end
 # end
 # SW.flipSpinsAlongRow!(Conf,12)
 # SW.flipSpinsAlongCol!(Conf,11)
+# Conf = SW.SpinConfig(rand(-0.5:0.5,20,20),1/2)
 SW.plotApplPlaquettes(Conf)
 SW.plotFractons!(current_axis(),Conf)
 current_figure()
@@ -135,7 +136,7 @@ Charge = conv(Conf,iceRule)#[3:23,3:23]
 @info "" numPosCharges(Charge)
 # Charge = conv(SW.booleanSpinConfig(Conf),iceRule)
 
-plotCharges(EnforceConstraint!(Charge))
+plotCharges(enforceConstraint!(Charge))
 
 ##
 plotChargeFT(Charge)
@@ -213,11 +214,14 @@ kernelRotated(kx,ky) = kernelAnalytical(
     rotMat(pi/4)*SA[kx,ky])
 
 # rootAnalytical(kx) = 2atan((2sin(kx) + sqrt(5)* sqrt(sin(kx)^2))/(1 + cos(kx)))
-rootAnalytical1(kx) = 2atan((2 + sqrt(5))*tan(kx/2))
-rootAnalytical2(kx) = 2atan((2 - sqrt(5))*tan(kx/2))
+# rootAnalytical1(kx) = 2atan((2 + sqrt(5))*tan(kx/2))
+# rootAnalytical2(kx) = 2atan((2 - sqrt(5))*tan(kx/2))
+
+rootAnalytical1(kx) = 2atan((2 + sqrt(5))*cot(kx/2)) +pi
+rootAnalytical2(kx) = 2atan((2 - sqrt(5))*cot(kx/2)) +pi
 
 with_theme(theme_PiTicks()) do
-    k = LinRange(-2pi,2pi,1000)
+    k = LinRange(0,2pi,1000)
     mat = [kernelAnalytical(i,j) for i in k, j in k]
     melFilter(x) = max(abs(x),1e-10)
     absmat = melFilter.(mat)
@@ -227,11 +231,26 @@ with_theme(theme_PiTicks()) do
     hm1 = heatmap!(ax1,k,k,mat,colormap = :balance)
     hm2 = heatmap!(ax2,k,k,absmat,colormap = :jet,colorscale = log10)
 
-    kred = LinRange(-pi,pi,100)
-    lines!(ax2,kred,rootAnalytical1.(kred),color = :black,linestyle = :dash,linewidth = 1)
-    lines!(ax2,kred,rootAnalytical2.(kred),color = :black,linestyle = :dash,linewidth = 1)
+    lines!(ax2,k,rootAnalytical1.(k),color = :black,linestyle = :dash,linewidth = 1)
+    lines!(ax2,k,rootAnalytical2.(k),color = :black,linestyle = :dash,linewidth = 1)
     Colorbar(fig[2,1], hm1,vertical =false)
     Colorbar(fig[2,2], hm2,vertical =false)
+    fig
+    
+end
+##
+let 
+    zeroThing = zeros(1000,1000)
+
+    k = getk(zeroThing)
+    fig = Figure()
+    ax = Axis(fig[1, 1],title = L"$\text{Re}$ $c(\mathbf{k})$",aspect = 1)
+    for (i,kx) in enumerate(k), (j,ky) in enumerate(k)
+        if isapprox(rootAnalytical1(kx), ky,rtol = 1e-3,atol=2e-2)|| isapprox(rootAnalytical2(kx), ky,rtol = 1e-3,atol=2e-2)
+            zeroThing[i,j] = 1
+        end
+    end
+    hm = heatmap!(ax,k,k,zeroThing,colormap = :balance,colorrange = ±(zeroThing))
     fig
     
 end
@@ -259,7 +278,8 @@ end
 function modifyFourier!(ChargeFFT)
     k = getk(ChargeFFT)
     for (i,kx) in enumerate(k), (j,ky) in enumerate(k)
-        ChargeFFT[i,j] *= abs(kernelAnalytical(kx,ky))
+        ChargeFFT[i,j] *= abs2(kernelAnalytical(kx,ky))
+        # ChargeFFT[i,j] *= abs(kernelAnalytical(kx,ky))
     end
     ChargeFFT
 end
@@ -279,18 +299,25 @@ function getStructureFac(ChargeFFT)
     # return mean(abs.(C) for C in ChargeFFT)
 end
 ##
-Charges = mean(abs.(fft(enforceConstraint!(rand(-4:0.5:4,50,50)))) for i in 1:200)
+Charges = mean(abs.(fft(enforceConstraint!(rand(-4:4,50,50)))) for i in 1:200)
+##
 plotChargeFFT(Charges,;colormap = :viridis,colorrange = (0,maximum(Charges)))
 ##
-Charges = real.(fft(enforceConstraint!(rand(-1:0.5:1,100,100))) for i in 1:200)
+Charges = real.(modifyFourier!.(fft(enforceConstraint!(rand(-4:4,100,100))) for i in 1:2000))
 
 SF = getStructureFac(Charges)
 plotChargeFFT(SF,colormap = :viridis,colorrange = extrema(SF))
 ##
-ChargeFFTs = sampleCharges(1000)
+ChargeFFTs = sampleCharges(10000)
 plotChargeFFT(mean(ChargeFFTs))
 ##
 SF = getStructureFac(ChargeFFTs)
 plotChargeFFT(SF,colormap = :viridis,colorrange = extrema(SF))
 ##
-ChargeFFTs = 
+Conf = SW.constructConfigPath(10,10,SW.ALLGS_S12,SW.xdirecPath,maxiter = 10000000, verbose = false)
+# Conf = rand(-0.5:0.5,20,20)
+##
+
+Charge = conv(Conf,iceRule)
+
+plotCharges(Charge;colorrange = (-4,4))

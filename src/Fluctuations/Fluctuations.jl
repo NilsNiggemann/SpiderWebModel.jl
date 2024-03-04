@@ -327,13 +327,13 @@ function flipSpinsAlongDiagonal!(Conf, org, slope)
     return Conf
 end
 
-function flipSpinsAlongRow!(Conf, i, skip = 2)
-    Conf[1:2:end, i] .*= -1
+function flipSpinsAlongRow!(Conf, i, offset = 0)
+    Conf[1+offset:2:end, i] .*= -1
     return Conf
 end
 
-function flipSpinsAlongCol!(Conf, i, skip = 2)
-    Conf[i, 1:2:end] .*= -1
+function flipSpinsAlongCol!(Conf, i, offset = 0)
+    Conf[i, 1+offset:2:end] .*= -1
     return Conf
 end
 
