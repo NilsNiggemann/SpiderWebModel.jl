@@ -8,6 +8,7 @@ import CircularArrays
 import DSP
 import JuMP
 import HiGHS
+import Gurobi
 
 include("SpinConfig.jl")
 include("Constraint.jl")

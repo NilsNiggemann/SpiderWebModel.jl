@@ -6,6 +6,7 @@ function getStructureFac(AllStates::AbstractVector{<:SpinConfig}, weights, tol =
     plan = getLatticeFFTPlan(AllStates[1].Mat, 0)
     # weights = abs2.(Psi)
     # state_weight = collect(zip( AllStates,weights))[inds]
+
     Sq = fetch.([Threads.@spawn getInterpolatedFFT(c.Mat,
                      0,
                      plan;
@@ -23,7 +24,8 @@ function getStructureFac(AllStates::AbstractVector{<:SpinConfig},
         eigen::Union{Eigen, NamedTuple},
         tol = 0)
     Psi = eigen.vectors[:, 1]
-    weights = abs2.(Psi)
+    NumSites = length(AllStates[1])
+    weights = abs2.(Psi) ./ NumSites
     return getStructureFac(AllStates, weights, tol)
 end
 
@@ -34,7 +36,8 @@ function getEqualWeightStructureFac(AllStates)
                      plan;
                      Interpolation = BSpline(Constant())) for c in AllStates])
 
-    weight(Nstates) = 1 / Nstates
+    NumSites = length(AllStates[1])
+    weight(Nstates) = 1 / (Nstates*NumSites)
 
     SSq(kx, ky) = sum(s(kx, ky) * s(-kx, -ky) for s in Sq) * weight(length(Sq))
 
