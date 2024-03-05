@@ -6,6 +6,8 @@ import ChunkSplitters
 import DataStructures
 import CircularArrays
 import DSP
+import JuMP
+import HiGHS
 
 include("SpinConfig.jl")
 include("Constraint.jl")
