@@ -120,5 +120,5 @@ with_theme(theme_PiTicks()) do
     @info "" sumrule = sum(real(Sq.Sq_k[1:end-1,1:end-1])) sumRuleExpected = L^2/4
     Colorbar(fig[1,2],hm)
     fig
-    
+    save("Application/figs/Sq_$L.pdf",fig)
 end
