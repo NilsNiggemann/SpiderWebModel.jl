@@ -22,13 +22,19 @@ function getPlotPoints(State)
     col(i, j) = ChargeMat[i, j] > 0 ? :red : :blue
     size(i, j) = abs(ChargeMat[i, j]) * 18
 
-    cols = [col(i, j)
-            for i in axes(ChargeMat, 1), j in axes(ChargeMat, 2) if ChargeMat[i, j] ≠ 0]
-    sizes = [size(i, j)
-             for i in axes(ChargeMat, 1), j in axes(ChargeMat, 2) if ChargeMat[i, j] ≠ 0]
+    cols = [
+        col(i, j) for
+        i in axes(ChargeMat, 1), j in axes(ChargeMat, 2) if ChargeMat[i, j] ≠ 0
+    ]
+    sizes = [
+        size(i, j) for
+        i in axes(ChargeMat, 1), j in axes(ChargeMat, 2) if ChargeMat[i, j] ≠ 0
+    ]
 
-    points = [Point2(i, j)
-              for i in axes(ChargeMat, 1), j in axes(ChargeMat, 2) if ChargeMat[i, j] ≠ 0]
+    points = [
+        Point2(i, j) for
+        i in axes(ChargeMat, 1), j in axes(ChargeMat, 2) if ChargeMat[i, j] ≠ 0
+    ]
 
     return (; cols, sizes, points)
 end

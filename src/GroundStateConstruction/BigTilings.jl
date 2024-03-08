@@ -1,14 +1,14 @@
-struct TilingMatrix{T, MatType <: AbstractMatrix{T}} <: AbstractMatrix{T}
+struct TilingMatrix{T,MatType<:AbstractMatrix{T}} <: AbstractMatrix{T}
     BasisStates::Vector{MatType}
     Tiles::Matrix{Int}
-    TileSize::Tuple{Int, Int}
-    size::Tuple{Int, Int}
+    TileSize::Tuple{Int,Int}
+    size::Tuple{Int,Int}
 end
 
 Base.size(T::TilingMatrix) = T.size
 Base.copy(T::TilingMatrix) = TilingMatrix(T.BasisStates, copy(T.Tiles), T.TileSize, T.size)
 
-function TilingMatrix(BasisStates, Tiles::AbstractMatrix, shape::Tuple{Int, Int})
+function TilingMatrix(BasisStates, Tiles::AbstractMatrix, shape::Tuple{Int,Int})
     TilingMatrix(BasisStates, Tiles, size(BasisStates[begin]), shape)
 end
 
@@ -40,7 +40,7 @@ function constructGSFromTiles(Tiles, Lx, Ly; numTries = 100000)
     Conf = SpinConfig(Tiling, 1 / 2)
     GS = typeof(Conf)[]
 
-    for i in 1:numTries
+    for i = 1:numTries
         Tiling = constructRandomTiling!(TileMat, Tiles, Lx, Ly)
 
         if fulFillsConstraint_nonStrict(Conf)
@@ -56,11 +56,9 @@ function constructGSFromTiles_Threads(Tiles, Lx, Ly; numTries = 100000)
     nThreads = Threads.nthreads()
     StatesCollection = Vector{typeof(StatesExample)}(undef, nThreads)
 
-    Threads.@threads for i in 1:nThreads
-        StatesCollection[i] = constructGSFromTiles(Tiles,
-            Lx,
-            Ly,
-            numTries = numTries ÷ nThreads)
+    Threads.@threads for i = 1:nThreads
+        StatesCollection[i] =
+            constructGSFromTiles(Tiles, Lx, Ly, numTries = numTries ÷ nThreads)
     end
     return append!(StatesCollection...)
 end

@@ -16,14 +16,18 @@ let
     fig = Figure(size = 200 .* (sizex, sizey))
     allij = Tuple.(CartesianIndices(layout))
     xticks = yticks = [-1, 0, 1]
-    axes = [Axis(fig[fj, fi];
-                xticklabelsvisible = false,
-                yticklabelsvisible = false,
-                xgridvisible = false,
-                ygridvisible = false,
-                aspect = 1,
-                xticks,
-                yticks) for (i, (fi, fj)) in enumerate(allij)]
+    axes = [
+        Axis(
+            fig[fj, fi];
+            xticklabelsvisible = false,
+            yticklabelsvisible = false,
+            xgridvisible = false,
+            ygridvisible = false,
+            aspect = 1,
+            xticks,
+            yticks,
+        ) for (i, (fi, fj)) in enumerate(allij)
+    ]
 
     for (ax, Plaq) in zip(axes, AllAllowedConfigs)
         heatmap!(ax, xticks, yticks, Array(Plaq.Mat), colorrange = (-0.5, 0.5))
@@ -35,13 +39,14 @@ end
 ##
 
 function drawPlaquette!(ax, (i, j); kwargs...)
-    points = Point2f.([
-        (i - 1, j - 1),
-        (i + 1, j - 1),
-        (i + 1, j + 1),
-        (i - 1, j + 1),
-        (i - 1, j - 1)
-    ])
+    points =
+        Point2f.([
+            (i - 1, j - 1),
+            (i + 1, j - 1),
+            (i + 1, j + 1),
+            (i - 1, j + 1),
+            (i - 1, j - 1),
+        ])
     lines!(ax, points; linestyle = :dash, color = :white, kwargs...)
 end
 drawPlaquette!((i, j); kwargs...) = drawPlaquette!(current_axis(), (i, j); kwargs...)
@@ -59,7 +64,7 @@ plotSpinConfig(SpinConfig)
 ##
 
 AFM = let
-    S = SW.SpinConfig([0.5 * (-1)^(i + j) for i in 1:100, j in 1:100], 1 / 2)
+    S = SW.SpinConfig([0.5 * (-1)^(i + j) for i = 1:100, j = 1:100], 1 / 2)
 end
 
 SW.PlaquetteOperatorSave!(AFM, 5, 5)
@@ -68,15 +73,17 @@ plotSpinConfig(AFM)
 SW.fulFillsConstraint(AFM)
 ##
 function getStairCase(L)
-    UC = SA[1 1 1 0;
-            0 0 1 0;
-            1 0 1 1;
-            1 0 0 0]
+    UC = SA[
+        1 1 1 0
+        0 0 1 0
+        1 0 1 1
+        1 0 0 0
+    ]
     Mat = zeros(Float64, L, L)
     mel(x) = x == 1 ? 1 / 2 : -1 / 2
     for i in axes(Mat, 1)
         for j in axes(Mat, 2)
-            Mat[i, j] = mel(UC[i % 4 + 1, j % 4 + 1])
+            Mat[i, j] = mel(UC[i%4+1, j%4+1])
         end
     end
 
@@ -99,7 +106,11 @@ end
 ##
 function findOps(Conf)
     r = -1.0:1.0
-    Allops = (SW.SpinConfig(SMatrix{3, 3}(a, b, c, d, e, f, g, h, i), 1 / 2) for a in r for b in r for c in r for d in r for e in r for f in r for g in r for h in r for i in r)
+    Allops = (
+        SW.SpinConfig(SMatrix{3,3}(a, b, c, d, e, f, g, h, i), 1 / 2) for a in r for
+        b in r for c in r for d in r for e in r for f in r for g in r for h in r for
+        i in r
+    )
     # filter!(x ->SW.CanApplyAnywhere(Conf,x),Allops)
     Allops = [x for x in Allops if SW.CanApplyAnywhere(Conf, x)]
     return Allops
@@ -130,9 +141,9 @@ function generateRandomGroundState(L, S = 1 / 2; maxiter = 1_000_000)
 
     randBuffer = rand(1:70, maxiter)
     it = 0
-    for i in 1:L
-        for j in 1:L
-            PlaqetteMatrix[i, j] = randBuffer[(i - 1) * L + j]
+    for i = 1:L
+        for j = 1:L
+            PlaqetteMatrix[i, j] = randBuffer[(i-1)*L+j]
             it += 1
         end
     end
@@ -195,24 +206,31 @@ include("plotStructureFac.jl")
 function getConfigs(L, numConfigs = 10; kwargs...)
     # paths = [SW.ydirecPathReverse(L),SW.xdirecPathReverse(L),SW.ydirecPath(L),SW.xdirecPath(L),SW.spiralPath(L)]
 
-    Paths = (SW.xdirecPath(L),
+    Paths = (
+        SW.xdirecPath(L),
         SW.ydirecPath(L),
         SW.xdirecPathReverse(L),
-        SW.ydirecPathReverse(L))
+        SW.ydirecPathReverse(L),
+    )
     # Paths = (SW.xdirecPathReverse(L),)
     defaultDelete = 1
     tries = 60
     maxiter = 10_500_000
 
-    S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),
-                    L,
-                    L,
-                    SW.ALLGS_S12,
-                    setup(path),
-                    maxiter = 200_000,
-                    deleteSteps = SW.getStepDeleter(L + 2, 1, 15),
-                    verbose = false;
-                    kwargs...) for _ in 1:numConfigs for path in Paths])
+    S =
+        fetch.([
+            Threads.@spawn SW.constructConfigPath(
+                SW.DictAlgorithm(),
+                L,
+                L,
+                SW.ALLGS_S12,
+                setup(path),
+                maxiter = 200_000,
+                deleteSteps = SW.getStepDeleter(L + 2, 1, 15),
+                verbose = false;
+                kwargs...,
+            ) for _ = 1:numConfigs for path in Paths
+        ])
 
     filter!(x -> SW.fulFillsConstraint(x, verbose = false) && !any(isnan, x), S)
     @info "" L defaultDelete tries maxiter length(S)
@@ -227,15 +245,20 @@ function getConfigsSpiral(L, numConfigs = 10; kwargs...)
     deleter = getspiralDeleter(path, defaultDelete, tries)
     setup = SW.setupCalc!(path, L, L, SW.ALLGS_S12)
 
-    S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),
-                    L,
-                    L,
-                    SW.ALLGS_S12,
-                    setup,
-                    maxiter = maxiter,
-                    deleteSteps = deleter,
-                    verbose = false;
-                    kwargs...) for _ in 1:numConfigs])
+    S =
+        fetch.([
+            Threads.@spawn SW.constructConfigPath(
+                SW.DictAlgorithm(),
+                L,
+                L,
+                SW.ALLGS_S12,
+                setup,
+                maxiter = maxiter,
+                deleteSteps = deleter,
+                verbose = false;
+                kwargs...,
+            ) for _ = 1:numConfigs
+        ])
 
     filter!(x -> SW.fulFillsConstraint(x, verbose = false) && !any(isnan, x), S)
     @info "" L defaultDelete tries maxiter length(S)
@@ -261,7 +284,8 @@ function visualizeConstruction(L)
     path = SW.spiralPath(L)
     setup = SW.setupCalc!(path, L, L, SW.ALLGS_S12)
     # setup(path) = SW.setupCalc!(path,L,L,SW.ALLGS_S12)
-    S = SW.constructConfigPath(SW.DictAlgorithm(),
+    S = SW.constructConfigPath(
+        SW.DictAlgorithm(),
         L,
         L,
         SW.ALLGS_S12,
@@ -269,7 +293,8 @@ function visualizeConstruction(L)
         maxiter = 200,
         deleteSteps = getspiralDeleter(path, 1, 10),
         verbose = false,
-        plotSteps = true)
+        plotSteps = true,
+    )
     return S
 end
 
@@ -278,7 +303,7 @@ function generateFluctuations(StartConfig, maxiter = 500)
     Configs = Set([copy(StartConfig)])
     b1 = findOps(StartConfig)[1]
     b3 = findOps(StartConfig)[3]
-    for i in 1:maxiter
+    for i = 1:maxiter
         Conf = copy(rand(Configs))
 
         plaqs1 = SW.getApplicablePlaquettes(Conf, b1)
@@ -309,7 +334,7 @@ plotStructureFac(collect(a))
 function generateFluctuations(StartConfig, b1, b3, maxiter = 500)
     Configs = Set([copy(StartConfig)])
 
-    for i in 1:maxiter
+    for i = 1:maxiter
         Conf = copy(rand(Configs))
         plaqs1 = SW.getApplicablePlaquettes(Conf, b1)
         plaqs3 = SW.getApplicablePlaquettes(Conf, b3)
@@ -348,7 +373,7 @@ function takeFluctuations(Confs, b1 = findOps(Confs[1])[1])
     findNumFlucs = [length(SW.getApplicablePlaquettes(c, b1)) for c in Confs]
 
     inds = sortperm(findNumFlucs)
-    Confs = Confs[inds[(end - 50):end]]
+    Confs = Confs[inds[(end-50):end]]
 
     flucs = Set(empty(Confs))
     for Conf in Confs
@@ -362,7 +387,7 @@ end
 function takeFluctuations2(Conf, maxiter = 100, b = findOps(Confs[1]))
     b1, b3 = b[1], b[3]
     Conf2 = copy(Conf)
-    for i in 1:maxiter
+    for i = 1:maxiter
         plaqs1 = SW.getApplicablePlaquettes(Conf2, b1)
         plaqs3 = SW.getApplicablePlaquettes(Conf2, b3)
         isempty(plaqs1) && isempty(plaqs3) && (@warn "no fluctuations possible"; break)
@@ -384,7 +409,7 @@ end
 function appendFluctuations(Confs, maxiter, numFlucs = 2, b = findOps(Confs[1]))
     newconfs = copy(Confs)
     for C in Confs
-        for i in 1:numFlucs
+        for i = 1:numFlucs
             push!(newconfs, takeFluctuations2(C, maxiter, b))
             push!(newconfs, takeFluctuations2(C, maxiter, b))
         end

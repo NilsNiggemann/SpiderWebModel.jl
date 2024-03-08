@@ -26,12 +26,14 @@ with_theme(theme_PiTicks()) do
         # Sq1 = [real(Sq.Sq(k[1],k[2],maxIndex)) for maxIndex in IndRange]
         lines!(axConv, IndRange, Sq1)
     end
-    axSq = Axis(fig[2, 1],
+    axSq = Axis(
+        fig[2, 1],
         xlabel = L"q_x",
         ylabel = L"q_y",
         aspect = 1,
         xticks = PiTicks(0:(0.5pi):(2pi)),
-        yticks = PiTicks(0:(0.5pi):(2pi)))
+        yticks = PiTicks(0:(0.5pi):(2pi)),
+    )
     heatmap!(axSq, Sq.k, Sq.k, real(Sq.Sq_k))
     rowsize!(fig.layout, 1, Relative(0.35))
     fig

@@ -74,10 +74,14 @@ let
 
     exampleState = SW.getPeriodicState(a_rec[1], 3Lx, 3Ly, Offset)
 
-    axes = [Axis(fig[i, j];
-                SW.getConfigAxis(exampleState)...,
-                xticklabelsvisible = i == size[2],
-                yticklabelsvisible = j == 1) for i in 1:size[2], j in 1:size[1]]
+    axes = [
+        Axis(
+            fig[i, j];
+            SW.getConfigAxis(exampleState)...,
+            xticklabelsvisible = i == size[2],
+            yticklabelsvisible = j == 1,
+        ) for i = 1:size[2], j = 1:size[1]
+    ]
     for (i, state) in enumerate(uniqueConfs)
         @assert SW.fulFillsConstraint(state)
         SW.plotApplPlaquettes!(axes[i], state)

@@ -56,11 +56,15 @@ function getFittingTilesDict!(fittingTilesDict, P, PlaquetteList)::Vector{Int}
     end
 end
 
-function constructConfigPath(P::SpinConfig, PlaquetteList, setup;
-        maxiter = 10000,
-        deleteSteps = getStepDeleter(size(P, 2) + 2, 1, 15),
-        verbose = true,
-        plotSteps = false)
+function constructConfigPath(
+    P::SpinConfig,
+    PlaquetteList,
+    setup;
+    maxiter = 10000,
+    deleteSteps = getStepDeleter(size(P, 2) + 2, 1, 15),
+    verbose = true,
+    plotSteps = false,
+)
     path = setup.path
     emptyTilesList = setup.emptyTilesList
 
@@ -79,14 +83,14 @@ function constructConfigPath(P::SpinConfig, PlaquetteList, setup;
     end
 
     function resetToStep!(P, iterNum)
-        emptyTiles = emptyTilesList[iterNum + 1]
+        emptyTiles = emptyTilesList[iterNum+1]
         for i in eachindex(emptyTiles)
             I = emptyTiles[i]
             P[I] = NaN
         end
     end
 
-    P_init = getSitesFromPlaquette(getPlaquette(P, path[lastindex(tilingHistory) + 1]...))
+    P_init = getSitesFromPlaquette(getPlaquette(P, path[lastindex(tilingHistory)+1]...))
     fittingTilesDict = Dict(P_init => getFittingTiles(P_init, PlaquetteList))
 
     counter = Ref(0)
@@ -95,7 +99,7 @@ function constructConfigPath(P::SpinConfig, PlaquetteList, setup;
     while iter < lastindex(path) - 1
         iter = lastindex(tilingHistory)
 
-        i, j = path[iter + 1]
+        i, j = path[iter+1]
         TotIter += 1
         if TotIter > maxiter
             if verbose
@@ -127,9 +131,13 @@ function constructConfigPath(P::SpinConfig, PlaquetteList, setup;
     return P
 end
 
-function constructConfigPath(LPx, LPy, PlaquetteList,
-        setup = setupCalc!(xdirecPath(LPx, LPy), LPx, LPy, PlaquetteList);
-        kwargs...)
+function constructConfigPath(
+    LPx,
+    LPy,
+    PlaquetteList,
+    setup = setupCalc!(xdirecPath(LPx, LPy), LPx, LPy, PlaquetteList);
+    kwargs...,
+)
     Lx = 2 * LPx + 1
     Ly = 2 * LPy + 1
     Mat = fill(NaN, Lx, Ly)

@@ -45,16 +45,15 @@ function AnimatespinConfig(StartState, path)
     ax = Axis(fig[1, 1]; SW.getConfigAxis(St)...)
 
     hm = heatmap!(ax, spinConf; colormap = :grays, colorrange = (-0.5, 0.5))
-    constrPoints = [Point2(i, j)
-                    for i in axes(St.Mat, 1), j in axes(St.Mat, 2) if (i + j) % 2 == 0]
+    constrPoints =
+        [Point2(i, j) for i in axes(St.Mat, 1), j in axes(St.Mat, 2) if (i + j) % 2 == 0]
 
     scatter!(ax, constrpoints, markersize = sizes, color = cols, marker = :rect)
     scatter!(ax, points, markersize = sizes, color = cols, marker = :rect)
     # scatter!(ax,points)
     translate!(hm, 0, 0, -100)
 
-    record(fig, path, timestamps;
-        framerate = framerate) do t
+    record(fig, path, timestamps; framerate = framerate) do t
         time[] = t
     end
 end
@@ -79,7 +78,7 @@ AnimatespinConfig(St, "Animation/RandStateFracton.mp4")
 function AnimatePlaqFlip(StartState, path)
     time = Observable(1)
     St = copy(StartState)
-    Plaq = SW.getApplicablePlaquettes(St)[begin + 30]
+    Plaq = SW.getApplicablePlaquettes(St)[begin+30]
     Pij = SW.getPlaquette(St, Plaq...)
 
     sites = [(0, 0), (3, 1), (3, 2), (3, 3), (2, 3), (1, 3), (1, 2), (1, 1), (2, 1), (3, 1)]
@@ -100,8 +99,9 @@ function AnimatePlaqFlip(StartState, path)
     cols_arr = getproperty.(AllCharges, :cols)
     sizes_arr = getproperty.(AllCharges, :sizes)
     points_arr = getproperty.(AllCharges, :points)
-    sites_arr = [Point2.(sites[2:(t - 1)]) .+ Ref(Point2(Plaq) - Point2(2, 2))
-                 for t in 2:length(sites)]
+    sites_arr = [
+        Point2.(sites[2:(t-1)]) .+ Ref(Point2(Plaq) - Point2(2, 2)) for t = 2:length(sites)
+    ]
     # return sites_arr, timestamps
     spinConf = @lift(AllConfs[$time])
     cols = @lift(cols_arr[$time])
@@ -115,23 +115,24 @@ function AnimatePlaqFlip(StartState, path)
     ax = Axis(fig[1, 1]; SW.getConfigAxis(St)...)
 
     hm = heatmap!(ax, spinConf; colormap = :grays, colorrange = (-0.5, 0.5))
-    constrPoints = [Point2(i, j)
-                    for i in axes(St.Mat, 1), j in axes(St.Mat, 2) if (i + j) % 2 == 0]
+    constrPoints =
+        [Point2(i, j) for i in axes(St.Mat, 1), j in axes(St.Mat, 2) if (i + j) % 2 == 0]
 
     scatter!(ax, constrPoints, markersize = 25, color = :grey, marker = '×')
     scatter!(ax, points, markersize = sizes, color = cols, marker = :rect)
     scatter!(ax, Point2(Plaq), markersize = 20, color = :grey, marker = :circle)
-    scatterlines!(ax,
+    scatterlines!(
+        ax,
         sites,
         markersize = 0,
         color = :grey,
         linestyle = :dash,
-        linewidth = 4)
+        linewidth = 4,
+    )
     # # scatter!(ax,points)
     translate!(hm, 0, 0, -100)
 
-    record(fig, path, timestamps;
-        framerate = framerate) do t
+    record(fig, path, timestamps; framerate = framerate) do t
         time[] = t
     end
 end

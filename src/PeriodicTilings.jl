@@ -1,4 +1,4 @@
-struct PeriodicMatrix{T, Mat <: AbstractMatrix{T}} <: AbstractMatrix{T}
+struct PeriodicMatrix{T,Mat<:AbstractMatrix{T}} <: AbstractMatrix{T}
     UC::Mat
     Lx::Int
     Ly::Int
@@ -99,7 +99,7 @@ function constructAllConfigs(Lx, Ly, PlaquetteList)
         iter += 1
         i, j = path[iter]
         for history_buff in AllConfigs_current
-            history = @view history_buff[1:(iter - 1)]
+            history = @view history_buff[1:(iter-1)]
             P = reconstructTiling!(P, history, PlaquetteList, path)
             Pij = getPlaquette(P, i, j)
             Tiles = getFittingTiles!(TileListBuffer, Pij, PlaquetteList)
@@ -112,14 +112,16 @@ function constructAllConfigs(Lx, Ly, PlaquetteList)
         display(stack(AllConfigs_next))
         AllConfigs_current = AllConfigs_next
         AllConfigs_next = empty(AllConfigs_current)
-        println("progress: ",
+        println(
+            "progress: ",
             iter,
             "/",
             length(path),
             " = ",
             round(iter * 100 / length(path), digits = 1),
             "% \tnumber of Configs: ",
-            length(AllConfigs_current))
+            length(AllConfigs_current),
+        )
     end
     return AllConfigs_current
 end
@@ -160,7 +162,7 @@ end
 function fillEmptyState(State::SpinConfig)
     NaNPos = findall(isnan, State)
     AllPossibilities = Iterators.product(((-State.S):(State.S) for i in NaNPos)...)
-    newStates = [copy(State) for _ in 1:length(AllPossibilities)]
+    newStates = [copy(State) for _ = 1:length(AllPossibilities)]
     for (i, conf) in enumerate(AllPossibilities)
         State = newStates[i]
         for (j, pos) in enumerate(NaNPos)
@@ -180,25 +182,29 @@ function fillEmptyStates(States, Lx, Ly, PlaquetteList)
     return newStates
 end
 
-function getPeriodicState_history(Lx,
-        Ly,
-        ULx,
-        ULy,
-        tilingHistory,
-        PlaquetteList,
-        offset = 0)
+function getPeriodicState_history(
+    Lx,
+    Ly,
+    ULx,
+    ULy,
+    tilingHistory,
+    PlaquetteList,
+    offset = 0,
+)
     UC = reconstructTiling_xDirec(ULx, ULy, tilingHistory, PlaquetteList)
     State = getPeriodicState(UC, Lx, Ly, offset)
 end
 
 function isPeriodicTiling(Lx, Ly, tilingHistory, PlaquetteList, offset = 0)
-    State = getPeriodicState_history((2 + 1 * offset) * Lx,
+    State = getPeriodicState_history(
+        (2 + 1 * offset) * Lx,
         (2 + 1 * offset) * Ly,
         Lx,
         Ly,
         tilingHistory,
         PlaquetteList,
-        offset)
+        offset,
+    )
     return fulFillsConstraint_nonStrict(State)
 end
 

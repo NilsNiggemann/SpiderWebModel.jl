@@ -23,13 +23,14 @@ let
     for i in axes(S, 1)
         for j in axes(S, 2)
             if iseven(i + j) && SW.plaquetteIsInBounds(S, i, j)
-                border = Point.([
-                    (i - 1.5, j - 1.5),
-                    (i + 1.5, j - 1.5),
-                    (i + 1.5, j + 1.5),
-                    (i - 1.5, j + 1.5),
-                    (i - 1.5, j - 1.5)
-                ])
+                border =
+                    Point.([
+                        (i - 1.5, j - 1.5),
+                        (i + 1.5, j - 1.5),
+                        (i + 1.5, j + 1.5),
+                        (i - 1.5, j + 1.5),
+                        (i - 1.5, j - 1.5),
+                    ])
                 # lines!(border,color = :red)
                 # band!([i-1.5,i+1.5],[j-1.5,j-1.5],[j+1.5,j+1.5],color = (:black,0.2))
                 # scatter!([Point(i,j),],color = :red,markersize = 10)

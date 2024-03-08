@@ -26,7 +26,7 @@ function plotPath()
     current = 1
 
     display(SW.plotApplPlaquettes(res.AllStates[current]))
-    for i in 1:20
+    for i = 1:20
         current = rand(res.Neighbors[current])
         display(SW.plotApplPlaquettes(res.AllStates[current]))
     end
@@ -55,7 +55,7 @@ function getObservables(res, sol)
     m = SW.getMagnetization(AllStates, sol)
 
     mavg = sum(abs, m) / length(m)
-    mavgBulk = sum(abs, m[3:(end - 2), 3:(end - 2)]) / length(m[3:(end - 2), 3:(end - 2)])
+    mavgBulk = sum(abs, m[3:(end-2), 3:(end-2)]) / length(m[3:(end-2), 3:(end-2)])
     magnetization = (; m, mavg, mavgBulk)
 
     structureFac = SW.getStructureFac(AllStates, sol)
@@ -77,12 +77,14 @@ function plotOverview(Observables; title = L"")
         fig = Figure(; size = 0.8 .* (450, 600))
 
         axmag = Axis(fig[1, 1]; title, xlabel = L"x", ylabel = L"y", aspect = 1)
-        axSq = Axis(fig[2, 1],
+        axSq = Axis(
+            fig[2, 1],
             xlabel = L"q_x",
             ylabel = L"q_y",
             aspect = 1,
             xticks = PiTicks(0:(0.5pi):(2pi)),
-            yticks = PiTicks(0:(0.5pi):(2pi)))
+            yticks = PiTicks(0:(0.5pi):(2pi)),
+        )
 
         hm = plotMagnetization!(axmag, Observables)
         Colorbar(fig[1, 2], hm, label = L"\langle S^z \rangle")
@@ -143,8 +145,13 @@ Ens_6x6_3 = ([Energy6x6_3(L) / L^2 for L in Ls_medium])
 ##
 with_theme(theme_SimpleTicks()) do
     fig = Figure(size = 0.8 .* (600, 400))
-    ax = Axis(fig[1, 1], xlabel = L"L", ylabel = L"-E_0(L)/L^2",
-        xscale = log10, yscale = log10)
+    ax = Axis(
+        fig[1, 1],
+        xlabel = L"L",
+        ylabel = L"-E_0(L)/L^2",
+        xscale = log10,
+        yscale = log10,
+    )
     scatterlines!(ax, Ls_small, -StairEs, label = L"Staircase$$")
     scatterlines!(ax, Ls_large, -Ens_5x5, label = L"5×5")
     scatterlines!(ax, Ls_medium, -Ens_6x6, label = L"6×6")
@@ -206,25 +213,34 @@ Ens_6x6_3 = ([Energy6x6_3(L) for L in Ls_6])
 ##
 with_theme(theme_SimpleTicks()) do
     fig = Figure(size = 0.8 .* (600, 400))
-    ax = Axis(fig[1, 1], xlabel = L"L", ylabel = L"-E_0(L)/L^2",
-        xscale = log10, yscale = log10)
+    ax = Axis(
+        fig[1, 1],
+        xlabel = L"L",
+        ylabel = L"-E_0(L)/L^2",
+        xscale = log10,
+        yscale = log10,
+    )
     scatterlines!(ax, Ls_4, -StairEs ./ Ls_4 .^ 2, label = L"Staircase$$", color = :red)
     scatterlines!(ax, Ls_5, -Ens_5x5 ./ Ls_5 .^ 2, label = L"5×5", color = :blue)
     scatterlines!(ax, Ls_6, -Ens_6x6 ./ Ls_6 .^ 2, label = L"6×6", color = :green)
     scatterlines!(ax, Ls_6, -Ens_6x6_3 ./ Ls_6 .^ 2, label = L"⋱_{6×6}", color = :black)
     LRange = LinRange(4, 15, 100)
-    lines!(ax,
+    lines!(
+        ax,
         LRange,
         1 / 10 .* LRange .^ 0,
         label = L"E_0 =-L^2/10",
         linestyle = :dash,
-        color = :grey)
-    lines!(ax,
+        color = :grey,
+    )
+    lines!(
+        ax,
         LRange,
         1 / 16 .* LRange .^ 0,
         label = L"E_0 =-L^2/16",
         linestyle = :dashdot,
-        color = :grey)
+        color = :grey,
+    )
     axislegend(ax, position = :lt, nbanks = 2)
     ylims!(ax, 0.05, 0.25)
     save("exactFig/EnergyScaling_periodic.png", fig)
@@ -240,15 +256,15 @@ Sol5x5 = solveED(getPeriodic(SW.periodicState5x5(15)), μ)
 function isAllowedState(state)
     for i in axes(state, 1), j in axes(state, 2)
         if state[i, j]
-            NearestNeighborOccupied = state[i - 1, j] || state[i + 1, j] ||
-                                      state[i, j - 1] || state[i, j + 1]
+            NearestNeighborOccupied =
+                state[i-1, j] || state[i+1, j] || state[i, j-1] || state[i, j+1]
 
             if NearestNeighborOccupied
                 return false
             end
 
-            NextNearestNeighborOccupied = state[i - 1, j - 1] || state[i + 1, j - 1] ||
-                                          state[i - 1, j + 1] || state[i + 1, j + 1]
+            NextNearestNeighborOccupied =
+                state[i-1, j-1] || state[i+1, j-1] || state[i-1, j+1] || state[i+1, j+1]
 
             if NextNearestNeighborOccupied
                 return false
@@ -260,7 +276,7 @@ end
 
 function getAllStates(L)
     states = 0:1
-    combinations = Iterators.product((states for i in 1:L, j in 1:L)...)
+    combinations = Iterators.product((states for i = 1:L, j = 1:L)...)
 
     allowedStates = BitMatrix[]
 

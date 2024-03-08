@@ -1,6 +1,6 @@
 import Base: size, getindex, setindex!, iterate, show, copy, hash
 
-struct SpinConfig{T, MatType <: AbstractMatrix{T}, T1 <: Real} <: AbstractMatrix{T}
+struct SpinConfig{T,MatType<:AbstractMatrix{T},T1<:Real} <: AbstractMatrix{T}
     Mat::MatType
     S::T1
 end

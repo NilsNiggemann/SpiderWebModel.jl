@@ -1,8 +1,10 @@
 using LinearAlgebra, SparseArrays, Arpack
 import KrylovKit
-const P1 = SA[-1.0 1.0 1.0;
-              -1.0 0.0 -1.0;
-              1.0 1.0 -1.0]
+const P1 = SA[
+    -1.0 1.0 1.0
+    -1.0 0.0 -1.0
+    1.0 1.0 -1.0
+]
 const P2 = -P1
 
 const P1_SITES = -SVector(getSitesFromPlaquette(P1)) / 2
@@ -15,7 +17,7 @@ function plaquetteFlippable(plaqSites::SVector{8})
     return plaqSites == P1_SITES || plaqSites == P2_SITES
 end
 
-function plaquetteFlippable(plaqSites::SVector{8, Union{Integer, Bool}})
+function plaquetteFlippable(plaqSites::SVector{8,Union{Integer,Bool}})
     return plaqSites == P1_SITES_BOOL || plaqSites == P2_SITES_BOOL
 end
 
@@ -129,8 +131,8 @@ function generateAllPaths(InitialState)
     NewPaths = [startpath]
 
     nThreads = Threads.nthreads()
-    Conf_buffer = [copy(InitialState) for _ in 1:nThreads]
-    AppendPaths_buffer = [empty([startpath]) for _ in 1:nThreads]
+    Conf_buffer = [copy(InitialState) for _ = 1:nThreads]
+    AppendPaths_buffer = [empty([startpath]) for _ = 1:nThreads]
 
     while length(NewPaths) > 0
         batches = ChunkSplitters.chunks(NewPaths, n = nThreads, split = :batch)
@@ -224,7 +226,7 @@ end
 function getAllNeighborStates(AllPaths, AllPaths_array, InitialState)
     Neighbors = [Int[] for i in eachindex(AllPaths)]
     nThreads = Threads.nthreads()
-    Conf_buffer = [copy(InitialState) for _ in 1:nThreads]
+    Conf_buffer = [copy(InitialState) for _ = 1:nThreads]
 
     batches = ChunkSplitters.chunks(AllPaths_array, n = nThreads, split = :batch)
     Threads.@threads for (iChunk, inds) in enumerate(batches)
@@ -267,7 +269,7 @@ function invertDict(D)
     D2 = Dict(v => k for (k, v) in D)
 end
 
-function H(AllStates, neighbors, mu::T = 0.0) where {T <: Number}
+function H(AllStates, neighbors, mu::T = 0.0) where {T<:Number}
     dim = length(AllStates)
     rows = Int[]
     cols = Int[]
@@ -278,7 +280,7 @@ function H(AllStates, neighbors, mu::T = 0.0) where {T <: Number}
         push!(vals, val)
     end
 
-    for n in 1:dim
+    for n = 1:dim
         for m in neighbors[n]
             addTerm!(n, m, -one(T))
         end
@@ -291,7 +293,7 @@ function H(AllStates, neighbors, mu::T = 0.0) where {T <: Number}
 end
 
 SolveH(H, range = 1:1) = eigen(H, range)
-const SparseMat = Union{SparseMatrixCSC, Hermitian{<:Number, <:SparseMatrixCSC}}
+const SparseMat = Union{SparseMatrixCSC,Hermitian{<:Number,<:SparseMatrixCSC}}
 
 function SolveH(H::SparseMat; kwargs...)
     if size(H) == (1, 1)
@@ -356,14 +358,16 @@ function canFlipPlaquette(Conf::SpinConfig, i, j)
 
     # P = getPlaquette(Conf,i,j)
     # sites = SVector(Mat[2,3],Mat[1,3],Mat[1,2],Mat[1,1],Mat[2,1],Mat[3,1],Mat[3,2],Mat[3,3])
-    sites = SVector(Conf[i, j + 1],
-        Conf[i - 1, j + 1],
-        Conf[i - 1, j],
-        Conf[i - 1, j - 1],
-        Conf[i, j - 1],
-        Conf[i + 1, j - 1],
-        Conf[i + 1, j],
-        Conf[i + 1, j + 1])
+    sites = SVector(
+        Conf[i, j+1],
+        Conf[i-1, j+1],
+        Conf[i-1, j],
+        Conf[i-1, j-1],
+        Conf[i, j-1],
+        Conf[i+1, j-1],
+        Conf[i+1, j],
+        Conf[i+1, j+1],
+    )
     return plaquetteFlippable(sites)
 end
 
@@ -399,13 +403,17 @@ end
 
 """assumes that Op is already an allowed operator"""
 function getApplicablePlaquettes(Conf::SpinConfig, Op)
-    plaqPos = [(i, j) for i in axes(Conf.Mat, 1)
-               for j in axes(Conf.Mat, 2) if CanApplyNonStrict(Conf, Op, i, j)]
+    plaqPos = [
+        (i, j) for i in axes(Conf.Mat, 1) for
+        j in axes(Conf.Mat, 2) if CanApplyNonStrict(Conf, Op, i, j)
+    ]
     return plaqPos
 end
 
 function getApplicablePlaquettes(Conf::SpinConfig)
-    plaqPos = [(i, j) for i in axes(Conf.Mat, 1)
-               for j in axes(Conf.Mat, 2) if canFlipPlaquette(Conf, i, j)]
+    plaqPos = [
+        (i, j) for i in axes(Conf.Mat, 1) for
+        j in axes(Conf.Mat, 2) if canFlipPlaquette(Conf, i, j)
+    ]
     return plaqPos
 end

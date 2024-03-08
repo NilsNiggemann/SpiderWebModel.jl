@@ -7,14 +7,16 @@ function plotSpinConfig!(ax, S::SpinConfig; plotConstraints = true, kwargs...)
     Amax = max(maximum(vals), S.S)
     us = Amin:Amax
     # hm = heatmap!(ax,Array(S.Mat),colorrange = (Amin,Amax),colormap = cgrad(:linear_bgy_10_95_c74_n256, length(us), categorical = true);kwargs...)
-    hm = heatmap!(ax,
+    hm = heatmap!(
+        ax,
         Array(S.Mat),
         colorrange = (Amin, Amax),
         colormap = cgrad(:grays, length(us), categorical = true);
-        kwargs...)
+        kwargs...,
+    )
     if plotConstraints
-        points = [Point(Tuple(I)...)
-                  for I in CartesianIndices(S.Mat) if iseven(sum(Tuple(I)))]
+        points =
+            [Point(Tuple(I)...) for I in CartesianIndices(S.Mat) if iseven(sum(Tuple(I)))]
         scatter!(ax, points, marker = '×', color = :gray, markersize = 20)
     end
     translate!(hm, 0, 0, -100)
@@ -26,7 +28,8 @@ function plotSpinConfig!(ax, S::SpinConfig{Bool}; kwargs...)
 end
 
 function getConfigAxis(S; kwargs...)
-    (; aspect = DataAspect(),
+    (;
+        aspect = DataAspect(),
         backgroundcolor = :grey,
         # xminorgridwidth = 2,
         # yminorgridwidth = 2,
@@ -40,13 +43,13 @@ function getConfigAxis(S; kwargs...)
         # yticks = (axes(S,2),string.(axes(S,2))) ,
         xminorticks = 0.5 .+ axes(S, 1),
         yminorticks = 0.5 .+ axes(S, 2),
-        limits = (0.5, size(S, 1) + 0.5, 0.5, size(S, 2) + 0.5))
+        limits = (0.5, size(S, 1) + 0.5, 0.5, size(S, 2) + 0.5),
+    )
 end
 
 function plotSpinConfig(S; kwargs...)
     fig = Figure(size = 1.2 .* (450, 400))
-    ax = Axis(fig[1, 1];
-        getConfigAxis(S)...)
+    ax = Axis(fig[1, 1]; getConfigAxis(S)...)
     hm = plotSpinConfig!(ax, S; kwargs...)
     us = filter!(x -> !ismissing(x) && !isnan(x), unique(S))
     isempty(us) && (us = [-1, 1])

@@ -21,9 +21,11 @@ Base.@propagate_inbounds function Base.getindex(v::SBitVector, i::Int)
     return (v.x >> (i - 1)) % Bool
 end
 
-Base.@propagate_inbounds function Base.setindex(v::SBitVector{UIntType},
-        i::Int,
-        x::Bool) where {UIntType}
+Base.@propagate_inbounds function Base.setindex(
+    v::SBitVector{UIntType},
+    i::Int,
+    x::Bool,
+) where {UIntType}
     numBits = _numberOfBits(UIntType)
     Base.@boundscheck 1 <= i <= numBits || throw(BoundsError(v, i))
     mask = UIntType(1) << (i - 1)
@@ -43,11 +45,11 @@ end
 Base.:(==)(x::SBitVector, y::SBitVector) = x.x == y.x
 Base.hash(x::SBitVector, h::UInt) = hash(x.x, h)
 
-struct PlaqMapping{I <: Integer}
-    d::OrderedDict{Tuple{I, I}, I}
+struct PlaqMapping{I<:Integer}
+    d::OrderedDict{Tuple{I,I},I}
 end
 
-function (P::PlaqMapping)(ij::Tuple{I, I}) where {I <: Integer}
+function (P::PlaqMapping)(ij::Tuple{I,I}) where {I<:Integer}
     index = get(P.d, ij, 0)
     if index == 0
         index = updatePlaqMapping!(P, ij)
@@ -55,18 +57,18 @@ function (P::PlaqMapping)(ij::Tuple{I, I}) where {I <: Integer}
     return index
 end
 
-(P::PlaqMapping)(i::I, j::I) where {I <: Integer} = P((i, j))
+(P::PlaqMapping)(i::I, j::I) where {I<:Integer} = P((i, j))
 (P::PlaqMapping)(i::Integer) = P.d.keys[i]
 
 Base.length(P::PlaqMapping) = length(P.d)
 
 """constructs arrays for mapping between plaquette position (i,j) and integers"""
 function PlaqMapping()
-    d = OrderedDict{Tuple{Int, Int}, Int}()
+    d = OrderedDict{Tuple{Int,Int},Int}()
     return PlaqMapping(d)
 end
 
-function updatePlaqMapping!(plaqMapping, plaqNum::Tuple{I, I}) where {I <: Integer}
+function updatePlaqMapping!(plaqMapping, plaqNum::Tuple{I,I}) where {I<:Integer}
     if plaqNum ∉ keys(plaqMapping.d)
         plaqMapping.d[plaqNum] = length(plaqMapping) + 1
     end
@@ -108,9 +110,11 @@ function getNewStates!(states, Conf, StateRep::SBitVector, plaqMap::PlaqMapping)
 end
 const STAIRCASE_GROWTH_FACTOR = 4e-7
 
-function _generateHamiltonian(InitialState,
-        ::SBitVector{UIntType},
-        growthfactor = STAIRCASE_GROWTH_FACTOR) where {UIntType}
+function _generateHamiltonian(
+    InitialState,
+    ::SBitVector{UIntType},
+    growthfactor = STAIRCASE_GROWTH_FACTOR,
+) where {UIntType}
     plaqMapping = PlaqMapping()
     # InitialState = booleanSpinConfig(InitialState) # is actually slower
 
@@ -169,7 +173,7 @@ function vvcat(vv::Vector{Vector{T}}) where {T}
     out = Vector{T}(undef, sum(length, vv))
     i = 0
     for v in vv, x in v
-        @inbounds out[i += 1] = x
+        @inbounds out[i+=1] = x
     end
     return out
 end

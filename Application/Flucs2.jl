@@ -8,10 +8,10 @@ Stair = SW.getStairCase(14)
 ##
 ls = let
     ls = Int[]
-    for i in 1:15
+    for i = 1:15
         Stair = SW.getStairCase(i)
-        @time (; Hrows, AllStates) = SW._generateHamiltonian(Stair,
-            SW.SBitVector{UInt64}(0, 0))
+        @time (; Hrows, AllStates) =
+            SW._generateHamiltonian(Stair, SW.SBitVector{UInt64}(0, 0))
         push!(ls, length(Hrows))
     end
     ls

@@ -6,10 +6,15 @@ function getStructureFac(AllStates::AbstractVector{<:SpinConfig}, weights, tol =
     plan = getLatticeFFTPlan(AllStates[1].Mat, 0)
     # weights = abs2.(Psi)
     # state_weight = collect(zip( AllStates,weights))[inds]
-    Sq = fetch.([Threads.@spawn getInterpolatedFFT(c.Mat,
-                     0,
-                     plan;
-                     Interpolation = BSpline(Constant())) for c in AllStates])
+    Sq =
+        fetch.([
+            Threads.@spawn getInterpolatedFFT(
+                c.Mat,
+                0,
+                plan;
+                Interpolation = BSpline(Constant()),
+            ) for c in AllStates
+        ])
     # Sq = [getInterpolatedFFT(weight* c.Mat,0,plan;Interpolation = BSpline(Constant())) for (c,weight) in state_weight]
     SSq(kx, ky) = sum(w^2 * s(kx, ky) * s(-kx, -ky) for (w, s) in zip(weights, Sq))
 
@@ -19,9 +24,11 @@ function getStructureFac(AllStates::AbstractVector{<:SpinConfig}, weights, tol =
     return (; k, Sq = SSq, Sq_k)
 end
 
-function getStructureFac(AllStates::AbstractVector{<:SpinConfig},
-        eigen::Union{Eigen, NamedTuple},
-        tol = 0)
+function getStructureFac(
+    AllStates::AbstractVector{<:SpinConfig},
+    eigen::Union{Eigen,NamedTuple},
+    tol = 0,
+)
     Psi = eigen.vectors[:, 1]
     weights = abs2.(Psi)
     return getStructureFac(AllStates, weights, tol)
@@ -29,17 +36,22 @@ end
 
 function getEqualWeightStructureFac(AllStates)
     plan = getLatticeFFTPlan(AllStates[1].Mat, 0)
-    Sq = fetch.([Threads.@spawn getInterpolatedFFT(c.Mat,
-                     0,
-                     plan;
-                     Interpolation = BSpline(Constant())) for c in AllStates])
+    Sq =
+        fetch.([
+            Threads.@spawn getInterpolatedFFT(
+                c.Mat,
+                0,
+                plan;
+                Interpolation = BSpline(Constant()),
+            ) for c in AllStates
+        ])
 
     weight(Nstates) = 1 / Nstates
 
     SSq(kx, ky) = sum(s(kx, ky) * s(-kx, -ky) for s in Sq) * weight(length(Sq))
 
     function SSq(kx, ky, maxindex)
-        sum(Sq[i](kx, ky) * Sq[i](-kx, -ky) for i in 1:maxindex) * weight(maxindex)
+        sum(Sq[i](kx, ky) * Sq[i](-kx, -ky) for i = 1:maxindex) * weight(maxindex)
     end
 
     k = Sq[1].itp.ranges[1]
@@ -57,9 +69,11 @@ function getRij_vec(Config::SpinConfig, i)
 end
 
 function getRij_vec(Config::SpinConfig)
-    Ri = reshape([float(SVector(Tuple(ij))) for ij in CartesianIndices(Config.Mat)],
-        length(Config))
-    return [Ri[i] - Ri[j] for i in eachindex(Ri) for j in 1:i]
+    Ri = reshape(
+        [float(SVector(Tuple(ij))) for ij in CartesianIndices(Config.Mat)],
+        length(Config),
+    )
+    return [Ri[i] - Ri[j] for i in eachindex(Ri) for j = 1:i]
 end
 
 function getSij(Configs::AbstractVector{<:SpinConfig}, i, j)
@@ -72,8 +86,10 @@ end
 
 function getSij(Configs::AbstractVector{<:SpinConfig})
     fac(i, j) = ifelse(i == j, 1, 2)
-    return fetch.([Threads.@spawn fac(i, j) * getSij(Configs, i, j)
-                   for i in LinearIndices(Configs[1]) for j in 1:i])
+    return fetch.([
+        Threads.@spawn fac(i, j) * getSij(Configs, i, j) for i in LinearIndices(Configs[1])
+        for j = 1:i
+    ])
 end
 
 function getMagnetization(AllStates, eigen)
@@ -109,10 +125,12 @@ function getStructureFac(AllStates::AbstractVector{<:LazyConfig}, eigen, tol = 0
 
     function getSqi(state, ψn)
         Conf = spinConfig!(Conf, state)
-        getInterpolatedFFT(abs2(ψn) * Conf.Mat,
+        getInterpolatedFFT(
+            abs2(ψn) * Conf.Mat,
             0,
             plan;
-            Interpolation = BSpline(Constant()))
+            Interpolation = BSpline(Constant()),
+        )
     end
     Sq = getSqi(first(AllStates), first(Psi))
     k = Sq.itp.ranges[1]

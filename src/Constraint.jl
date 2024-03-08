@@ -7,35 +7,30 @@ function constraint(sites)
 end
 
 """Order in which the spins are stored in the plaquette corresponding to the numbering convention"""
-plaquetteOrder(S1, S2, S3, S4, S5, S6, S7, S8, S9) = SMatrix{3, 3}(S4,
-    S5,
-    S6,
-    S3,
-    S9,
-    S7,
-    S2,
-    S1,
-    S8)
+plaquetteOrder(S1, S2, S3, S4, S5, S6, S7, S8, S9) =
+    SMatrix{3,3}(S4, S5, S6, S3, S9, S7, S2, S1, S8)
 
 function plaquetteOrder(S1, S2, S3, S4, S5, S6, S7, S8)
-    SMatrix{3, 3}(S4, S5, S6, S3, NaN, S7, S2, S1, S8)
+    SMatrix{3,3}(S4, S5, S6, S3, NaN, S7, S2, S1, S8)
 end
 plaquetteOrder(x) = plaquetteOrder(x...)
 
 function plaquette(sites, S = 1 / 2)
-    Mat = SMatrix{3, 3}(plaquetteOrder(sites))
+    Mat = SMatrix{3,3}(plaquetteOrder(sites))
     return SpinConfig(Mat, S)
 end
 
 function getSitesFromPlaquette(Mat::AbstractMatrix)
-    return (Mat[2, 3],
+    return (
+        Mat[2, 3],
         Mat[1, 3],
         Mat[1, 2],
         Mat[1, 1],
         Mat[2, 1],
         Mat[3, 1],
         Mat[3, 2],
-        Mat[3, 3])
+        Mat[3, 3],
+    )
 end
 
 function getSitesFromPlaquette(P::SpinConfig)
@@ -47,25 +42,27 @@ function constraint(P::SpinConfig)
 end
 
 function getPlaquette(S::SpinConfig, i, j)
-    Mat = @view S.Mat[(i - 1):(i + 1), (j - 1):(j + 1)]
+    Mat = @view S.Mat[(i-1):(i+1), (j-1):(j+1)]
     return SpinConfig(Mat, S.S)
 end
 
 """generates all possible combinations 0,1 of the 8 spins in a plaquette """
 
 function getAllGS(S)
-    allCombs = [plaquette((i, j, k, l, m, n, o, p), S) for i in (-S):S for j in (-S):S
-                for k in (-S):S for l in (-S):S for m in (-S):S for n in (-S):S
-                for o in (-S):S
-                for p in (-S):S if constraint((i, j, k, l, m, n, o, p)) == 0]
+    allCombs = [
+        plaquette((i, j, k, l, m, n, o, p), S) for i = (-S):S for j = (-S):S for
+        k = (-S):S for l = (-S):S for m = (-S):S for n = (-S):S for o = (-S):S for
+        p = (-S):S if constraint((i, j, k, l, m, n, o, p)) == 0
+    ]
     return allCombs
 end
 
 function getAllGS_noMissing(S)
-    allCombs = [plaquette((i, j, k, l, m, n, o, p, q), S) for i in (-S):S for j in (-S):S
-                for k in (-S):S for l in (-S):S for m in (-S):S for n in (-S):S
-                for o in (-S):S for p in (-S):S
-                for q in (-S):S if constraint((i, j, k, l, m, n, o, p)) == 0]
+    allCombs = [
+        plaquette((i, j, k, l, m, n, o, p, q), S) for i = (-S):S for j = (-S):S for
+        k = (-S):S for l = (-S):S for m = (-S):S for n = (-S):S for o = (-S):S for
+        p = (-S):S for q = (-S):S if constraint((i, j, k, l, m, n, o, p)) == 0
+    ]
     return allCombs
 end
 
@@ -73,8 +70,8 @@ const ALLGS_S12 = getAllGS(0.5)
 const ALLGS_S12_NOMISSING = getAllGS_noMissing(0.5)
 
 function plaquetteIsInBounds(Conf::AbstractMatrix, iCenter::Integer, jCenter::Integer)
-    i = (iCenter - 1):(iCenter + 1)
-    j = (jCenter - 1):(jCenter + 1)
+    i = (iCenter-1):(iCenter+1)
+    j = (jCenter-1):(jCenter+1)
     return checkbounds(Bool, Conf, i, j)
 end
 
