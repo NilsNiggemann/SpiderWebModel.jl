@@ -109,11 +109,14 @@ function constructGroundstates(
     NRuns::Integer,
     fixedFraction::Real,
 )
-    p = ProgressMeter.Progress(NRuns)
+    p = ProgressMeter.Progress(NRuns; showspeed = true)
 
-    generate_showvalues(iter, x) = () -> [(:iter, iter), (:numSolutions, length(x))]
+    generate_showvalues(iter, numSolutions) =
+        () -> [(:iter, iter.value), (:numSolutions, numSolutions.value)]
     sols = Vector{BitMatrix}(undef, NRuns)
     statuses = falses(NRuns)
+    numSolutions = Threads.Atomic{Int}(0)
+    numfinished = Threads.Atomic{Int}(0)
     Threads.@threads for iter = 1:NRuns
         model = modelfactory(L)
         JuMP.set_attribute(model, MOI.NumberOfThreads(), 1)
@@ -124,13 +127,23 @@ function constructGroundstates(
         x, status = constructGroundstate(model, L)
         sols[iter] = x
         statuses[iter] = status
-        ProgressMeter.next!(p; showvalues = generate_showvalues(iter, sum(statuses)))
+        Threads.atomic_add!(numfinished, 1)
+        if status
+            Threads.atomic_add!(numSolutions, 1)
+        end
+        ProgressMeter.next!(p; showvalues = generate_showvalues(numfinished, numSolutions))
     end
     filter!(!isempty, sols)
 end
 
 
-function constructGroundstates(L::Integer, NRuns::Integer, fixedFraction::Real; kwargs...)
-    modelfactory(L) = setUpSpiderWeb(L, OutputFlag = false, TimeLimit = 20; kwargs...)
+function constructGroundstates(
+    L::Integer,
+    NRuns::Integer,
+    fixedFraction::Real;
+    TimeLimit = 20,
+    kwargs...,
+)
+    modelfactory(L) = setUpSpiderWeb(L; TimeLimit = 20, OutputFlag = false, kwargs...)
     constructGroundstates(L, modelfactory, NRuns, fixedFraction::Real)
 end
