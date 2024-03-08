@@ -19,11 +19,11 @@ ConfSpiral = SW.constructConfigPath(8, 8, SW.ALLGS_S12, SW.spiralPath)
 end
 ##
 @testset "JuMP construction" begin
-        
+
     L = 20
     # sols = SW.constructGroundstates(L,100,1/8)
-    sols = SW.floatSpinConfig.(SW.constructGroundstates(L,30,1/7),1/2)
+    sols = SW.floatSpinConfig.(SW.constructGroundstates(L, 30, 1 / 7), 1 / 2)
     @test length(sols) > 0
-    @test all(SW.fulFillsConstraint,sols)
+    @test all(SW.fulFillsConstraint, sols)
     # @test all(SW.fulFillsConstraint ∘ SW.floatSpinConfig,sols)
 end

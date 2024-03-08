@@ -5,24 +5,24 @@ using CairoMakie
 using StaticArrays
 using MakieHelpers
 ##
-Lm(qx,qy) = 2SVector(cos(qx+qy)-cos(qx-qy),cos(qx)-cos(qy))
+Lm(qx, qy) = 2SVector(cos(qx + qy) - cos(qx - qy), cos(qx) - cos(qy))
 
-δ(n,m) = ifelse(n==m,1,0)
-Proj(n,m,L) = δ(n,m) - real(L[n] * L[m] /(L' * L))
-Proj(L) = sum((Proj(n,m,L) for n in 1:2 for m in 1:2) )
+δ(n, m) = ifelse(n == m, 1, 0)
+Proj(n, m, L) = δ(n, m) - real(L[n] * L[m] / (L' * L))
+Proj(L) = sum((Proj(n, m, L) for n = 1:2 for m = 1:2))
 with_theme(theme_PiTicks()) do
-    k = LinRange(0,2pi,300)
+    k = LinRange(0, 2pi, 300)
     fig = Figure()
-    ax = Axis(fig[1,1],aspect = 1)
-    Sq = [Proj(1,2,Lm(qx,qy)) for qx in k, qy in k]
-    heatmap!(ax,k,k,Sq)
+    ax = Axis(fig[1, 1], aspect = 1)
+    Sq = [Proj(1, 2, Lm(qx, qy)) for qx in k, qy in k]
+    heatmap!(ax, k, k, Sq)
     fig
 end
 ##
 function getCouplingsToS1(RefSite = Rvec(0, 0, 1))
     L = 4
-    S1Terms = spin{Int, Rvec_2D}[]
-    for n1 in (-L + RefSite.n1):(L + RefSite.n1), n2 in (-L + RefSite.n2):(L + RefSite.n2)
+    S1Terms = spin{Int,Rvec_2D}[]
+    for n1 = (-L+RefSite.n1):(L+RefSite.n1), n2 = (-L+RefSite.n2):(L+RefSite.n2)
         isodd(n1 + n2) && continue
         sites = [
             Rvec(n1 + 1, n2, 1),
@@ -32,7 +32,7 @@ function getCouplingsToS1(RefSite = Rvec(0, 0, 1))
             Rvec(n1 - 1, n2, 1),
             Rvec(n1 - 1, n2 - 1, 1),
             Rvec(n1, n2 - 1, 1),
-            Rvec(n1 + 1, n2 - 1, 1)
+            Rvec(n1 + 1, n2 - 1, 1),
         ]
         sgns = [1, 1, -1, -1, 1, 1, -1, -1]
         plaq = [spin(r, s) for (r, s) in zip(sgns, sites)]
@@ -69,24 +69,30 @@ let
 
     p = [Point2f(n1, n2) for (n1, n2) in zip(aDF.n1, aDF.n2)]
     fig = Figure()
-    ax = Axis(fig[1, 1],
+    ax = Axis(
+        fig[1, 1],
         aspect = 1,
         xgridcolor = :black,
         ygridcolor = :black,
-        backgroundcolor = :white)
+        backgroundcolor = :white,
+    )
     col = Dict(0 => :black, 2 => :red, -2 => :blue, 4 => :darkred, -4 => :darkblue)
     ls(i) = i > 0 ? :solid : :dash
     for (i, p) in enumerate(p)
         fac = aDF.fac[i]
-        lines!([p0, p],
+        lines!(
+            [p0, p],
             linewidth = 5 * abs(fac),
             color = col[fac],
             linestyle = ls(fac),
-            label = string(fac))
+            label = string(fac),
+        )
     end
-    scatter!([Point2f(n1, n2) + p0 for n1 in -2:2 for n2 in -2:2],
+    scatter!(
+        [Point2f(n1, n2) + p0 for n1 = -2:2 for n2 = -2:2],
         color = :black,
-        markersize = 10)
+        markersize = 10,
+    )
     scatter!(p, color = :black, markersize = 50, marker = '×')
 
     axislegend(ax, unique = true)
@@ -99,13 +105,14 @@ end
 
 let
     L = 1
-    AllPoints = [Point2f(n1, n2) for n1 in (-L):L for n2 in (-L):L]
+    AllPoints = [Point2f(n1, n2) for n1 = (-L):L for n2 = (-L):L]
     inbox(x) = abs(x[1]) <= 1 && abs(x[2]) <= 1
     inbox(x::Rvec_2D) = abs(x.n1) <= 1 && abs(x.n2) <= 1
     filter!(inbox, AllPoints)
 
     fig = Figure(size = (400, 400), backgroundcolor = :transparent)
-    ax = Axis(fig[1, 1],
+    ax = Axis(
+        fig[1, 1],
         aspect = 1,
         xgridcolor = :black,
         ygridcolor = :black,
@@ -121,7 +128,8 @@ let
         bottomspinevisible = false,
         topspinevisible = false,
         leftspinevisible = false,
-        rightspinevisible = false)
+        rightspinevisible = false,
+    )
 
     PlotPoints = Set(copy(AllPoints))
     for p0 in AllPoints
@@ -131,17 +139,21 @@ let
         aDF = DataFrame(;
             n1 = StructArray(a.site).n1,
             n2 = StructArray(a.site).n2,
-            fac = a.fac)
+            fac = a.fac,
+        )
 
         p = [Point2f(n1, n2) for (n1, n2) in zip(aDF.n1, aDF.n2)]
 
         col = Dict(0 => :black, 2 => :red, -2 => :blue, 4 => :darkred, -4 => :darkblue)
 
         for (i, p) in enumerate(p)
-            lines!([p0, p], linewidth = 2 * abs(aDF.fac[i]),
+            lines!(
+                [p0, p],
+                linewidth = 2 * abs(aDF.fac[i]),
                 # color=col[aDF.fac[i]],
                 color = :black,
-                label = string(aDF.fac[i]))
+                label = string(aDF.fac[i]),
+            )
             push!(PlotPoints, p)
         end
     end
@@ -166,9 +178,10 @@ let
     B = SpiderWebBasis()
     L = 2
 
-    points = [Point2f(getCartesian(Rvec(n1, n2, b), B)...) for n1 in (-L):L
-              for n2 in (-L):L
-              for b in 1:2]
+    points = [
+        Point2f(getCartesian(Rvec(n1, n2, b), B)...) for n1 = (-L):L for n2 = (-L):L for
+        b = 1:2
+    ]
     fig = Figure()
     ax = Axis(fig[1, 1], aspect = 1)
     scatter!(points, color = :black, markersize = 10)
@@ -183,8 +196,10 @@ function getJMatrix(q)
     J12 = +2cos(2qx + qy) + 2cos(qx - 2qy) - 2cos(2qx - qy) - 2cos(qx + 2qy)
     J21 = J12
     J22 = -4cos(qx + qy) - 4cos(qx - qy) + 2cos(2qx) + 2cos(2qy)
-    J = LargeN.Hermitian(SA[J11 J12;
-                            J21 J22])
+    J = LargeN.Hermitian(SA[
+        J11 J12
+        J21 J22
+    ])
     return J
 end
 
@@ -197,19 +212,23 @@ let
     eig = LargeN.ComputeEig2D(getJMatrix, res, ext = pi, 2)
     fig = Figure()
     ax = Axis3(fig[1, 1], aspect = (1, 1, 1 / 4))
-    surface!(ax,
+    surface!(
+        ax,
         q,
         q,
         eig.values[1, :, :],
         colorrange = extrema(eig.values),
-        transparency = true)
-    surface!(ax,
+        transparency = true,
+    )
+    surface!(
+        ax,
         q,
         q,
         eig.values[2, :, :],
         colorrange = extrema(eig.values),
         transparency = true,
-        colormap = (:viridis, 0.6))
+        colormap = (:viridis, 0.6),
+    )
     save("eig.png", fig)
     fig
 end

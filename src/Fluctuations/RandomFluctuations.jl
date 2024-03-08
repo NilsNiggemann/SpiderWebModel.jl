@@ -37,7 +37,7 @@ function generateRandomPaths(InitialState, N, flipDepth; acceptanceRate = 0.5)
     nThreads = Threads.nthreads()
 
     # Conf_buffer = [copy(InitialState) for _ in 1:nThreads]
-    AppendPaths_buffer = [empty([startpath]) for _ in 1:nThreads]
+    AppendPaths_buffer = [empty([startpath]) for _ = 1:nThreads]
     # CurrentPaths_buffer = [empty([startpath]) for _ in 1:nThreads]
 
     # FlipPlaq_buffer = [empty([(0,0)]) for _ in 1:nThreads]
@@ -54,7 +54,7 @@ function generateRandomPaths(InitialState, N, flipDepth; acceptanceRate = 0.5)
         LI = LinearIndices(Conf)
 
         for i in inds
-            for _ in 1:flipDepth
+            for _ = 1:flipDepth
                 Conf = spinConfig!(Conf, path, InitialState)
                 getRandomSeparatedPlaquettes!(FlipPlaq, sepPlaquettes, Conf)
                 for p in sepPlaquettes
@@ -69,6 +69,8 @@ function generateRandomPaths(InitialState, N, flipDepth; acceptanceRate = 0.5)
             push!(AppendPaths, copy(path))
         end
     end
-    return [LazyConfig(InitialState, paths) for appendPaths in AppendPaths_buffer
-            for paths in appendPaths]
+    return [
+        LazyConfig(InitialState, paths) for appendPaths in AppendPaths_buffer for
+        paths in appendPaths
+    ]
 end

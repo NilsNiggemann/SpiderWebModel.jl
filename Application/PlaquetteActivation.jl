@@ -4,10 +4,13 @@ using StaticArrays, CairoMakie, Random
 L = 9
 function getBaseConf(L)
     plaqFlip = SW.SpinConfig(fill(NaN, L, L), 1 / 2)
-    plaqFlip[(end ÷ 2):(end ÷ 2 + 3), (end ÷ 2 - 1):(end ÷ 2 + 2)] .= [1 0 0 0;
-                                                                       1 1 0 0;
-                                                                       0 1 1 1;
-                                                                       1 0 0 1] .- 1 / 2
+    plaqFlip[(end÷2):(end÷2+3), (end÷2-1):(end÷2+2)] .=
+        [
+            1 0 0 0
+            1 1 0 0
+            0 1 1 1
+            1 0 0 1
+        ] .- 1 / 2
 
     @assert SW.fulFillsConstraint(plaqFlip, verbose = true)
     return plaqFlip
@@ -40,14 +43,18 @@ function generateStates(L, numConfigs = 10)
     maxiter = 10000
     set = SW.setupCalc!(Path, L, L, SW.ALLGS_S12)
 
-    S = [SW.constructConfigPath(SW.DictAlgorithm(),
-             plaqFlip,
-             SW.ALLGS_S12,
-             set;
-             maxiter,
-             deleteSteps = SW.getStepDeleter(L + 2, defaultDelete, tries),
-             verbose = false,
-             plotSteps = false) for _ in 1:numConfigs]
+    S = [
+        SW.constructConfigPath(
+            SW.DictAlgorithm(),
+            plaqFlip,
+            SW.ALLGS_S12,
+            set;
+            maxiter,
+            deleteSteps = SW.getStepDeleter(L + 2, defaultDelete, tries),
+            verbose = false,
+            plotSteps = false,
+        ) for _ = 1:numConfigs
+    ]
 
     filter!(x -> SW.fulFillsConstraint(x, verbose = false) && !any(isnan, x), S)
     @info "" L defaultDelete tries maxiter length(S)

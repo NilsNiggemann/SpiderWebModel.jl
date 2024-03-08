@@ -1,14 +1,14 @@
 function xdirecPath(LPx, LPy = LPx)
-    [(i, j) for j in 1:(2LPy + 1) for i in 1:(2LPx + 1) if iseven(i + j)]
+    [(i, j) for j = 1:(2LPy+1) for i = 1:(2LPx+1) if iseven(i + j)]
 end
 function xdirecPathReverse(LPx, LPy = LPx)
-    [(i, j) for j in 1:(2LPy + 1) for i in (2LPx + 1):-1:1 if iseven(i + j)]
+    [(i, j) for j = 1:(2LPy+1) for i = (2LPx+1):-1:1 if iseven(i + j)]
 end
 function ydirecPath(LPx, LPy = LPx)
-    [(i, j) for i in 1:(2LPx + 1) for j in 1:(2LPy + 1) if iseven(i + j)]
+    [(i, j) for i = 1:(2LPx+1) for j = 1:(2LPy+1) if iseven(i + j)]
 end
 function ydirecPathReverse(LPx, LPy = LPx)
-    [(i, j) for i in 1:(2LPx + 1) for j in (2LPy + 1):-1:1 if iseven(i + j)]
+    [(i, j) for i = 1:(2LPx+1) for j = (2LPy+1):-1:1 if iseven(i + j)]
 end
 
 function correctPath!(path, Config)
@@ -27,7 +27,7 @@ function spiralPath(L)
     side_length = 1
     steps_in_side = 0
 
-    for i in 2:num_points
+    for i = 2:num_points
         x += dx
         y += dy
         push!(coords, (x, y))
@@ -56,7 +56,7 @@ function spiralPath(L)
 end
 
 function spiralPath(Lx, Ly)
-    @assert Lx==Ly "Lx must be equal to Ly"
+    @assert Lx == Ly "Lx must be equal to Ly"
     spiralPath(Lx)
 end
 

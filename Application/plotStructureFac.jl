@@ -22,7 +22,7 @@ end
 rotate(S::SW.SpinConfig, n) = SW.SpinConfig(rotate(S.Mat, n), S.S)
 
 function AllRots(Confs)
-    Confs2 = [rotate(c, n) for c in Confs for n in 0:3]
+    Confs2 = [rotate(c, n) for c in Confs for n = 0:3]
     return Confs2
 end
 
@@ -40,8 +40,10 @@ using LatticeFFTs.Interpolations
 function getStructureFac(Confs)
     plan = getLatticeFFTPlan(Confs[1].Mat, 0)
 
-    Sq = [getInterpolatedFFT(c.Mat, 0, plan; Interpolation = BSpline(Constant()))
-          for c in Confs]
+    Sq = [
+        getInterpolatedFFT(c.Mat, 0, plan; Interpolation = BSpline(Constant())) for
+        c in Confs
+    ]
 end
 ##
 function plotStructureFac(Confs; cbar = false, kwargs...)

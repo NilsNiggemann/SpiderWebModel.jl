@@ -13,15 +13,20 @@ function getConfigs(L, numConfigs = 10; kwargs...)
 
     setup = SW.setupCalc!(path, L, L, SW.ALLGS_S12)
 
-    S = fetch.([Threads.@spawn SW.constructConfigPath(SW.DictAlgorithm(),
-                    L,
-                    L,
-                    SW.ALLGS_S12,
-                    setup;
-                    maxiter,
-                    deleteSteps = SW.getStepDeleter(L + 2, 1, 15),
-                    verbose = false,
-                    kwargs...) for _ in 1:numConfigs])
+    S =
+        fetch.([
+            Threads.@spawn SW.constructConfigPath(
+                SW.DictAlgorithm(),
+                L,
+                L,
+                SW.ALLGS_S12,
+                setup;
+                maxiter,
+                deleteSteps = SW.getStepDeleter(L + 2, 1, 15),
+                verbose = false,
+                kwargs...,
+            ) for _ = 1:numConfigs
+        ])
 
     filter!(x -> SW.fulFillsConstraint(x, verbose = false) && !any(isnan, x), S)
     @info "" L defaultDelete tries maxiter length(S)
@@ -59,9 +64,11 @@ edSol = DoEDs(confs, μ)
 ##
 
 with_theme(theme_PiTicks()) do
-    fig, ax, hm = heatmap(sum(edSol.Sq_ks[i] for i in eachindex(edSol.En));
+    fig, ax, hm = heatmap(
+        sum(edSol.Sq_ks[i] for i in eachindex(edSol.En));
         axis = (; aspect = 1, title = L"μ = %$μ"),
-        figure = (; size = 0.8 .* (400, 300)))
+        figure = (; size = 0.8 .* (400, 300)),
+    )
     Colorbar(fig[1, 2], hm, label = L"\mathcal{S}^{zz}(\mathbf{q})")
     # save("exactFig/Sq_mu=$μ.png",fig)
     fig
