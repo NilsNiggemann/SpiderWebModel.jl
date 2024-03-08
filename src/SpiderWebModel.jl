@@ -2,13 +2,15 @@ module SpiderWebModel
 using StaticArrays, Random, Statistics
 using OrderedCollections, Dictionaries, LinearAlgebra
 using HDF5, H5Zblosc
+
 import ChunkSplitters
 import DataStructures
 import CircularArrays
 import DSP
 import JuMP
-import HiGHS
 import Gurobi
+import ProgressMeter
+import MathOptInterface as MOI
 
 include("SpinConfig.jl")
 include("Constraint.jl")
@@ -24,10 +26,20 @@ include("Plotting/Fractons.jl")
 
 include("GroundStateConstruction/TilingPaths.jl")
 include("GroundStateConstruction/GroundStateConstruction.jl")
-include("GroundStateConstruction/BigTilings.jl")
+include("GroundStateConstruction/JuMPConstruction.jl")
 
 include("Observables/Observables.jl")
+
 include("explicitStates/PeriodicStates.jl")
 
 include("IO/saveHilbertSpace.jl")
+
+const GRB_ENV_REF = Ref{Gurobi.Env}()
+
+function __init__()
+    global GRB_ENV_REF
+    GRB_ENV_REF[] = Gurobi.Env()
+    return
+end
+
 end # module SpiderWebModel

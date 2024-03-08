@@ -13,12 +13,15 @@ Base.iterate(S::SpinConfig) = iterate(S.Mat)
 Base.size(S::SpinConfig) = size(S.Mat)
 Base.copy(S::SpinConfig) = SpinConfig(copy(S.Mat), S.S)
 
-function booleanSpinConfig(S::AbstractMatrix)
-    S.S == 1 / 2 || error("S must be 1/2")
-    return SpinConfig(S .== 1 / 2, S.S)
+function booleanSpinConfig(Conf::AbstractMatrix,S::Real=1/2)
+    S == 1 / 2 || error("S must be 1/2")
+    return SpinConfig(Conf .== 1 / 2, S)
 end
 
-function floatSpinConfig(S::AbstractMatrix{Bool})
-    S.S == 1 / 2 || error("S must be 1/2")
-    return SpinConfig(S .- 1 / 2, S.S)
+booleanSpinConfig(Conf::SpinConfig) = booleanSpinConfig(Conf.Mat, Conf.S)
+
+function floatSpinConfig(Conf::AbstractMatrix{Bool},S::Real=1/2)
+    S == 1 / 2 || error("S must be 1/2")
+    return SpinConfig(Conf .- 1 / 2, S)
 end
+floatSpinConfig(Conf::SpinConfig) = floatSpinConfig(Conf.Mat, Conf.S)
