@@ -41,7 +41,7 @@ function constraint(P::SpinConfig)
     return constraint(getSitesFromPlaquette(P))
 end
 
-function getPlaquette(S::SpinConfig, i, j)
+Base.@propagate_inbounds function getPlaquette(S::SpinConfig, i, j)
     Mat = @view S.Mat[(i-1):(i+1), (j-1):(j+1)]
     return SpinConfig(Mat, S.S)
 end

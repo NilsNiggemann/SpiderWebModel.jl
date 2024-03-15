@@ -1,5 +1,3 @@
-using BitIntegers
-
 struct SBitVector{T} <: AbstractVector{Bool}
     x::T
     len::Int

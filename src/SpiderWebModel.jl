@@ -2,7 +2,10 @@ module SpiderWebModel
 using StaticArrays, Random, Statistics
 using OrderedCollections, Dictionaries, LinearAlgebra
 using HDF5, H5Zblosc
+using LinearAlgebra, SparseArrays, Arpack
+using BitIntegers
 
+import KrylovKit
 import ChunkSplitters
 import DataStructures
 import CircularArrays
@@ -11,14 +14,17 @@ import JuMP
 import Gurobi
 import ProgressMeter
 import MathOptInterface as MOI
+import Stencils
+
 
 include("SpinConfig.jl")
 include("Constraint.jl")
 include("PeriodicTilings.jl")
 
 include("Fluctuations/Fluctuations.jl")
-include("Fluctuations/Fluctuations_BitVector.jl")
+include("Fluctuations/ConstructHilbertSpace.jl")
 include("Fluctuations/RandomFluctuations.jl")
+include("Fluctuations/ED.jl")
 
 include("Plotting/plotSpinConfig.jl")
 include("Plotting/PlaquetteFlips.jl")

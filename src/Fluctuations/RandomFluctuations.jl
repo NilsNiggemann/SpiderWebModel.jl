@@ -4,12 +4,12 @@ function plaquettesAreSeparated(P1, P2)
     return any(x -> abs(x) > 2, separation)
 end
 
-function getApplicablePlaquettes!(plaqsPos, Conf::SpinConfig)
+function getApplicablePlaquettes!(plaqsPos, Conf::SpinConfig,Op=nothing)
     empty!(plaqsPos)
 
     for i in axes(Conf.Mat, 1)
         for j in axes(Conf.Mat, 2)
-            if canFlipPlaquette(Conf, i, j)
+            if CanApplyNonStrict(Conf,Op, i, j)
                 push!(plaqsPos, (i, j))
             end
         end
@@ -17,8 +17,8 @@ function getApplicablePlaquettes!(plaqsPos, Conf::SpinConfig)
     return plaqsPos
 end
 
-function getRandomSeparatedPlaquettes!(plaquettes, sep_plaquettes, Conf)
-    getApplicablePlaquettes!(plaquettes, Conf)
+function getRandomSeparatedPlaquettes!(plaquettes, sep_plaquettes, Conf,op=nothing)
+    getApplicablePlaquettes!(plaquettes, Conf,op)
     shuffle!(plaquettes)
     empty!(sep_plaquettes)
     for p1 in plaquettes
