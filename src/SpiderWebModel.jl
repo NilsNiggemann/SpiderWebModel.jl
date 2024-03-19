@@ -21,10 +21,12 @@ include("SpinConfig.jl")
 include("Constraint.jl")
 include("PeriodicTilings.jl")
 
+include("Fluctuations/StencilConfigs.jl")
 include("Fluctuations/Fluctuations.jl")
 include("Fluctuations/ConstructHilbertSpace.jl")
 include("Fluctuations/RandomFluctuations.jl")
 include("Fluctuations/ED.jl")
+include("Fluctuations/GreensFunctionMonteCarlo.jl")
 
 include("Plotting/plotSpinConfig.jl")
 include("Plotting/PlaquetteFlips.jl")
