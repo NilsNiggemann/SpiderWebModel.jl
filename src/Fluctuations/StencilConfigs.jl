@@ -34,7 +34,7 @@ end
 
 @inline function P_applicable(S::SpinConfig, i::Int, j::Int)
     Pij = getPlaquetteSites(S, i, j)
-    P_applicable(Pij, Int8(1))
+    P_applicable(Pij, S.S)
 end
 
 @inline P_applicable(S::SpinConfig, I::Union{<:NTuple{2},<:CartesianIndex{2}}) = P_applicable(S, I[1], I[2])
@@ -53,5 +53,3 @@ function getApplicablePlaquettes!(plaqsPlus,plaqsMinus,Conf::SpinConfig{T,<:Sten
     end
     return plaqsPlus,plaqsMinus
 end
-
-getApplicablePlaquettes(Conf::SpinConfig{T,<:Stencils.StencilArray}) where T = getApplicablePlaquettes!(Vector{Tuple{Int,Int}}(),Vector{Tuple{Int,Int}}(),Conf)
