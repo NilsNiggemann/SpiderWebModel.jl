@@ -6,7 +6,8 @@ struct SpinConfig{T,MatType<:AbstractMatrix{T},T1<:Real} <: AbstractMatrix{T}
 end
 
 Base.@propagate_inbounds @inline Base.getindex(S::SpinConfig, i, j) = getindex(S.Mat, i, j)
-Base.@propagate_inbounds @inline Base.setindex!(S::SpinConfig, x, i, j) = setindex!(S.Mat, x, i, j)
+Base.@propagate_inbounds @inline Base.setindex!(S::SpinConfig, x, i, j) =
+    setindex!(S.Mat, x, i, j)
 @inline Base.iterate(S::SpinConfig, i) = iterate(S.Mat, i)
 @inline Base.iterate(S::SpinConfig) = iterate(S.Mat)
 @inline Base.parent(S::SpinConfig) = S.Mat
@@ -15,7 +16,7 @@ Base.@propagate_inbounds @inline Base.setindex!(S::SpinConfig, x, i, j) = setind
 @inline Base.copy(S::SpinConfig) = SpinConfig(copy(S.Mat), S.S)
 
 @inline function plaquetteIterator(S::AbstractMatrix)
-    return Base.Iterators.product(axes(S,1)[begin+1:end-1], axes(S,2)[begin+1:end-1])
+    return Base.Iterators.product(axes(S, 1)[begin+1:end-1], axes(S, 2)[begin+1:end-1])
 end
 
 @inline function plaquetteIterator(S::SpinConfig)

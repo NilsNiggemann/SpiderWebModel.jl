@@ -3,13 +3,8 @@ using SpiderWebModel.Stencils
 ##
 plaquette = Moore(1)
 ##
-mat = zeros(Int,7,7)
-A = StencilArray(
-    mat,
-    plaquette;
-    boundary = Wrap(),
-    padding = Halo{:in}()
-    )
+mat = zeros(Int, 7, 7)
+A = StencilArray(mat, plaquette; boundary = Wrap(), padding = Halo{:in}())
 A .= collect(LinearIndices(A))
 Stencils.update_boundary!(A)
 ##

@@ -1,11 +1,12 @@
 function plotApplPlaquettes!(
     ax,
-    State,Operator=nothing;
+    State,
+    Operator = nothing;
     square = (:green, 0.0),
     heatmapkwargs = (;),
     kwargs...,
 )
-    plaqs = getApplicablePlaquettes(State,Operator)
+    plaqs = getApplicablePlaquettes(State, Operator)
     points = Point2f.(plaqs)
     plotSpinConfig!(ax, State; heatmapkwargs...)
 
@@ -53,8 +54,8 @@ function plotApplPlaquettes!(
     scatter!(ax, points, markersize = 13, color = :red; kwargs...)
 end
 
-function plotApplPlaquettes(State,op=nothing; heatmapkwargs = (;), kwargs...)
+function plotApplPlaquettes(State, op = nothing; heatmapkwargs = (;), kwargs...)
     fig = plotSpinConfig(State; heatmapkwargs...)
-    plotApplPlaquettes!(current_axis(), State,op; kwargs...)
+    plotApplPlaquettes!(current_axis(), State, op; kwargs...)
     fig
 end

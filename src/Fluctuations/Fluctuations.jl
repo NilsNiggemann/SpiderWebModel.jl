@@ -205,4 +205,4 @@ function getApplicablePlaquettes(Conf::SpinConfig)
     ]
     return plaqPos
 end
-getApplicablePlaquettes(Conf::SpinConfig,::Nothing) = getApplicablePlaquettes(Conf)
+getApplicablePlaquettes(Conf::SpinConfig, ::Nothing) = getApplicablePlaquettes(Conf)

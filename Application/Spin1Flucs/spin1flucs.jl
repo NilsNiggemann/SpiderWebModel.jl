@@ -2,47 +2,47 @@ import SpiderWebModel as SW
 using StaticArrays, CairoMakie
 using MakieHelpers
 ##
-StartState = SW.SpinConfig(zeros(60,60),1)
+StartState = SW.SpinConfig(zeros(60, 60), 1)
 # StartState = SW.SpinConfig(Array(SW.getStairCase(24)),1)
-SW.plotApplPlaquettes(StartState,SW.P2)
+SW.plotApplPlaquettes(StartState, SW.P2)
 ##
-function getRandomConfs(StartState,N,acceptanceRate;prethermalizationSteps=1000)
-    confs = [[copy(StartState)] for _ in 1:Threads.nthreads()]
-    
+function getRandomConfs(StartState, N, acceptanceRate; prethermalizationSteps = 1000)
+    confs = [[copy(StartState)] for _ = 1:Threads.nthreads()]
+
     nthreads = Threads.nthreads()
-    Threads.@threads for ithread in 1:nthreads
+    Threads.@threads for ithread = 1:nthreads
         confs_i = confs[ithread]
         Conf = confs_i[1]
-        FlipPlaqs = empty!([(0,0)])
+        FlipPlaqs = empty!([(0, 0)])
         iter = 0
         while true
-            iter +=1
-            PCurr = rand((SW.P1,SW.P2))
-    
-            FlipPlaqs = SW.getApplicablePlaquettes!(FlipPlaqs,Conf,PCurr)
+            iter += 1
+            PCurr = rand((SW.P1, SW.P2))
+
+            FlipPlaqs = SW.getApplicablePlaquettes!(FlipPlaqs, Conf, PCurr)
             # FlipPlaqs = SW.getRandomSeparatedPlaquettes!(FlipPlaqs, sepPlaqs, Conf,PCurr)
             if isempty(FlipPlaqs)
                 continue
             end
-            i,j = rand(FlipPlaqs)
+            i, j = rand(FlipPlaqs)
             P = SW.getPlaquette(Conf, i, j)
             P .+= PCurr
-            if iter> prethermalizationSteps && rand() < acceptanceRate 
-                push!(confs_i,copy(Conf))
+            if iter > prethermalizationSteps && rand() < acceptanceRate
+                push!(confs_i, copy(Conf))
             end
-            if length(confs_i) >= N/nthreads
+            if length(confs_i) >= N / nthreads
                 break
             end
         end
     end
     allconfs = confs[begin]
-    for i in 2:nthreads
-        append!(allconfs,confs[i])
+    for i = 2:nthreads
+        append!(allconfs, confs[i])
     end
     return allconfs
 end
 ##
-@time confs = getRandomConfs(StartState,2000,0.0002;prethermalizationSteps=10000000)
+@time confs = getRandomConfs(StartState, 2000, 0.0002; prethermalizationSteps = 10000000)
 ##
 Sq = SW.getEqualWeightStructureFac(confs)
 ##
