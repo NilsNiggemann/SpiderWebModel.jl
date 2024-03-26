@@ -1,14 +1,33 @@
-function stencilConfig(A::AbstractArray, S::T; kwargs...) where {T}
+struct StencilSpinConfig{T,MatType<:AbstractMatrix{T}} <: AbstractSpinConfig{T}
+    Mat::MatType
+    M::Int8
+end
+@inline Base.parent(S::StencilSpinConfig) = S.Mat
+@inline getSpin(S::StencilSpinConfig) = S.M/2
+
+function stencilConfig(A::AbstractMatrix{<:AbstractFloat}, S,paddingValue = Int8(typemax(Int8)); kwargs...)
+    return stencilConfig(Int8.(2 .*A), S,paddingValue; kwargs...)
+end
+
+function stencilConfig(A::AbstractMatrix{Int8}, S,paddingValue = Int8(typemax(Int8)); kwargs...)
     St = Stencils.StencilArray(
         A,
         Stencils.Moore();
-        boundary = Stencils.Remove(T(typemax(T))),
+        boundary = Stencils.Remove(paddingValue),
         kwargs...,
     )
-    return SpinConfig(St, S)
+    M = Int8(2S)
+    return StencilSpinConfig(St, M)
 end
 
 stencilConfig(A::SpinConfig; kwargs...) = stencilConfig(parent(A), A.S; kwargs...)
+
+function SpinConfig(S::StencilSpinConfig)
+    return SpinConfig(parent(S)./2, S.M/2)
+end
+
+plotSpinConfig!(ax, S::StencilSpinConfig; kwargs...) = plotSpinConfig!(ax, SpinConfig(S); kwargs...)
+plotSpinConfig(S::StencilSpinConfig; kwargs...) = plotSpinConfig(SpinConfig(S); kwargs...)
 
 @inline Base.@propagate_inbounds getPlaquetteStencil(
     S::Stencils.StencilArray,
@@ -16,13 +35,15 @@ stencilConfig(A::SpinConfig; kwargs...) = stencilConfig(parent(A), A.S; kwargs..
     j::Int,
 ) = Stencils.stencil(S, CartesianIndex(i, j))
 
-@inline Base.@propagate_inbounds getPlaquetteStencil(S::SpinConfig, i::Int, j::Int) =
+@inline Base.@propagate_inbounds getPlaquetteStencil(S::StencilSpinConfig, i::Int, j::Int) =
     getPlaquetteStencil(parent(S), i, j)
 
 @inline Base.@propagate_inbounds function getSitesFromStencil(S::Stencils.Moore)
     S6, S7, S8, S5, S1, S4, S3, S2 = S
     return SVector(S1, S2, S3, S4, S5, S6, S7, S8)
 end
+
+P1_STENCIL_temp = SVector(-1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0)
 
 @inline Base.@propagate_inbounds function getPlaquetteSites(
     S::Stencils.StencilArray,
@@ -33,8 +54,17 @@ end
     return getSitesFromStencil(S)
 end
 
-@inline Base.@propagate_inbounds getPlaquetteSites(S::SpinConfig, i::Int, j::Int) =
+@inline Base.@propagate_inbounds getPlaquetteSites(S::StencilSpinConfig, i::Int, j::Int) =
     getPlaquetteSites(parent(S), i, j)
+
+function applyPlaquette!(Config,i,j,sgn)
+    sites = Stencils.indices(Stencils.stencil(parent(Config)), CartesianIndex(i, j))
+    for (ij,s) in zip(sites,P1_STENCIL_temp)
+        i,j = ij
+        Config[i,j] = sgn *s
+    end
+end
+
 
 """returns a tuple of two booleans, corresponding to the applicability of P and P⁺. M=2S is an integer"""
 @inline function P_applicable(Pij::Union{SVector{8},Stencils.Moore}, M::Integer)
@@ -46,19 +76,19 @@ end
     return p, pdagger
 end
 
-@inline function P_applicable(S::SpinConfig, i::Int, j::Int)
+@inline function P_applicable(S::StencilSpinConfig, i::Int, j::Int)
     Pij = getPlaquetteSites(S, i, j)
-    P_applicable(Pij, S.S)
+    P_applicable(Pij, S.M)
 end
 
-@inline P_applicable(S::SpinConfig, I::Union{<:NTuple{2},<:CartesianIndex{2}}) =
+@inline P_applicable(S::StencilSpinConfig, I::Union{<:NTuple{2},<:CartesianIndex{2}}) =
     P_applicable(S, I[1], I[2])
 
-function getApplicablePlaquettes!(
+function getApplicablePlaquettes_separated!(
     plaqsPlus,
     plaqsMinus,
-    Conf::SpinConfig{T,<:Stencils.StencilArray},
-) where {T}
+    Conf::StencilSpinConfig,
+)
     empty!(plaqsPlus)
     empty!(plaqsMinus)
     for I in plaquetteIterator(Conf)
@@ -72,3 +102,21 @@ function getApplicablePlaquettes!(
     end
     return plaqsPlus, plaqsMinus
 end
+
+function getApplicablePlaquettes!(
+    plaqs,
+    Conf::StencilSpinConfig,
+)
+    empty!(plaqs)
+    for I in plaquetteIterator(Conf)
+        applPlus, applMinus = P_applicable(Conf, I)
+        if applPlus || applMinus
+            push!(plaqs, Tuple(I))
+        end
+    end
+    return plaqs
+end
+
+getApplicablePlaquettes(Conf::StencilSpinConfig) = getApplicablePlaquettes!( Tuple{Int,Int}[], Conf)
+
+getApplicablePlaquettes(Conf::StencilSpinConfig,::Nothing) = getApplicablePlaquettes(Conf)

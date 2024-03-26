@@ -44,7 +44,7 @@ include("IO/saveHilbertSpace.jl")
 
 const GRB_ENV_REF = Ref{Gurobi.Env}()
 
-function __init__()
+function initGurobi()
     global GRB_ENV_REF
     GRB_ENV_REF[] = Gurobi.Env()
     return
