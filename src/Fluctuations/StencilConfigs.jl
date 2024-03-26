@@ -26,6 +26,8 @@ function SpinConfig(S::StencilSpinConfig)
     return SpinConfig(parent(S)./2, S.M/2)
 end
 
+allSpinsInBounds(S::StencilSpinConfig; kwargs...) = allSpinsInBounds(S,S.M; kwargs...)
+
 plotSpinConfig!(ax, S::StencilSpinConfig; kwargs...) = plotSpinConfig!(ax, SpinConfig(S); kwargs...)
 plotSpinConfig(S::StencilSpinConfig; kwargs...) = plotSpinConfig(SpinConfig(S); kwargs...)
 
@@ -43,7 +45,7 @@ plotSpinConfig(S::StencilSpinConfig; kwargs...) = plotSpinConfig(SpinConfig(S); 
     return SVector(S1, S2, S3, S4, S5, S6, S7, S8)
 end
 
-P1_STENCIL_temp = SVector(-1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0)
+const P1_STENCIL = Int8.(SVector(-2, -2, 2, 2, 2, 2, -2, -2))
 
 @inline Base.@propagate_inbounds function getPlaquetteSites(
     S::Stencils.StencilArray,
@@ -59,10 +61,11 @@ end
 
 function applyPlaquette!(Config,i,j,sgn)
     sites = Stencils.indices(Stencils.stencil(parent(Config)), CartesianIndex(i, j))
-    for (ij,s) in zip(sites,P1_STENCIL_temp)
+    for (ij,s) in zip(sites,P1_STENCIL)
         i,j = ij
-        Config[i,j] = sgn *s
+        Config[i,j] += sgn *s
     end
+    return Config
 end
 
 

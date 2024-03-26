@@ -79,15 +79,19 @@ function plaquetteIsInBounds(Conf::AbstractSpinConfig, iCenter::Integer, jCenter
     plaquetteIsInBounds(parent(Conf), iCenter, jCenter)
 end
 
-function allSpinsInBounds(Conf::AbstractSpinConfig; verbose = false)
-    for x in parent(Conf)
+function allSpinsInBounds(Conf,Spin; verbose = false)
+    for x in Conf
         isnan(x) && continue
-        if abs(x) > getSpin(Conf)
+        if abs(x) > Spin
             verbose && println("Spin larger than S")
             return false
         end
     end
     return true
+end
+
+function allSpinsInBounds(Conf::AbstractSpinConfig; verbose = false)
+    allSpinsInBounds(parent(Conf.Mat), getSpin(Conf); verbose)
 end
 
 """Assumes that constraint are only defined on every alternating site, starting from the first index"""
