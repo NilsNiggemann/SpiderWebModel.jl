@@ -16,7 +16,7 @@ Base.@propagate_inbounds @inline Base.setindex!(S::AbstractSpinConfig, x, i, j) 
 @inline Base.iterate(S::AbstractSpinConfig) = iterate(parent(S))
 
 @inline Base.size(S::AbstractSpinConfig) = size(parent(S))
-@inline Base.copy(S::AbstractSpinConfig) = SpinConfig(copy(parent(S)), getSpin(S))
+@inline Base.copy(S::SpinConfig) = SpinConfig(copy(parent(S)), getSpin(S))
 
 @inline function plaquetteIterator(S::AbstractMatrix)
     inboundsInds = Base.Iterators.product(axes(S, 1)[begin+1:end-1], axes(S, 2)[begin+1:end-1])
