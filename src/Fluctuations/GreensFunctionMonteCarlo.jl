@@ -31,6 +31,7 @@ function getMoves!(
     return moves
 end
 
+
 import StatsBase
 function performMarkovStep!(weights,moves,Config,weightfunc::T,Λ) where T
     empty!(weights)
@@ -59,7 +60,25 @@ function performMarkovStep!(weights,moves,Config,weightfunc::T,Λ) where T
 end
 
 function getLocalEnergy(weights,Λ)
-    return -sum(weight for weight in weights) + Λ # todo: correct if there is importance sampling
+    return -sum(weights) + Λ
+end
+
+
+function NPlaquettes(Conf)
+    moves = 0
+    for I in plaquetteIterator(Conf)
+        applPlus, applMinus = P_applicable(Conf, I)
+        moves += applPlus + applMinus
+    end
+    return moves
+end
+
+function VaritationalFunc(α,NPlaq::Integer)
+    return exp(α*NPlaq-20)
+end
+
+function VaritationalFunc(α)
+    return Conf -> VaritationalFunc(α,NPlaquettes(Conf))
 end
 
 function startSingleWalkerGFMC(InitialState,NSteps,weightfunc::T,Λ) where T
@@ -103,14 +122,13 @@ function precomputeNormalizedAccWeight(weights,nThermal,PMax)
     
     for p in 2:PMax
         # println("p = $p")
-        for n in p+1:lastindex(bn)-1
+        Threads.@threads for n in p+1:lastindex(bn)-1
             # Gnp[n,p] = Gnp[n,p-1]*bn[n-p]/meanweight
             Gnp[n,p] = Gnp[n,p-1]*Gnp[n-p,1]
         end
     end
     return Gnp
 end
-getAccumulatedWeight(weights,n) = cumprod(weights[n-j] for j in 1:n-1)
 
 function getEnergy(weights,localEnergies,p,nthermalization)
     Gn(n) = normalizedAccWeight(weights,n,p)
@@ -126,8 +144,8 @@ function getEnergies(weights,localEnergies,nthermalization,PMax)
     Gnp = precomputeNormalizedAccWeight(weights,nthermalization,PMax)
     EL_thermalized = @view localEnergies[nthermalization+1:end]
     N = lastindex(localEnergies)
-    num = [sum(Gnp[n,p]*EL_thermalized[n] for n in eachindex(EL_thermalized)) for p in 1:PMax]
-    denom = [sum(Gnp[n,p] for n in eachindex(EL_thermalized)) for p in 1:PMax]
+    num = fetch.([Threads.@spawn sum(Gnp[n,p]*EL_thermalized[n] for n in eachindex(EL_thermalized)) for p in 1:PMax])
+    denom = fetch.([Threads.@spawn sum(Gnp[n,p] for n in eachindex(EL_thermalized)) for p in 1:PMax])
 
     return num ./denom
 end
