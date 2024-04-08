@@ -32,11 +32,11 @@ function getMoves!(
 end
 
 import StatsBase
-function performMarkovStep!(weights,moves,Config,weightfunc::T) where T
+function performMarkovStep!(weights,moves,Config,weightfunc::T,Λ) where T
     empty!(weights)
     moves = getMoves!(moves,Config)
     ψₓ = weightfunc(Config)
-    
+
     for operator in moves
         i,j,opNum = operator
         applyPlaquette!(Config, i, j, opNum)
@@ -44,24 +44,28 @@ function performMarkovStep!(weights,moves,Config,weightfunc::T) where T
         push!(weights,ψₓ´/ψₓ)
         applyPlaquette!(Config, i, j, -opNum)
     end
+    push!(moves, (0,0,0))
+    push!(weights,Λ)
     # TotalWeight = sum(weights)
     if isempty(weights)
         @info "No moves available" 
     end
     moveidx = StatsBase.sample(StatsBase.Weights(weights))
     move = moves[moveidx]
-    applyPlaquette!(Config, move[1], move[2], move[3]) 
+    if move != (0,0,0)
+        applyPlaquette!(Config, move[1], move[2], move[3]) 
+    end
     return move,weights
 end
 
-function getLocalEnergy(weights)
-    return -sum(1/weight for weight in weights)
+function getLocalEnergy(weights,Λ)
+    return -sum(weight for weight in weights) + Λ # todo: correct if there is importance sampling
 end
 
-function startSingleWalkerGFMC(InitialState,NSteps,weightfunc::T) where T
+function startSingleWalkerGFMC(InitialState,NSteps,weightfunc::T,Λ) where T
     # Config = initialize_GFMC(InitialState)
     # Config = copy(InitialState)
-    Config = (InitialState)
+    Config = deepcopy(InitialState)
     weights = Float64[]
     Allmoves = fill((Int8(0),Int8(0),Int8(0)),NSteps)
     LocalMoves = empty(Allmoves)
@@ -69,13 +73,13 @@ function startSingleWalkerGFMC(InitialState,NSteps,weightfunc::T) where T
     TotalWeights = zeros(NSteps)
     
     for i in 1:NSteps
-        move,weights = performMarkovStep!(weights,LocalMoves,Config,weightfunc)
+        move,weights = performMarkovStep!(weights,LocalMoves,Config,weightfunc,Λ)
         bx_TotalWeight = sum(weights)
 
         TotalWeights[i] = bx_TotalWeight
         
         Allmoves[i] = move
-        energies[i] = getLocalEnergy(weights)
+        energies[i] = getLocalEnergy(weights,Λ)
         
     end
     return (;Allmoves,energies,TotalWeights)
@@ -84,21 +88,27 @@ end
 function normalizedAccWeight(weights,n,p)
     meanweight = mean(weights)
     # meanweight = 1
-    prod(weights[n-j+1]/meanweight for j in 1:min(p,n))
+    prod(weights[n-j]/meanweight for j in 1:p)
 end
 
-function precomputeNormalizedAccWeight(weights,nThermal)
-    meanweight = mean(weights)
+function precomputeNormalizedAccWeight(weights,nThermal,PMax)
     # meanweight = 1
-
-    return [
-        (cumprod( 
-            weights[nThermal-i]/meanweight for i in lastindex(weights)-j:lastindex(weights)
-        ))
-        # for j in 1:length(weights)-1
-        for j in 1:20
-    ]
-    # prod(weights[n-j]/meanweight for j in 0:p)
+    N = lastindex(weights)
+    bn = @view weights[nThermal:end]
+    # meanweight = mean(bn)
+    meanweight = mean(weights)
+    
+    Gnp = zeros(length(bn)-1,PMax)
+    Gnp[:,1] .= bn[begin+1:end] ./meanweight 
+    
+    for p in 2:PMax
+        # println("p = $p")
+        for n in p+1:lastindex(bn)-1
+            # Gnp[n,p] = Gnp[n,p-1]*bn[n-p]/meanweight
+            Gnp[n,p] = Gnp[n,p-1]*Gnp[n-p,1]
+        end
+    end
+    return Gnp
 end
 getAccumulatedWeight(weights,n) = cumprod(weights[n-j] for j in 1:n-1)
 
@@ -110,4 +120,14 @@ function getEnergy(weights,localEnergies,p,nthermalization)
     denom = sum(Gn(n) for n in nthermalization+1:N)
 
     return num/denom
+end
+
+function getEnergies(weights,localEnergies,nthermalization,PMax)
+    Gnp = precomputeNormalizedAccWeight(weights,nthermalization,PMax)
+    EL_thermalized = @view localEnergies[nthermalization+1:end]
+    N = lastindex(localEnergies)
+    num = [sum(Gnp[n,p]*EL_thermalized[n] for n in eachindex(EL_thermalized)) for p in 1:PMax]
+    denom = [sum(Gnp[n,p] for n in eachindex(EL_thermalized)) for p in 1:PMax]
+
+    return num ./denom
 end
