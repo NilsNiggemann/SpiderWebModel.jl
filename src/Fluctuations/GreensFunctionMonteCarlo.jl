@@ -115,41 +115,49 @@ function normalizedAccWeight(weights,n,p)
 end
 
 function precomputeNormalizedAccWeight(weights,nThermal,PMax)
-    # meanweight = 1
-    N = lastindex(weights)
     bn = @view weights[nThermal:end]
     # meanweight = mean(bn)
-    meanweight = mean(weights)
+    # meanweight = mean(weights)
+    meanweight = 1
     
-    Gnp = zeros(length(bn)-1,PMax)
-    Gnp[:,1] .= bn[begin+1:end] ./meanweight 
-    
+    Gnp = zeros(length(bn)-PMax,PMax)
+    # @views Gnp[:,1] .= bn[PMax+1:end] ./meanweight 
+    for n in axes(Gnp,1)
+        Gnp[n,1] = bn[n]/meanweight 
+    end
     for p in 2:PMax
         # println("p = $p")
-        Threads.@threads for n in p+1:lastindex(bn)-1
+        # Threads.@threads 
+        for n in axes(Gnp,1)[p:end]
             # Gnp[n,p] = Gnp[n,p-1]*bn[n-p]/meanweight
-            Gnp[n,p] = Gnp[n,p-1]*Gnp[n-p,1]
+            Gnp[n,p] = Gnp[n,p-1]*Gnp[n-p+1,1]
         end
     end
     return Gnp
 end
 
 function getEnergy(weights,localEnergies,p,nthermalization)
-    Gn(n) = normalizedAccWeight(weights,n,p)
-    # EL_thermalized = @view localEnergies[nthermalization+1:end]
-    N = lastindex(localEnergies)
-    num = sum(Gn(n)*localEnergies[n] for n in nthermalization+1:N)
-    denom = sum(Gn(n) for n in nthermalization+1:N)
-
+    meanweight = mean(weights)
+    num = 0.
+    denom = 0.
+    
+    for n in nthermalization:length(localEnergies)
+        Gnp = 1.
+        for j in 1:p
+            Gnp *= weights[n-j]/meanweight
+        end
+        num += Gnp*localEnergies[n]
+        denom += Gnp
+    end
     return num/denom
 end
 
 function getEnergies(weights,localEnergies,nthermalization,PMax)
     Gnp = precomputeNormalizedAccWeight(weights,nthermalization,PMax)
-    EL_thermalized = @view localEnergies[nthermalization+1:end]
+    EL_thermalized = @view localEnergies[nthermalization:end]
     N = lastindex(localEnergies)
-    num = fetch.([Threads.@spawn sum(Gnp[n,p]*EL_thermalized[n] for n in eachindex(EL_thermalized)) for p in 1:PMax])
-    denom = fetch.([Threads.@spawn sum(Gnp[n,p] for n in eachindex(EL_thermalized)) for p in 1:PMax])
+    num = fetch.([Threads.@spawn sum(Gnp[n,p]*EL_thermalized[n-p] for n in axes(Gnp,1)[p+1:end]) for p in 1:PMax])
+    denom = fetch.([Threads.@spawn sum(Gnp[n,p] for n in axes(Gnp,1)[p+1:end]) for p in 1:PMax])
 
     return num ./denom
 end
