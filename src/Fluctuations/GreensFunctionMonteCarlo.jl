@@ -73,12 +73,16 @@ function NPlaquettes(Conf)
     return moves
 end
 
-function VaritationalFunc(α,NPlaq::Integer)
-    return exp(α*NPlaq-20)
+function varitationalFunc(α,NPlaq::Integer,NPlaqEstimate)
+    return exp(α*(NPlaq-NPlaqEstimate))
 end
 
-function VaritationalFunc(α)
-    return Conf -> VaritationalFunc(α,NPlaquettes(Conf))
+function ConstructVaritationalFunc(α,ConfEx=nothing)
+    NPlaqEst = 0
+    if ConfEx !== nothing
+        NPlaqEst = NPlaquettes(ConfEx)
+    end
+    return Conf -> varitationalFunc(α,NPlaquettes(Conf),NPlaqEst)
 end
 
 function startSingleWalkerGFMC(InitialState,NSteps,weightfunc::T,Λ) where T
