@@ -134,8 +134,6 @@ end
 
 function iterateProjector!(Gnp_new,Gnp,Gn1,p)
     
-    # Gnp_new[1:p] .= zero(eltype(Gnp))
-
     for n in axes(Gnp,1)[p:end]
         Gnp_new[n] = Gnp[n]*Gn1[n-p+1]
     end
@@ -201,14 +199,19 @@ function getObservables(weights,localEnergies,Obs,nthermalization,PMax)
         iterateProjector!(Gnp_new,Gnp,Gn1,p)
         Gnp .= Gnp_new
 
-        en = 0.
-        obs = 0.
-        denom = 0.
+        en = zero(eltype(Gnp))
+        obs = zero(eltype(Gnp))
+        denom = zero(eltype(Gnp))
+
+        ObsOffset = p+p÷2
+
         for n in eachindex(Gnp)[p+1:end]
             en += Gnp[n]*EL_thermalized[n-p]
             denom += Gnp[n]
-            if n>p+1+p÷2
-                obs += Gnp[n]*Obs_thermalized[n-p-p÷2]
+            
+            if n > ObsOffset
+                n_minus_m = n-ObsOffset
+                obs += Gnp[n]*Obs_thermalized[n_minus_m]
             end
         end
 

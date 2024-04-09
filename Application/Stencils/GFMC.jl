@@ -44,12 +44,14 @@ with_theme(theme_SimpleTicks()) do
     fig
 end
 ##
-obs = SW.getObservables(results[1].TotalWeights,results[1].energies,results[1].energies,nThermal,100)
+
+@time obs = fetch.([Threads.@spawn SW.getObservables(res.TotalWeights,res.energies,res.energies,nThermal,150) for res in results[1:4]])
 ##
 with_theme(theme_SimpleTicks()) do
     fig = Figure(fontsize = 22)
     ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
-    scatter!(ax,obs.E0,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
+    en = mean(getfield.(obs,:E0))
+    scatter!(ax,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
     hlines!([E0],color = :red,label = L"exact $$")
     axislegend(ax)
     xlims!(ax,1,length(en))
