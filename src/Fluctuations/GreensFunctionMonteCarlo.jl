@@ -152,8 +152,8 @@ function getEnergies(weights,localEnergies,nthermalization,PMax)
     Gnp = precomputeNormalizedAccWeight(weights,nthermalization,PMax)
     EL_thermalized = @view localEnergies[nthermalization:end]
     N = lastindex(localEnergies)
-    num = fetch.([Threads.@spawn sum(Gnp[n,p]*EL_thermalized[n-p] for n in axes(Gnp,1)[p+1:end]) for p in 1:PMax])
-    denom = fetch.([Threads.@spawn sum(Gnp[n,p] for n in axes(Gnp,1)[p+1:end]) for p in 1:PMax])
+    num = fetch.([Threads.@spawn sum(Gnp[n+p,p]*EL_thermalized[n] for n in axes(Gnp,1)[begin:end-p]) for p in 1:PMax])
+    denom = fetch.([Threads.@spawn sum(Gnp[n+p,p] for n in axes(Gnp,1)[begin:end-p]) for p in 1:PMax])
 
     return num ./denom
 end
