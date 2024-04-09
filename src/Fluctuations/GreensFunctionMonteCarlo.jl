@@ -176,7 +176,7 @@ end
 
 function getObservables(weights,localEnergies,Obs,nthermalization,PMax)
     
-    Gn1 = setupProjector(weights,nthermalization)[begin:end-PMax]
+    Gn1 = setupProjector(weights,nthermalization)
     Gnp = zero(Gn1)
     Gnp_new = zero(Gn1)
     
@@ -203,15 +203,15 @@ function getObservables(weights,localEnergies,Obs,nthermalization,PMax)
         obs = zero(eltype(Gnp))
         denom = zero(eltype(Gnp))
 
-        ObsOffset = p+p÷2
+        ObsOffset = p÷2
 
-        for n in eachindex(Gnp)[p+1:end]
-            en += Gnp[n]*EL_thermalized[n-p]
-            denom += Gnp[n]
+        for n in eachindex(Gnp)[1:end-p]
+            en += Gnp[n+p]*EL_thermalized[n]
+            denom += Gnp[n+p]
             
             if n > ObsOffset
                 n_minus_m = n-ObsOffset
-                obs += Gnp[n]*Obs_thermalized[n_minus_m]
+                obs += Gnp[n+p]*Obs_thermalized[n_minus_m]
             end
         end
 
