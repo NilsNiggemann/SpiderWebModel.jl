@@ -116,18 +116,14 @@ end
 
 function precomputeNormalizedAccWeight(weights,nThermal,PMax)
     bn = @view weights[nThermal:end]
-    # meanweight = mean(bn)
+    meanweight = mean(bn)
     # meanweight = mean(weights)
-    meanweight = 1
     
     Gnp = zeros(length(bn)-PMax,PMax)
-    # @views Gnp[:,1] .= bn[PMax+1:end] ./meanweight 
     for n in axes(Gnp,1)
         Gnp[n,1] = bn[n]/meanweight 
     end
     for p in 2:PMax
-        # println("p = $p")
-        # Threads.@threads 
         for n in axes(Gnp,1)[p:end]
             # Gnp[n,p] = Gnp[n,p-1]*bn[n-p]/meanweight
             Gnp[n,p] = Gnp[n,p-1]*Gnp[n-p+1,1]
