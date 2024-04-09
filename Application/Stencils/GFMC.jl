@@ -26,6 +26,7 @@ results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+1500_000,SW
 ##
 ens = [SW.getEnergies(res.TotalWeights,res.energies,nThermal,150) for res in results]
 en = mean(ens)
+
 # en = SW.getEnergies(results[6].TotalWeights,results[6].energies,nThermal,150)
 # en = mean(
 #     fetch.([Threads.@spawn [SW.getEnergy(res.TotalWeights,res.energies,p,20_000) for p in 1:80] for res in results])
@@ -36,7 +37,6 @@ with_theme(theme_SimpleTicks()) do
     ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
     scatter!(ax,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
     errorbars!(ax,eachindex(en),en,sqrt.(var(ens)),whiskerwidth = 3.5,color = :black)
-    enmat = stack(ens)
     hlines!([E0],color = :red,label = L"exact $$")
     axislegend(ax)
     xlims!(ax,1,length(en))
@@ -44,3 +44,15 @@ with_theme(theme_SimpleTicks()) do
     fig
 end
 ##
+obs = SW.getObservables(results[1].TotalWeights,results[1].energies,results[1].energies,nThermal,100)
+##
+with_theme(theme_SimpleTicks()) do
+    fig = Figure(fontsize = 22)
+    ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
+    scatter!(ax,obs.E0,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
+    hlines!([E0],color = :red,label = L"exact $$")
+    axislegend(ax)
+    xlims!(ax,1,length(en))
+    ylims!(ax,E0-1e-2,E0+1e-1)
+    fig
+end

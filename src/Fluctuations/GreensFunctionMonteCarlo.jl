@@ -132,6 +132,17 @@ function precomputeNormalizedAccWeight(weights,nThermal,PMax)
     return Gnp
 end
 
+function iterateProjector!(Gnp_new,Gnp,Gn1,p)
+    
+    # Gnp_new[1:p] .= zero(eltype(Gnp))
+
+    for n in axes(Gnp,1)[p:end]
+        Gnp_new[n] = Gnp[n]*Gn1[n-p+1]
+    end
+    return Gnp_new
+end
+
+
 function getEnergy(weights,localEnergies,p,nthermalization)
     meanweight = mean(weights)
     num = 0.
@@ -154,6 +165,59 @@ function getEnergies(weights,localEnergies,nthermalization,PMax)
     N = lastindex(localEnergies)
     num = fetch.([Threads.@spawn sum(Gnp[n+p,p]*EL_thermalized[n] for n in axes(Gnp,1)[begin:end-p]) for p in 1:PMax])
     denom = fetch.([Threads.@spawn sum(Gnp[n+p,p] for n in axes(Gnp,1)[begin:end-p]) for p in 1:PMax])
-
     return num ./denom
+end
+
+
+function setupProjector(weights,nThermal)
+    bn = @view weights[nThermal:end]
+    meanweight = mean(bn)
+    Gn1 = bn./meanweight
+end
+
+
+function getObservables(weights,localEnergies,Obs,nthermalization,PMax)
+    
+    Gn1 = setupProjector(weights,nthermalization)[begin:end-PMax]
+    Gnp = zero(Gn1)
+    Gnp_new = zero(Gn1)
+    
+    EL_thermalized = @view localEnergies[nthermalization:end]
+    Obs_thermalized = @view Obs[nthermalization:end]
+    
+    Energy_num = zeros(PMax)
+    Obs_num = zeros(PMax)
+    Denom = zeros(PMax)
+    
+    Gnp .= Gn1
+    
+    Energy_num[1] = sum(Gn1[n+1]*EL_thermalized[n] for n in eachindex(Gn1)[1:end-1])
+    Obs_num[1] = sum(Gn1[n+1]*Obs_thermalized[n] for n in eachindex(Gn1)[1:end-1])
+
+    Denom[1] = sum(Gn1[n+1] for n in eachindex(Gnp)[1:end-1])
+
+
+    for p in 2:PMax
+        iterateProjector!(Gnp_new,Gnp,Gn1,p)
+        Gnp .= Gnp_new
+
+        en = 0.
+        obs = 0.
+        denom = 0.
+        for n in eachindex(Gnp)[p+1:end]
+            en += Gnp[n]*EL_thermalized[n-p]
+            denom += Gnp[n]
+            if n>p+1+p÷2
+                obs += Gnp[n]*Obs_thermalized[n-p-p÷2]
+            end
+        end
+
+        Energy_num[p] = en
+        Obs_num[p] = obs
+        Denom[p] = denom
+    end
+    E0 = Energy_num ./Denom
+    Obs = Obs_num ./Denom
+    
+    return (;E0,Obs)
 end
