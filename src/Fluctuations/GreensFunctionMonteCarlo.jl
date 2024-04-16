@@ -32,6 +32,7 @@ function getMoves!(
 end
 
 
+
 import StatsBase
 function performMarkovStep!(weights,moves,Config,weightfunc::T,Λ) where T
     empty!(weights)
@@ -87,7 +88,7 @@ end
 
 function startSingleWalkerGFMC(InitialState,NSteps,weightfunc::T,Λ) where T
     # Config = initialize_GFMC(InitialState)
-    # Config = copy(InitialState)
+    # Config = deepcopy(InitialState)
     Config = deepcopy(InitialState)
     weights = Float64[]
     Allmoves = fill((Int8(0),Int8(0),Int8(0)),NSteps)
@@ -174,24 +175,23 @@ function setupProjector(weights,nThermal)
 end
 
 
-function getObservables(weights,localEnergies,Obs,nthermalization,PMax)
+function getObservables(result,StartConf,ObsFunc,nthermalization,PMax)
+    
+    weights = result.TotalWeights
+    localEnergies = result.energies
     
     Gn1 = setupProjector(weights,nthermalization)
     Gnp = zero(Gn1)
     Gnp_new = zero(Gn1)
     
     EL_thermalized = @view localEnergies[nthermalization:end]
-    Obs_thermalized = @view Obs[nthermalization:end]
     
     Energy_num = zeros(PMax)
-    Obs_num = zeros(PMax)
     Denom = zeros(PMax)
     
     Gnp .= Gn1
     
     Energy_num[1] = sum(Gn1[n+1]*EL_thermalized[n] for n in eachindex(Gn1)[1:end-1])
-    Obs_num[1] = sum(Gn1[n+1]*Obs_thermalized[n] for n in eachindex(Gn1)[1:end-1])
-
     Denom[1] = sum(Gn1[n+1] for n in eachindex(Gnp)[1:end-1])
 
 
@@ -200,27 +200,129 @@ function getObservables(weights,localEnergies,Obs,nthermalization,PMax)
         Gnp .= Gnp_new
 
         en = zero(eltype(Gnp))
-        obs = zero(eltype(Gnp))
         denom = zero(eltype(Gnp))
-
-        ObsOffset = p÷2
 
         for n in eachindex(Gnp)[1:end-p]
             en += Gnp[n+p]*EL_thermalized[n]
             denom += Gnp[n+p]
-            
-            if n > ObsOffset
-                n_minus_m = n-ObsOffset
-                obs += Gnp[n+p]*Obs_thermalized[n_minus_m]
-            end
         end
 
         Energy_num[p] = en
-        Obs_num[p] = obs
         Denom[p] = denom
     end
+
+    Conf = copy(StartConf)
+    moves = result.Allmoves
+    for i in 1:nthermalization
+        i,j,type = moves[i]
+        type != 0 && applyPlaquette!(Conf, i,j,type)
+    end
+
+    Newmoves = @view moves[nthermalization+1:end]
+    
+    Obs_num = zero(ObsFunc(Conf))
+
+    for n in eachindex(Gnp)[PMax÷2+1:end-PMax]
+        i,j,type = Newmoves[n]
+        type != 0 && applyPlaquette!(Conf, i,j,type)
+
+        Obs_num .+= Gnp[n+PMax]*ObsFunc(Conf)
+    end
+    
     E0 = Energy_num ./Denom
-    Obs = Obs_num ./Denom
+    Obs = Obs_num /Denom[end]
     
     return (;E0,Obs)
 end
+
+
+function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,Λ) where T
+    Walkers = [deepcopy(InitialState) for _ in 1:Nwalkers]
+
+    bx_List = [Float64[] for _ in 1:Nwalkers] # List of weights for each walker at each step
+    
+    weights = ones(Nwalkers)
+
+    Allmoves = fill((Int8(0),Int8(0),Int8(0)),NSteps)
+    LocalMoves = [empty(Allmoves) for _ in 1:Nwalkers]
+    energies = zeros(NSteps)
+    TotalWeights = zeros(NSteps)
+    reconfigurationList = zeros(Int,Nwalkers)
+
+    for i in 1:NSteps
+        
+        # for (α,Config) in enumerate(Walkers)
+        Threads.@threads for α in eachindex(Walkers)
+            Config = Walkers[α]
+            moveList = LocalMoves[α]
+            weightList = bx_List[α]
+            
+            weights[α] = one(weights[α])
+
+            for step in 1:nBranch
+                move,weightList = performMarkovStep!(weightList,moveList,Config,weightfunc,Λ)
+                bx = sum(weightList)#/size(S,1)
+                weights[α] *= bx
+            end
+            # getWeightList!(weightList,moveList,Config,weightfunc)
+        end
+        
+        energies[i] = getLocalEnergyWalkers(weights,bx_List,Λ)
+
+
+        for (α,Config) in enumerate(Walkers)
+            newConfIndex = StatsBase.sample(StatsBase.Weights(weights))
+            reconfigurationList[α] = newConfIndex
+        end
+        # for (α,α´) in enumerate(reconfigurationList)
+        #     if α´ != α
+        #         Walkers[α] .= Walkers[α´]
+        #     end
+        # end
+        # if i > 100
+        #     return reconfigurationList,weights,Walkers
+        # end
+        wavg = mean(weights)
+        TotalWeights[i] = wavg
+        
+        # Allmoves[i] = move
+        
+    end
+    return (;Allmoves,energies,TotalWeights)
+end
+
+function getWeightList!(weights,moves,Config,weightfunc::T) where T
+    empty!(weights)
+    moves = getMoves!(moves,Config)
+    ψₓ = weightfunc(Config)
+
+    for operator in moves
+        i,j,opNum = operator
+        applyPlaquette!(Config, i, j, opNum)
+        ψₓ´ = weightfunc(Config)
+        push!(weights,ψₓ´/ψₓ)
+        applyPlaquette!(Config, i, j, -opNum)
+    end
+    return weights
+end
+
+function getLocalEnergyWalkers(weights,bx_List,Λ)
+    Nw = length(weights)
+    num = 0.
+    denom = 0.
+
+    for α in eachindex(weights)
+        num += weights[α]*getLocalEnergy(bx_List[α],Λ)
+        denom += weights[α]
+    end
+    return num/denom
+end
+# function getLocalEnergyWalkers(weights,bx_List,Λ)
+#     Nw = length(weights)
+#     num = 0.
+
+#     for α in eachindex(weights)
+#         num += getLocalEnergy(bx_List[α],Λ)
+#     end
+#     return num/Nw
+# end
