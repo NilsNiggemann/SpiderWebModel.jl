@@ -36,18 +36,9 @@ end
 import StatsBase
 function performMarkovStep!(weights,moves,Config,weightfunc::T,Λ) where T
     empty!(weights)
-    moves = getMoves!(moves,Config)
-    ψₓ = weightfunc(Config)
+    # moves = getMoves!(moves,Config)
+    weights = getWeightList!(weights,moves,Config,weightfunc,Λ)
 
-    for operator in moves
-        i,j,opNum = operator
-        applyPlaquette!(Config, i, j, opNum)
-        ψₓ´ = weightfunc(Config)
-        push!(weights,ψₓ´/ψₓ)
-        applyPlaquette!(Config, i, j, -opNum)
-    end
-    push!(moves, (0,0,0))
-    push!(weights,Λ)
     # TotalWeight = sum(weights)
     if isempty(weights)
         @info "No moves available" 
@@ -58,6 +49,26 @@ function performMarkovStep!(weights,moves,Config,weightfunc::T,Λ) where T
         applyPlaquette!(Config, move[1], move[2], move[3]) 
     end
     return move,weights
+end
+
+
+function getWeightList!(weights,moves,Config,weightfunc::T,Λ) where T
+    empty!(weights)
+    moves = getMoves!(moves,Config)
+    ψₓ = weightfunc(Config)
+
+    for operator in moves
+        i,j,opNum = operator
+        applyPlaquette!(Config, i, j, opNum)
+        ψₓ´ = weightfunc(Config)
+        push!(weights,ψₓ´/ψₓ)
+        applyPlaquette!(Config, i, j, -opNum)
+    end
+    if Λ != 0
+        push!(moves, (0,0,0))
+        push!(weights,Λ)
+    end
+    return weights
 end
 
 function getLocalEnergy(weights,Λ)
@@ -83,7 +94,10 @@ function ConstructVaritationalFunc(α,ConfEx=nothing)
     if ConfEx !== nothing
         NPlaqEst = NPlaquettes(ConfEx)
     end
-    return Conf -> varitationalFunc(α,NPlaquettes(Conf),NPlaqEst)
+    ψ = let α = α, NPlaqEst = NPlaqEst
+        Conf -> varitationalFunc(α,NPlaquettes(Conf),NPlaqEst)
+    end
+    # return Conf -> varitationalFunc(α,NPlaquettes(Conf),NPlaqEst)
 end
 
 function startSingleWalkerGFMC(InitialState,NSteps,weightfunc::T,Λ) where T
@@ -98,11 +112,13 @@ function startSingleWalkerGFMC(InitialState,NSteps,weightfunc::T,Λ) where T
     
     for i in 1:NSteps
         move,weights = performMarkovStep!(weights,LocalMoves,Config,weightfunc,Λ)
+        
         bx_TotalWeight = sum(weights)
-
+        
         TotalWeights[i] = bx_TotalWeight
         
         Allmoves[i] = move
+        getWeightList!(weights,LocalMoves,Config,weightfunc,Λ)
         energies[i] = getLocalEnergy(weights,Λ)
         
     end
@@ -120,18 +136,19 @@ function precomputeNormalizedAccWeight(weights,nThermal,PMax)
     meanweight = mean(bn)
     # meanweight = mean(weights)
     
-    Gnp = zeros(length(bn)-PMax,PMax)
+    Gnp = zeros(length(bn),PMax)
     for n in axes(Gnp,1)
         Gnp[n,1] = bn[n]/meanweight 
     end
     for p in 2:PMax
-        for n in axes(Gnp,1)[p:end]
+        for n in p:length(bn)
             # Gnp[n,p] = Gnp[n,p-1]*bn[n-p]/meanweight
-            Gnp[n,p] = Gnp[n,p-1]*Gnp[n-p+1,1]
+            Gnp[n,p] = Gnp[n-1,p-1]*Gnp[n,1]
         end
     end
     return Gnp
 end
+
 
 function iterateProjector!(Gnp_new,Gnp,Gn1,p)
     
@@ -161,9 +178,17 @@ end
 function getEnergies(weights,localEnergies,nthermalization,PMax)
     Gnp = precomputeNormalizedAccWeight(weights,nthermalization,PMax)
     EL_thermalized = @view localEnergies[nthermalization:end]
-    N = lastindex(localEnergies)
-    num = fetch.([Threads.@spawn sum(Gnp[n+p,p]*EL_thermalized[n] for n in axes(Gnp,1)[begin:end-p]) for p in 1:PMax])
-    denom = fetch.([Threads.@spawn sum(Gnp[n+p,p] for n in axes(Gnp,1)[begin:end-p]) for p in 1:PMax])
+    N = lastindex(EL_thermalized)
+    num = zeros(PMax)
+    denom = zeros(PMax)
+    for p in 1:PMax
+        for n in p:N
+            num[p] += Gnp[n,p]*EL_thermalized[n]
+            denom[p] += Gnp[n,p]
+        end
+    end
+    # num = fetch.([Threads.@spawn sum(Gnp[n+p,p]*EL_thermalized[n] for n in axes(Gnp,1)[begin:end-p]) for p in 1:PMax])
+    # denom = fetch.([Threads.@spawn sum(Gnp[n+p,p] for n in axes(Gnp,1)[begin:end-p]) for p in 1:PMax])
     return num ./denom
 end
 
@@ -235,55 +260,65 @@ function getObservables(result,StartConf,ObsFunc,nthermalization,PMax)
     return (;E0,Obs)
 end
 
+function splitIntoBins(array,binsize)
+    Iterators.partition(array,binsize)
+end
 
-function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,Λ) where T
+function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,nThermal,weightfunc::T,Λ) where T
     Walkers = [deepcopy(InitialState) for _ in 1:Nwalkers]
+    # NewWalkers = [deepcopy(InitialState) for _ in 1:Nwalkers]
 
     bx_List = [Float64[] for _ in 1:Nwalkers] # List of weights for each walker at each step
     
     weights = ones(Nwalkers)
-
     Allmoves = fill((Int8(0),Int8(0),Int8(0)),NSteps)
     LocalMoves = [empty(Allmoves) for _ in 1:Nwalkers]
     energies = zeros(NSteps)
     TotalWeights = zeros(NSteps)
     reconfigurationList = zeros(Int,Nwalkers)
 
+    Threads.@threads for α in eachindex(Walkers)
+        Config = Walkers[α]
+        moveList = LocalMoves[α]
+        weightList = bx_List[α]
+        for i in 1:nThermal
+            move,weightList = performMarkovStep!(weightList,moveList,Config,weightfunc,Λ)
+        end
+
+    end
     for i in 1:NSteps
-        
         # for (α,Config) in enumerate(Walkers)
         Threads.@threads for α in eachindex(Walkers)
             Config = Walkers[α]
             moveList = LocalMoves[α]
             weightList = bx_List[α]
             
-            weights[α] = one(weights[α])
-
+            # weights[α] = one(weights[α])
+            w = 1
             for step in 1:nBranch
                 move,weightList = performMarkovStep!(weightList,moveList,Config,weightfunc,Λ)
-                bx = sum(weightList)#/size(S,1)
-                weights[α] *= bx
+                # getWeightList!(weightList,moveList,Config,weightfunc,Λ)
+                bx = sum(weightList)#/size(Config,1)
+                w *= bx
             end
-            # getWeightList!(weightList,moveList,Config,weightfunc)
+            weights[α] = w
         end
-        
-        energies[i] = getLocalEnergyWalkers(weights,bx_List,Λ)
 
-
-        for (α,Config) in enumerate(Walkers)
-            newConfIndex = StatsBase.sample(StatsBase.Weights(weights))
-            reconfigurationList[α] = newConfIndex
-        end
-        # for (α,α´) in enumerate(reconfigurationList)
-        #     if α´ != α
-        #         Walkers[α] .= Walkers[α´]
-        #     end
-        # end
-        # if i > 100
-        #     return reconfigurationList,weights,Walkers
-        # end
+        # weights[2:end] .= 0
+        # energies[i] = getLocalEnergy(bx_List[1],Λ)
         wavg = mean(weights)
         TotalWeights[i] = wavg
+        # push!(AllConfs,deepcopy(Walkers[1]))
+        
+        reconfiguration!(Walkers,reconfigurationList,weights)
+        for α in eachindex(Walkers)
+            Config = Walkers[α]
+            moveList = LocalMoves[α]
+            weightList = bx_List[α]
+            getWeightList!(weightList,moveList,Config,weightfunc,Λ)
+        end
+        energies[i] = getLocalEnergyWalkers(weights,bx_List,Λ)
+
         
         # Allmoves[i] = move
         
@@ -291,38 +326,82 @@ function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,
     return (;Allmoves,energies,TotalWeights)
 end
 
-function getWeightList!(weights,moves,Config,weightfunc::T) where T
-    empty!(weights)
-    moves = getMoves!(moves,Config)
-    ψₓ = weightfunc(Config)
+# function reconfiguration!(Walkers,weights)
+#     totw = sum(weights)
+#     newWalkers = empty(Walkers)
+#     for α in eachindex(Walkers)
+#         choice = rand()*totw
+#         for α´ in eachindex(Walkers)
+#             choice -= weights[α´]
+#             if choice < 0
+#                 push!(newWalkers,deepcopy(Walkers[α´]))
+#                 break
+#             end
+#         end
+#     end
+#     @assert length(newWalkers) == length(Walkers)
+#     Walkers .= newWalkers
+# end
 
-    for operator in moves
-        i,j,opNum = operator
-        applyPlaquette!(Config, i, j, opNum)
-        ψₓ´ = weightfunc(Config)
-        push!(weights,ψₓ´/ψₓ)
-        applyPlaquette!(Config, i, j, -opNum)
+function reconfiguration!(Walkers,reconfigurationList,weights)
+    StatsBase.sample!(eachindex(Walkers),StatsBase.Weights(weights),reconfigurationList,ordered = true)
+    minimizeReconfiguration!(reconfigurationList)
+    for (α,α´) in enumerate(reconfigurationList)
+        if α´ != α
+            Walkers[α] .= Walkers[α´]
+        end
     end
-    return weights
 end
-
-function getLocalEnergyWalkers(weights,bx_List,Λ)
-    Nw = length(weights)
-    num = 0.
-    denom = 0.
-
-    for α in eachindex(weights)
-        num += weights[α]*getLocalEnergy(bx_List[α],Λ)
-        denom += weights[α]
-    end
-    return num/denom
-end
+# function reconfiguration!(Walkers,reconfigurationList,weights)
+#     zα = [(α + rand()-1)/length(Walkers) for α in eachindex(Walkers)]
+#     weightsectors = cumsum(weights) 
+#     wTotal = sum(weights)
+#     weightsectors ./= wTotal
+#     for α in eachindex(Walkers)
+#         z = zα[α]
+#         α´ = searchsortedfirst(weightsectors,z)
+#         reconfigurationList[α] = α´
+#     end
+#     # StatsBase.sample!(eachindex(Walkers),StatsBase.Weights(weights),reconfigurationList,ordered = true)
+#     minimizeReconfiguration!(reconfigurationList)
+#     for (α,α´) in enumerate(reconfigurationList)
+#         if α´ != α
+#             Walkers[α] .= Walkers[α´]
+#         end
+#     end
+# end
 # function getLocalEnergyWalkers(weights,bx_List,Λ)
 #     Nw = length(weights)
 #     num = 0.
+#     denom = 0.
 
-#     for α in eachindex(weights)
-#         num += getLocalEnergy(bx_List[α],Λ)
+#     for α in eachindex(weights,bx_List)
+#         eloc = Λ - sum(bx_List[α])
+#         num += weights[α]*eloc
+#         denom += weights[α]
 #     end
-#     return num/Nw
+
+#     return num/denom
 # end
+function getLocalEnergyWalkers(weights,bx_List,Λ)
+    Nw = length(weights)
+    num = 0.
+
+    for α in eachindex(weights)
+        num += getLocalEnergy(bx_List[α],Λ)
+    end
+    return num/Nw
+end
+
+"""given a sorted list reconfiguration indices, minimizes the number of reconfigurations by swapping elements in the list. Each walker that survives a reconfiguration step remains unchanged while walkers that are killed get assigned to a new index."""
+function minimizeReconfiguration!(list)
+    for i in eachindex(list)
+        jRange = searchsorted(list,i)
+        if length(jRange) != 0
+            li = list[i]
+            list[i] = i
+            list[jRange[1]] = li
+        end
+    end
+    return list
+end
