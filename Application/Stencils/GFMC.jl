@@ -103,34 +103,41 @@ end
 #     return (;energies,TotalWeights)
 # end
 ##
-nThermal = 4_000
+nThermal = 2_000
 # SW.Random.seed!(12345)
 # results = [SW.startManyWalkerGFMC(S,2,55_000,3,nThermal,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:35]
-results = [SW.startManyWalkerGFMC(S,4,1_000_000÷4,4,nThermal,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:12]
-# @time results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+1000_000,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:24])
+nBra = 5
+@time results = [SW.startManyWalkerGFMC(S,4,nThermal+1200_000÷nBra,nBra,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:6]
+# nBra = 1
+# @time results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+1200_000,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:6*4])
 
 ##
-# @time obs = [SW.getObservables(res,S,float,1,100) for res in results]
-ens = [SW.getEnergies(res.TotalWeights,res.energies,nThermal,100) for res in results]
+@time obs = [SW.getObservables(res,S,float,1,150 ÷nBra) for res in results]
+# ens = [SW.getEnergies(res.TotalWeights,res.energies,nThermal,150÷nBra) for res in results]
 # binnedData = binningDataEstimates(results,100nThermal)
 # @time ens = fetch.([Threads.@spawn SW.getEnergies(binnedData.TotalWeights[i],binnedData.energies[i],1,100) for i in eachindex(binnedData.TotalWeights)])
-# locEn = collect(SW.splitIntoBins(results[1].energies,100000))
-# locW = collect(SW.splitIntoBins(results[1].TotalWeights,100000))
-# @time ens = fetch.([Threads.@spawn SW.getEnergies(locW[i],locEn[i],1,100) for i in eachindex(locEn)])
+# locEn = collect(SW.splitIntoBins(results[1].energies[100:end],10_000))
+# locW = collect(SW.splitIntoBins(results[1].TotalWeights[100:end],10_000))
+# for res in results[2:end]
+#     append!(locEn,collect(SW.splitIntoBins(res.energies[10000:end],10_000)))
+#     append!(locW,collect(SW.splitIntoBins(res.TotalWeights[10000:end],10_000)))
+# end
+# @time ens = fetch.([Threads.@spawn SW.getEnergies(locW[i],locEn[i],1,150÷nBra) for i in eachindex(locEn)])
 en = mean(ens)
 ##
 with_theme(theme_SimpleTicks()) do
     fig = Figure(fontsize = 22)
     ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
-    # ens = getfield.(obs,:E0)
-    # en = mean(ens)
+    ens = getfield.(obs,:E0)
+    en = mean(ens)
     err = sqrt.(var(ens))
-    scatter!(ax,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
-    errorbars!(ax,eachindex(en),en,err,whiskerwidth = 3.5,color = :black)
+    proj = nBra .*eachindex(en)
+    scatter!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
+    errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black)
     hlines!([E0],color = :red,label = L"exact $$")
     axislegend(ax,merge=true)
-    xlims!(ax,0.5,length(en))
-    ylims!(ax,E0-1e-2,E0+1e-1)
+    xlims!(ax,0.5,last(proj))
+    ylims!(ax,E0-1e-2,E0+3e-2)
     # save("Application/exactFig/GFMCEnergy.png",fig)
     fig
 end
