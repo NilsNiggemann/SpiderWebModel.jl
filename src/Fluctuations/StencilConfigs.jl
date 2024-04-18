@@ -4,7 +4,7 @@ struct StencilSpinConfig{T,MatType<:AbstractMatrix{T}} <: AbstractSpinConfig{T}
 end
 @inline Base.parent(S::StencilSpinConfig) = S.Mat
 @inline getSpin(S::StencilSpinConfig) = S.M/2
-@inline Base.copy(S::StencilSpinConfig) = stencilConfig(copy(parent(S)), S.M)
+@inline Base.copy(S::StencilSpinConfig) = stencilConfig(copy(S.Mat), S.M/2)
 
 function stencilConfig(A::AbstractMatrix{<:AbstractFloat}, S,paddingValue = Int8(typemax(Int8)); kwargs...)
     return stencilConfig(Int8.(2 .*A), S,paddingValue; kwargs...)
@@ -60,7 +60,7 @@ end
 @inline Base.@propagate_inbounds getPlaquetteSites(S::StencilSpinConfig, i::Int, j::Int) =
     getPlaquetteSites(parent(S), i, j)
 
-function applyPlaquette!(Config,i,j,sgn)
+Base.@propagate_inbounds function applyPlaquette!(Config,i,j,sgn)
     sites = Stencils.indices(Stencils.stencil(parent(Config)), CartesianIndex(i, j))
     for (ij,s) in zip(sites,P1_STENCIL)
         i,j = ij
@@ -71,7 +71,7 @@ end
 
 
 """returns a tuple of two booleans, corresponding to the applicability of P and P⁺. M=2S is an integer"""
-@inline function P_applicable(Pij::Union{SVector{8},Stencils.Moore}, M::Integer)
+@inline Base.@propagate_inbounds function P_applicable(Pij::Union{SVector{8},Stencils.Moore}, M::Integer)
     S1, S2, S3, S4, S5, S6, S7, S8 = Pij
     v = (S1, -S2, -S3, S4, S5, -S6, -S7, S8)
 
@@ -80,12 +80,12 @@ end
     return p, pdagger
 end
 
-@inline function P_applicable(S::StencilSpinConfig, i::Int, j::Int)
+@inline Base.@propagate_inbounds function P_applicable(S::StencilSpinConfig, i::Int, j::Int)
     Pij = getPlaquetteSites(S, i, j)
     P_applicable(Pij, S.M)
 end
 
-@inline P_applicable(S::StencilSpinConfig, I::Union{<:NTuple{2},<:CartesianIndex{2}}) =
+@inline Base.@propagate_inbounds P_applicable(S::StencilSpinConfig, I::Union{<:NTuple{2},<:CartesianIndex{2}}) =
     P_applicable(S, I[1], I[2])
 
 function getApplicablePlaquettes_separated!(
