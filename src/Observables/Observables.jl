@@ -95,8 +95,12 @@ function getSij(Configs::AbstractVector{<:SpinConfig})
     ])
 end
 
-function getMagnetization(AllStates, eigen)
+function getMagnetization(AllStates, eigen::AbstractMatrix)
     ψ0 = eigen.vectors[:, 1]
+    return getMagnetization(AllStates, ψ0)
+end
+
+function getMagnetization(AllStates, ψ0::AbstractVector)
     mag = zeros(AllStates |> first |> size)
     for n in eachindex(ψ0)
         Si = AllStates[n]

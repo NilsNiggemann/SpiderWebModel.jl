@@ -96,8 +96,8 @@ end
 nThermal = 2_000
 SW.Random.seed!(1234)
 # results = [SW.startManyWalkerGFMC(S,2,55_000,3,nThermal,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:35]
-nBra = 1
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,1,nThermal+600_000÷nBra,nBra,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:12])
+nBra = 3
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,16,nThermal+400_000÷nBra,nBra,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:32])
 ##
 # nBra = 1
 # @time results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+1200_000,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:6*4])
@@ -215,27 +215,63 @@ getEJackKnife(results[1].TotalWeights[nThermal:end],results[1].energies[nThermal
 #___________Observables_______________________
 ##
 # getAvgMag(Conf) = sum(Conf) ./ (2*length(Conf))
-function getMag(results,pmax)
+function getMag(results,pmax,I)
+    # I = CartesianIndex(I)
     Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights[nThermal:end],1,pmax) for res in results]
 
-    getAvgMag(Conf) = Conf[4,7] /2
+    getMag(Conf) = Conf[I] /2
 
-    getObs(p) = [SW.getObs(Gnp[:,p],res.SaveConfigs[nThermal:end],res.reconfTable[:,nThermal:end],getAvgMag,p÷2) for (res,Gnp) in zip(results,Gnps)]
+    @views getObs(p) = [SW.getObs(Gnp[:,1:p],res.SaveConfigs[nThermal:end],res.reconfTable[:,nThermal:end],getMag,p÷2) for (res,Gnp) in zip(results,Gnps)]
     obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
+##
+mags1 = getMag(results,100÷nBra,CartesianIndex(3,3)) 
+mags2 = getMag(results,100÷nBra,CartesianIndex(4,1)) 
+mags3 = getMag(results,100÷nBra,CartesianIndex(2,3)) 
 
-mags = getMag(results,100÷nBra) 
+##
+
+function errorBarLegend(size = 0.5;linekwargs = (;),markerkwargs = (;))
+    center = 0.5
+    ymin = center - size/2
+    ymax = center + size/2
+
+    errorbar = [Point2f(center, ymin), Point2f(center, ymax)]
+    [
+        LineElement(linepoints = errorbar),
+        MarkerElement(points = errorbar, marker = :hline, markersize = 10;linekwargs...),
+        MarkerElement(points = [Point2f(center, center),], marker = '●', markersize = 7;markerkwargs...)
+    ]
+end
 
 with_theme(theme_SimpleTicks()) do
     fig = Figure(fontsize = 22)
-    ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
+    ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"magnetization $$",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
     proj = nBra .*eachindex(mags)
-    m = mean.(mags)
-    scatter!(ax,proj,m,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
-    err = sqrt.(var.(mags))
-    errorbars!(ax,proj,m,err,whiskerwidth = 3.5,color = :black)
-    hlines!([magEx[4,7]],color = :red,label = L"exact $$")
-    axislegend(ax,merge=true)
+    
+    Cols = (:blue,:green,:orange)
+    Is = ((3,3),(4,1),(2,3))
+    for (i,mags) in enumerate((mags1,mags2,mags3))
+        mExact = magEx[Is[i]...]
+
+        sgn = sign(mExact)
+        m =  sgn .* mean.(mags)
+        scatter!(ax,proj,m,label = L"GFMC$$",color = Cols[i], marker = '●',markersize = 5)
+        err =sqrt.(var.(mags))
+        errorbars!(ax,proj,m,err,whiskerwidth = 3.5,color = Cols[i])
+        
+        hlines!([sgn * mExact],color = Cols[i],label = L"exact $$")
+        sgstring = sgn > 0 ? "" : "-"
+        text!(ax,(proj[end÷2],mExact-0.015),color = Cols[i],text = L"%$sgstring \langle S_{%$(Is[i])}\rangle")
+    end
+
+    Legend(fig[1, 1], [[
+        errorBarLegend(0.6)
+    ],
+    [LineElement(linepoints = [Point2f(0., 0.5), Point2f(1, 0.5)])]], [L"GFMC$$",L"exact $$"], tellheight = false, tellwidth = false,halign = :right, valign = :center,margin = (10,10,200,10))
+
+
+    # axislegend(ax,merge=true,position = :rc,unique=true)
     # xlims!(ax,0.5,last(proj))
     # ylims!(ax,E0-1e-2,E0+3e-2)
     # save("Application/exactFig/GFMCEnergy.png",fig)
