@@ -244,7 +244,7 @@ function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m=size(Gnp,2)÷2)
         for α in 1:Nw
             α´ = α
             for i_m in 1:m
-                α´ = reconfigurationTable[α´,n-m]
+                α´ = reconfigurationTable[α´,n-i_m]
             end
             num += Gn*ObsFunc(AllConfigs[n-m][α´])
         end
@@ -252,13 +252,6 @@ function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m=size(Gnp,2)÷2)
     return num/denom
 end
 
-function remapWalker(index,reconfigurationTable,n,m)
-    α = index
-    for i in 1:m
-        α = reconfigurationTable[α,n-m]
-    end
-    return α
-end
 
 function getObservablesOld(result,StartConf,ObsFunc,nthermalization,PMax)
     
