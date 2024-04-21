@@ -51,6 +51,14 @@ function performMarkovStep!(weights,moves,Config,weightfunc::T,Λ) where T
     return move,weights
 end
 
+# function findAffectedPlaquettes!(plaqs,Config,i,j)
+#     for I in plaquetteIterator(Config)
+#         if !plaquettesAreSeparated(I,(i,j))
+#             push!(plaqs,CartesianIndex(I))
+#         end
+#     end
+#     return plaqs
+# end
 
 function getWeightList!(weights,moves,Config,weightfunc::T,Λ) where T
     empty!(weights)
@@ -79,7 +87,7 @@ end
 function NPlaquettes(Conf)
     moves = 0
     for I in plaquetteIterator(Conf)
-        applPlus, applMinus = P_applicable(Conf, I)
+        @inbounds applPlus, applMinus = P_applicable(Conf, I)
         moves += applPlus + applMinus
     end
     return moves
@@ -102,8 +110,8 @@ end
 
 function startSingleWalkerGFMC(InitialState,NSteps,weightfunc::T,Λ) where T
     # Config = initialize_GFMC(InitialState)
-    # Config = deepcopy(InitialState)
-    Config = deepcopy(InitialState)
+    # Config = copy(InitialState)
+    Config = copy(InitialState)
     weights = Float64[]
     Allmoves = fill((Int8(0),Int8(0),Int8(0)),NSteps)
     LocalMoves = empty(Allmoves)
@@ -175,8 +183,10 @@ function getEnergy(weights,localEnergies,p,nthermalization)
     return num/denom
 end
 
-function getEnergies(weights,localEnergies,nthermalization,PMax)
+function getEnergies(weights,localEnergies,nthermalization,PMax;
     Gnp = precomputeNormalizedAccWeight(weights,nthermalization,PMax)
+    )
+    
     EL_thermalized = @view localEnergies[nthermalization:end]
     N = lastindex(EL_thermalized)
     num = zeros(PMax)
@@ -200,7 +210,57 @@ function setupProjector(weights,nThermal)
 end
 
 
-function getObservables(result,StartConf,ObsFunc,nthermalization,PMax)
+function computeGnpForward(weights,p,N=0)
+    meanweight = mean(weights)
+    # meanweight = mean(weights)
+    
+    Gnp = zeros(length(weights),p+N)
+
+    for n in axes(Gnp,1)
+        Gnp[n,1] = weights[n]/meanweight 
+    end
+    for p in 2:PMax
+        for n in p:length(weights)
+            # Gnp[n,p] = Gnp[n,p-1]*weights[n-p]/meanweight
+            Gnp[n,p] = Gnp[n-1,p-1]*Gnp[n+N,1]*Gnp[n-p+1,1]
+        end
+    end
+    return Gnp
+end
+
+
+function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m=size(Gnp,2)÷2)
+    N = lastindex(AllConfigs)
+    Obs = ObsFunc(AllConfigs[1][1])
+    num = zero(typeof(Obs))
+    denom = zero(typeof(Obs))
+    # fill!(Obs,zero(eltype(Obs)))
+
+    Nw = size(reconfigurationTable,1)
+    p = size(Gnp,2)
+    for n in m+1:N
+        Gn = Gnp[n,p]
+        denom += Gn*Nw
+        for α in 1:Nw
+            α´ = α
+            for i_m in 1:m
+                α´ = reconfigurationTable[α´,n-m]
+            end
+            num += Gn*ObsFunc(AllConfigs[n-m][α´])
+        end
+    end
+    return num/denom
+end
+
+function remapWalker(index,reconfigurationTable,n,m)
+    α = index
+    for i in 1:m
+        α = reconfigurationTable[α,n-m]
+    end
+    return α
+end
+
+function getObservablesOld(result,StartConf,ObsFunc,nthermalization,PMax)
     
     weights = result.TotalWeights
     localEnergies = result.energies
@@ -257,21 +317,23 @@ function splitIntoBins(array,binsize)
 end
 
 function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,Λ) where T
-    Walkers = [deepcopy(InitialState) for _ in 1:Nwalkers]
-    # NewWalkers = [deepcopy(InitialState) for _ in 1:Nwalkers]
+    Walkers = [copy(InitialState) for _ in 1:Nwalkers]
 
     bx_List = [Float64[] for _ in 1:Nwalkers] # List of weights for each walker at each step
     
     weights = ones(Nwalkers)
-    Allmoves = fill((Int8(0),Int8(0),Int8(0)),NSteps)
-    LocalMoves = [empty(Allmoves) for _ in 1:Nwalkers]
+    SaveConfigs = Vector{Vector{typeof(InitialState)}}()
+
+    LocalMoves = [ Vector{Tuple{Int8,Int8,Int8}}() for _ in 1:Nwalkers]
     energies = zeros(NSteps)
     TotalWeights = zeros(NSteps)
     reconfigurationList = zeros(Int,Nwalkers)
 
+    reconfTable = zeros(Int,Nwalkers,NSteps)
+
     for i in 1:NSteps
-        for (α,Config) in enumerate(Walkers)
-        # Threads.@threads for α in eachindex(Walkers)
+        # for (α,Config) in enumerate(Walkers)
+         for α in eachindex(Walkers)
             Config = Walkers[α]
             moveList = LocalMoves[α]
             weightList = bx_List[α]
@@ -280,7 +342,7 @@ function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,
             w = 1
             for step in 1:nBranch
                 move,weightList = performMarkovStep!(weightList,moveList,Config,weightfunc,Λ)
-                bx = sum(weightList)#/size(Config,1)
+                bx = sum(weightList)/size(Config,1)
                 w *= bx
             end
             weights[α] = w
@@ -289,11 +351,23 @@ function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,
         energies[i] = getLocalEnergyWalkers_before(weights,bx_List,Λ)
 
         TotalWeights[i] = mean(weights)
-        
         reconfiguration!(Walkers,reconfigurationList,weights)
-        
+        reconfTable[:,i] .= reconfigurationList
+
+        SaveWalkers = empty(Walkers)
+        # for (α,α´) in enumerate(reconfigurationList)
+        #     if α == α´ # convention: surviving walkers always remain a copy at their index
+        #         push!(SaveWalkers,copy(Walkers[α]))
+        #     end
+        # end
+
+        for Walker in Walkers
+            push!(SaveWalkers,copy(Walker))
+        end
+
+        push!(SaveConfigs,SaveWalkers)
     end
-    return (;Allmoves,energies,TotalWeights)
+    return (;TotalWeights, energies, SaveConfigs,reconfTable)
 end
 
 function reconfiguration!(Walkers,reconfigurationList,weights)
