@@ -97,7 +97,7 @@ nThermal = 2_000
 SW.Random.seed!(1234)
 # results = [SW.startManyWalkerGFMC(S,2,55_000,3,nThermal,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:35]
 nBra = 3
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,16,nThermal+400_000÷nBra,nBra,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:32])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,12,nThermal+400_000÷nBra,nBra,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:12])
 ##
 # nBra = 1
 # @time results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+1200_000,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:6*4])
@@ -215,7 +215,7 @@ getEJackKnife(results[1].TotalWeights[nThermal:end],results[1].energies[nThermal
 #___________Observables_______________________
 ##
 # getAvgMag(Conf) = sum(Conf) ./ (2*length(Conf))
-function getMag(results,pmax,I)
+function getMag(results,pmax,I,nThermal)
     # I = CartesianIndex(I)
     Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights[nThermal:end],1,pmax) for res in results]
 
@@ -224,11 +224,24 @@ function getMag(results,pmax,I)
     @views getObs(p) = [SW.getObs(Gnp[:,1:p],res.SaveConfigs[nThermal:end],res.reconfTable[:,nThermal:end],getMag,p÷2) for (res,Gnp) in zip(results,Gnps)]
     obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
-##
-mags1 = getMag(results,100÷nBra,CartesianIndex(3,3)) 
-mags2 = getMag(results,100÷nBra,CartesianIndex(4,1)) 
-mags3 = getMag(results,100÷nBra,CartesianIndex(2,3)) 
 
+function getSiSj(results,pmax,I,J,nThermal)
+    # I = CartesianIndex(I)
+    Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights[nThermal:end],1,pmax) for res in results]
+
+    getCorr(Conf) = (Conf[I]*Conf[J]) *0.25
+
+    @views getObs(p) = [SW.getObs(Gnp[:,1:p],res.SaveConfigs[nThermal:end],res.reconfTable[:,nThermal:end],getCorr,p÷2) for (res,Gnp) in zip(results,Gnps)]
+    obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
+end
+##
+mags1 = getMag(results,100÷nBra,CartesianIndex(3,3),nThermal) 
+mags2 = getMag(results,100÷nBra,CartesianIndex(4,1),nThermal) 
+mags3 = getMag(results,100÷nBra,CartesianIndex(2,3),nThermal) 
+##
+IJ_SS = (CartesianIndex(3,4),CartesianIndex(4,2))
+SiSj = getSiSj(results,100÷nBra,IJ_SS[1],IJ_SS[2],nThermal) 
+SiSjex = SW.getSij(HConfs,v0,IJ_SS[1],IJ_SS[2])
 ##
 
 function errorBarLegend(size = 0.5;linekwargs = (;),markerkwargs = (;))
@@ -246,8 +259,8 @@ end
 
 with_theme(theme_SimpleTicks()) do
     fig = Figure(fontsize = 22)
-    ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"magnetization $$",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
-    proj = nBra .*eachindex(mags)
+    ax = Axis(fig[1,1],xlabel = L"projection order $$",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
+    proj = nBra .*eachindex(mags1)
     
     Cols = (:blue,:green,:orange)
     Is = ((3,3),(4,1),(2,3))
@@ -262,13 +275,23 @@ with_theme(theme_SimpleTicks()) do
         
         hlines!([sgn * mExact],color = Cols[i],label = L"exact $$")
         sgstring = sgn > 0 ? "" : "-"
-        text!(ax,(proj[end÷2],mExact-0.015),color = Cols[i],text = L"%$sgstring \langle S_{%$(Is[i])}\rangle")
+        text!(ax,(proj[end÷2],mExact-0.015),color = Cols[i],text = L"%$sgstring \langle S^z_{%$(Is[i])}\rangle")
     end
+    chi = mean.(SiSj)
+
+    chiScale = -3
+    scatter!(ax,proj,chiScale .*chi,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
+    err =sqrt.(var.(SiSj))
+    errorbars!(ax,proj,chiScale .*chi,chiScale .*err,whiskerwidth = 3.5,color =  :black)
+    hlines!([chiScale*SiSjex],color = :black,label = L"exact $$")
+    i,j = Tuple.(IJ_SS)
+    text!(ax,(proj[end÷2],chiScale*SiSjex-0.015),color = :black,text = L"%$chiScale\times \langle S^z_{%$i} S^z_{%$j}\rangle",align = (:center,:center))
+
 
     Legend(fig[1, 1], [[
         errorBarLegend(0.6)
     ],
-    [LineElement(linepoints = [Point2f(0., 0.5), Point2f(1, 0.5)])]], [L"GFMC$$",L"exact $$"], tellheight = false, tellwidth = false,halign = :right, valign = :center,margin = (10,10,200,10))
+    [LineElement(linepoints = [Point2f(0., 0.5), Point2f(1, 0.5)])]], [L"GFMC$$",L"exact $$"], tellheight = false, tellwidth = false,halign = :right, valign = :center,margin = (10,10,120,10))
 
 
     # axislegend(ax,merge=true,position = :rc,unique=true)

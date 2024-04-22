@@ -79,20 +79,14 @@ function getRij_vec(Config::SpinConfig)
     return [Ri[i] - Ri[j] for i in eachindex(Ri) for j = 1:i]
 end
 
-function getSij(Configs::AbstractVector{<:SpinConfig}, i, j)
-    return mean(c[i] * c[j] for c in Configs)
-end
-
-function getSij(Configs::AbstractVector{<:SpinConfig}, i)
-    return fetch.([Threads.@spawn getSij(Configs, i, j) for j in eachindex(Configs[1])])
-end
-
-function getSij(Configs::AbstractVector{<:SpinConfig})
-    fac(i, j) = ifelse(i == j, 1, 2)
-    return fetch.([
-        Threads.@spawn fac(i, j) * getSij(Configs, i, j) for i in LinearIndices(Configs[1])
-        for j = 1:i
-    ])
+function getSij(AllStates, ψ0::AbstractVector,i,j)
+    Sij = 0.
+    for n in eachindex(ψ0)
+        Si = AllStates[n][i]
+        Sj = AllStates[n][j]
+        Sij += abs2(ψ0[n]) * Si*Sj
+    end
+    return Sij
 end
 
 function getMagnetization(AllStates, eigen::AbstractMatrix)
