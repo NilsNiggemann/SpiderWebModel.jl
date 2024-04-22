@@ -2,42 +2,47 @@ using LatticeFFTs
 using LatticeFFTs
 using LatticeFFTs.Interpolations
 
-function getStructureFac(AllStates::AbstractVector{<:SpinConfig}, weights, tol = 0)
-    plan = getLatticeFFTPlan(AllStates[1].Mat, 0)
+function getStructureFacWeights(AllStates::AbstractVector{<:SpinConfig}, weights, tol = 0)
     # weights = abs2.(Psi)
     # state_weight = collect(zip( AllStates,weights))[inds]
+    Conf = parent(AllStates[1])
+    Sq = similar(Conf, Complex{eltype(Conf)})
+    Si = similar(Conf, Complex{eltype(Conf)})
 
-    Sq =
-        fetch.([
-            Threads.@spawn getInterpolatedFFT(
-                c.Mat,
-                0,
-                plan;
-                Interpolation = BSpline(Constant()),
-            ) for c in AllStates
-        ])
+    plan = LatticeFFTs.FFTW.plan_fft(Conf)
+    # Sq(c) = mul!(outBuffer,plan,c)
+    
+    result = similar(Sq)
+    avgweight = mean(weights)
+    avgweight⁻¹ = 1 / avgweight
+    for (c, weight) in zip(AllStates, weights)
+        Si .= c
+        mul!(Sq, plan, Si)
+        result .+= abs2.(Sq) .* (avgweight⁻¹*weight)^2
+    end
     # Sq = [getInterpolatedFFT(weight* c.Mat,0,plan;Interpolation = BSpline(Constant())) for (c,weight) in state_weight]
-    SSq(kx, ky) = sum(w^2 * s(kx, ky) * s(-kx, -ky) for (w, s) in zip(weights, Sq))
+    # SSq(kx, ky) = sum(w^2 * s(kx, ky) * s(-kx, -ky) for (w, s) in zip(weights, Sq))
+    # SSq(kx, ky) = sum(w^2 * abs2(Sq[kx, ky]) for (w, s) in zip(weights, Sq))
 
-    k = Sq[1].itp.ranges[1]
-    Sq_k = fetch.([Threads.@spawn SSq(kx, ky) for kx in k, ky in k])
+    # k = Sq[1].itp.ranges[1]
+    # Sq_k = fetch.([Threads.@spawn SSq(Tuple(I)...) for I in CartesianIndices(Sq[1])])
 
-    return (; k, Sq = SSq, Sq_k)
+    # return (; k, Sq = SSq, Sq_k)
+    return result .* (avgweight^2)
 end
 
 function getStructureFac(
     AllStates::AbstractVector{<:SpinConfig},
-    eigen::Union{Eigen,NamedTuple},
+    ψ0::AbstractVector,
     tol = 0,
 )
-    Psi = eigen.vectors[:, 1]
     NumSites = length(AllStates[1])
-    weights = abs2.(Psi) ./ NumSites
-    return getStructureFac(AllStates, weights, tol)
+    weights = abs2.(ψ0) ./ NumSites
+    return getStructureFacWeights(AllStates, weights, tol)
 end
 
 function getEqualWeightStructureFac(AllStates)
-    plan = getLatticeFFTPlan(AllStates[1].Mat, 0)
+    plan = getLatticeFFTPlan(Conf, 0)
     Sq =
         fetch.([
             Threads.@spawn getInterpolatedFFT(
