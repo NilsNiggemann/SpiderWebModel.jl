@@ -37,6 +37,10 @@ function makeBlocks(arr;blocksize = nothing, numBlocks = 32)
 end
 magEx = SW.getMagnetization(HConfs, v0)
 ##
+@time SqEx = SW.getStructureFac(HConfs,v0)
+# @time SqEx = SW.getEqualWeightStructureFac(HConfs)
+# @time SqEx = SW.getStructureFac(HConfs,SW.normalize!(ones(length(v0))))
+##
 
 
 nThermal = 4_000
@@ -298,5 +302,74 @@ with_theme(theme_SimpleTicks()) do
     # xlims!(ax,0.5,last(proj))
     # ylims!(ax,E0-1e-2,E0+3e-2)
     # save("Application/exactFig/GFMCEnergy.png",fig)
+    fig
+end
+##
+@views function getFullMag(res,p,nThermal)
+    # I = CartesianIndex(I)
+    Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights[nThermal:end],1,p)
+
+    res = SW.getObs(Gnp,res.SaveConfigs[nThermal:end],res.reconfTable[:,nThermal:end],float,p÷2)
+end
+magFull = fetch.([Threads.@spawn getFullMag(res,100÷nBra,nThermal) for res in results])
+
+##
+with_theme(theme_SimpleTicks()) do 
+    m = mean(magFull) ./2
+    fig,ax,hm = heatmap(m,colormap = :greys,axis=(;aspect=1,title = L"GFMC$$"),figure = (;size = 0.8 .*(360,500)))
+    ax2 = Axis(fig[2,1],aspect=1,title = L"exact $$")
+    heatmap!(ax2,magEx,colormap = :greys,colorrange = extrema(m))
+    Colorbar(fig[1:2,2],hm,label = L"\langle S^z_i \rangle")
+    fig
+end
+##
+function getSq(res,p,nThermal)
+    @views Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights[nThermal:end],1,p)
+
+    Conf = parent(res.SaveConfigs[1][1])
+    NSites = length(Conf)
+    Sq = similar(Conf, ComplexF64)
+    
+    Si = similar(Conf, ComplexF64)
+    plan = SW.LatticeFFTs.FFTW.plan_fft(Conf)
+
+    function SqFunc(Conf)
+        Si .= Conf
+        SW.mul!(Sq, plan, Si)
+        Sq .= abs2.(Sq)
+    end
+
+    @views res = SW.getObs(Gnp,res.SaveConfigs[nThermal:end],res.reconfTable[:,nThermal:end],SqFunc,p÷2)
+    newRes = similar(res,size(res).+1)
+    newRes[1:end-1,1:end-1] .= res
+    @views newRes[end,1:end-1] .= res[1,:]
+    @views newRes[1:end-1,end] .= res[:,1]
+    newRes ./NSites
+    # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
+end
+# @views function getSq(res,p,nThermal)
+#     # I = CartesianIndex(I)
+#     Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights[nThermal:end],1,p)
+
+#     Sq(x) = abs2.(SW.LatticeFFTs.fft(x))
+
+#     res = SW.getObs(Gnp,res.SaveConfigs[nThermal:end],res.reconfTable[:,nThermal:end],Sq,p÷2)
+#     newRes = similar(res,size(res).+1)
+#     newRes[1:end-1,1:end-1] .= res
+#     newRes[end,1:end-1] .= res[1,:]
+#     newRes[1:end-1,end] .= res[:,1]
+#     newRes./length(res)
+#     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
+# end
+##
+SqsGFMC = fetch.([Threads.@spawn getSq(res,100÷nBra,nThermal) for res in results])
+##
+with_theme(theme_PiTicks()) do 
+    Sq = mean(real(SqsGFMC)) ./4
+    (;kx,ky) = SqEx
+    fig,ax,hm = heatmap(kx,ky,Sq,colormap = :viridis,axis=(;aspect=1,title = L"GFMC$$"),figure = (;size = (360,500)))
+    ax2 = Axis(fig[2,1],aspect=1,title = L"exact $$")
+    heatmap!(ax2,kx,ky,real(SqEx.Sq),colormap = :viridis,colorrange = extrema(Sq))
+    Colorbar(fig[1:2,2],hm,label = L"\langle \mathcal{S}^{zz}(\textbf{q})\rangle")
     fig
 end

@@ -228,81 +228,40 @@ function computeGnpForward(weights,p,N=0)
     return Gnp
 end
 
+add_elementwise!(x::AbstractArray,y) = (x .+= y)
+add_elementwise!(x::Number,y::Number) = x + y
+
+mult_elementwise!(x::Number,y::Number) = x * y
+mult_elementwise!(x::AbstractArray,y::Number) = (x .*= y)
+
+divide_elementwise!(x::Number,y::Number) = x / y
+divide_elementwise!(x::AbstractArray,y::AbstractArray) = (x ./= y)
 
 function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m=size(Gnp,2)÷2)
     N = lastindex(AllConfigs)
     Obs = ObsFunc(AllConfigs[1][1])
-    num = zero(typeof(Obs))
-    denom = zero(typeof(Obs))
+    num = zero(Obs)
+    denom = zero(Obs)
     # fill!(Obs,zero(eltype(Obs)))
 
     Nw = size(reconfigurationTable,1)
     p = size(Gnp,2)
     for n in m+1:N
         Gn = Gnp[n,p]
-        denom += Gn*Nw
+        # denom += Gn*Nw
+        denom = add_elementwise!(denom,Gn*Nw)
         for α in 1:Nw
             α´ = α
             for i_m in 1:m
                 α´ = reconfigurationTable[α´,n-i_m]
             end
-            num += Gn*ObsFunc(AllConfigs[n-m][α´])
+            O = ObsFunc(AllConfigs[n-m][α´])
+            GnO = mult_elementwise!(O,Gn)
+            # @. num += Gn*O
+            num = add_elementwise!(num,GnO)
         end
     end
-    return num/denom
-end
-
-
-function getObservablesOld(result,StartConf,ObsFunc,nthermalization,PMax)
-    
-    weights = result.TotalWeights
-    localEnergies = result.energies
-    
-    Gn1 = setupProjector(weights,nthermalization)
-    Gnp = zero(Gn1)
-    Gnp_new = zero(Gn1)
-    
-    EL_thermalized = @view localEnergies[nthermalization:end]
-    
-    Energy_num = zeros(PMax)
-    Denom = zeros(PMax)
-    
-    Gnp .= Gn1
-    
-    Energy_num[1] = Gn1'*EL_thermalized
-    Denom[1] = sum(Gn1)
-
-
-    for p in 2:PMax
-        iterateProjector!(Gnp_new,Gnp,Gn1,p)
-        Gnp .= Gnp_new
-
-        Energy_num[p] = Gnp' * EL_thermalized
-        Denom[p] = sum(Gnp)
-    end
-
-    Conf = copy(StartConf)
-    moves = result.Allmoves
-    for i in 1:nthermalization
-        i,j,type = moves[i]
-        type != 0 && applyPlaquette!(Conf, i,j,type)
-    end
-
-    Newmoves = @view moves[nthermalization+1:end]
-    
-    Obs_num = zero(ObsFunc(Conf))
-
-    for n in eachindex(Gnp)[PMax÷2+1:end-PMax]
-        i,j,type = Newmoves[n]
-        type != 0 && applyPlaquette!(Conf, i,j,type)
-
-        Obs_num .+= Gnp[n+PMax]*ObsFunc(Conf)
-    end
-    
-    E0 = Energy_num ./Denom
-    Obs = Obs_num /Denom[end]
-    
-    return (;E0,Obs)
+    return divide_elementwise!(num,denom)
 end
 
 function splitIntoBins(array,binsize)
