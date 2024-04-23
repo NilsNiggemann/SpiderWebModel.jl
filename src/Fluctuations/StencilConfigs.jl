@@ -4,7 +4,7 @@ struct StencilSpinConfig{T,MatType<:AbstractMatrix{T}} <: AbstractSpinConfig{T}
 end
 @inline Base.parent(S::StencilSpinConfig) = S.Mat
 @inline getSpin(S::StencilSpinConfig) = S.M/2
-@inline Base.copy(S::StencilSpinConfig) = stencilConfig(copy(S.Mat), S.M/2)
+@inline Base.copy(S::StencilSpinConfig) = StencilSpinConfig(copy(parent(S)), S.M)
 
 function stencilConfig(A::AbstractMatrix{<:AbstractFloat}, S,paddingValue = Int8(typemax(Int8)); kwargs...)
     return stencilConfig(Int8.(2 .*A), S,paddingValue; kwargs...)

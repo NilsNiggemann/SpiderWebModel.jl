@@ -312,12 +312,12 @@ end
 ##
 #___________Spin-1_______________________
 
-S = SW.stencilConfig(zeros(20,20),1)
+S = SW.stencilConfig(zeros(30,30),1)
 nBra = 4
-nThermal = 100
-results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,12,nThermal+20_000÷nBra,nBra,x->SW.varitationalFunc(0.15,x,0),0) for _ in 1:8])
+nThermal = 3000
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,12,nThermal+300_000÷nBra,nBra,x->SW.varitationalFunc(0.15,x,0),1) for _ in 1:8])
 ##
-ens = [SW.getEnergies(w,e,1,200÷nBra) for res in results[1:end] for (w,e) in zip(makeBlocks(res.TotalWeights[nThermal:end],numBlocks=2),makeBlocks(res.energies[nThermal:end],numBlocks=2)) ]
+ens = [SW.getEnergies(w,e,1,200÷nBra) for res in results[1:end] for (w,e) in zip(makeBlocks(res.TotalWeights[4nThermal:end],numBlocks=1),makeBlocks(res.energies[4nThermal:end],numBlocks=1)) ]
 
 en = mean(ens)
 with_theme(theme_SimpleTicks()) do
@@ -336,7 +336,7 @@ with_theme(theme_SimpleTicks()) do
 end
 
 ##
-SqsGFMC = fetch.([Threads.@spawn getSq(res,200÷nBra,nThermal) for res in results])
+SqsGFMC = fetch.([Threads.@spawn getSq(res,120÷nBra,500) for res in results])
 ##
 function SqFieldTheory(x,y)
     num = cos(x) - cos(y) +2sin(x)sin(y) 

@@ -5,22 +5,22 @@ struct SpiderWebWalker{C} <: AbstractWalker
     Config::C
     moves::Vector{Tuple{Int8,Int8,Int8}}
     weights::Vector{Float64}
-    indices::Vector{Int}
-    n_x::Vector{Int}
-    n_x´::Vector{Int}
+    Plaquette_positions::Vector{Tuple{Int,Int}}
+    n_x::Vector{Int8}
+    n_x´::Vector{Int8}
 end
-function spiderWebWalker(S)
-    Config = copy(S)
+function SpiderWebWalker(Config,Plaquette_positions)
     moves = Vector{Tuple{Int8,Int8,Int8}}()
     weights = Vector{Float64}()
-    indices = Vector{Int}()
-    n_x = zeros(Int,length(collect(plaquetteIterator(Config))))
-    n_x´ = Vector{Int}()
-    return SpiderWebWalker(Config,moves,weights,indices,n_x,n_x´)
+    # Plaquette_positions = collect(plaquetteIterator(Config))
+    n_x = zeros(Int8,length(Plaquette_positions))
+    n_x´ = Vector{Int8}()
+    return SpiderWebWalker(copy(Config),moves,weights,Plaquette_positions,n_x,n_x´)
 end
 
 get_config(Walker::SpiderWebWalker) = Walker.Config
 get_weights(Walker::SpiderWebWalker) = Walker.weights
+plaquetteIterator(Walker::SpiderWebWalker) = Walker.Plaquette_positions
 
 getOperatorRep(i,j,opNum) = i,j,opNum
 # getOperatorRep(i,j,opNum) = CartesianIndex(i,j,opNum)
@@ -72,33 +72,29 @@ function precomputeAffectedPlaquettes(Config)
     return AffPlaqMatrix
 end
 # Assumes that length(n_plaq) == length(plaquetteIterator(Config))
-function getNPlaq!(n_plaq, Config)
-    for (i,I) in enumerate(plaquetteIterator(Config))
+function getNPlaq!(Walker::SpiderWebWalker)
+    (;n_x,Config) = Walker
+    for (i,I) in enumerate(plaquetteIterator(Walker))
         @inbounds applPlus, applMinus = P_applicable(Config, I)
         n = applPlus + applMinus
-        n_plaq[i] = n
+        n_x[i] = n
     end
-    return n_plaq
+    return n_x
 end
 
-function getNPlaq!(n_plaq, Config,Plaq_indices)
+function getNPlaq!(Walker::SpiderWebWalker,affected_indices)
     ind = 1
-    # resize!(n_plaq,length(Plaq_indices))
-    # println(Plaq_indices)
-    empty!(n_plaq)
-    for (i,I) in enumerate(plaquetteIterator(Config))
-        if i == Plaq_indices[ind]
-            # println("\t",i," ",I, " ",ind)
-            # i ∉ Plaq_indices && continue
-            # ind += 1
-            @inbounds applPlus, applMinus = P_applicable(Config, I)
-            n = applPlus + applMinus
-            push!(n_plaq,n)
-            ind += 1
-            ind > length(Plaq_indices) && break
-        end
+    (;n_x´,Config,Plaquette_positions) = Walker
+    resize!(n_x´,length(affected_indices))
+    # println(affected_indices)
+    # empty!(n_x´)
+    for (i,PlaqIndex) in enumerate(affected_indices)
+        I = Plaquette_positions[PlaqIndex]
+        @inbounds applPlus, applMinus = P_applicable(Config, I)
+        n = applPlus + applMinus
+        n_x´[i] = n
     end
-    return n_plaq
+    return n_x´
 end
 
 function getWeightList!(weights,moves,Config,weightfunc::T,Λ) where T
@@ -135,14 +131,14 @@ function getWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc
 
     moves = getMoves!(moves,Config)
 
-    getNPlaq!(n_x,Config)
+    getNPlaq!(Walker)
     
     for operator in moves
         i,j,opNum = operator
         indices = AffectedPlaquetteList[i,j]
         applyPlaquette!(Config, i, j, opNum)
         
-        getNPlaq!(n_x´,Config,indices)
+        getNPlaq!(Walker,indices)
         
         N□ = getNPlaq_difference(n_x,n_x´,indices) 
         weight = weightfunc(N□)
@@ -289,8 +285,6 @@ function getEnergies(weights,localEnergies,nthermalization,PMax;
             denom[p] += Gnp[n,p]
         end
     end
-    # num = fetch.([Threads.@spawn sum(Gnp[n+p,p]*EL_thermalized[n] for n in axes(Gnp,1)[begin:end-p]) for p in 1:PMax])
-    # denom = fetch.([Threads.@spawn sum(Gnp[n+p,p] for n in axes(Gnp,1)[begin:end-p]) for p in 1:PMax])
     return num ./denom
 end
 
@@ -363,15 +357,16 @@ end
 function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,Λ) where T
     # Walkers = fetch.([Threads.@spawn spiderWebWalker(InitialState) for _ in 1:Nwalkers])# use threads to initialize walkers on correct NUMA domains (hopefully)
     AffectedPlaquetteList = precomputeAffectedPlaquettes(InitialState)
-    
-    Walkers = [spiderWebWalker(InitialState) for _ in 1:Nwalkers]
+    plaquettePositions = collect(plaquetteIterator(InitialState))
+    # createWalker(InitialState) = SpiderWebWalker(InitialState,plaquettePositions)
+    Walkers = [SpiderWebWalker(InitialState,plaquettePositions) for _ in 1:Nwalkers]
 
     weights = ones(Nwalkers)
     energies = zeros(NSteps)
     TotalWeights = zeros(NSteps)
     reconfigurationList = zeros(Int,Nwalkers)
     
-    SaveConfigs = Vector{Vector{typeof(InitialState)}}()
+    SaveConfigs = Vector{Vector{typeof(parent(InitialState))}}()
     reconfTable = zeros(Int,Nwalkers,NSteps)
 
     for i in 1:NSteps
@@ -432,7 +427,7 @@ function getLocalEnergyWalkers_before(weights,Walkers::AbstractVector{<:Abstract
 end
 
 function saveConfigs(Walkers::AbstractVector{<:AbstractWalker})
-    [copy(get_config(Walker)) for Walker in Walkers]
+    [copy(parent(get_config(Walker))) for Walker in Walkers]
 end
 
 """given a sorted list reconfiguration indices, minimizes the number of reconfigurations by swapping elements in the list. Each walker that survives a reconfiguration step remains unchanged while walkers that are killed get assigned to a new index."""
