@@ -336,7 +336,7 @@ with_theme(theme_SimpleTicks()) do
 end
 
 ##
-SqsGFMC = fetch.([Threads.@spawn getSq(res,50÷nBra,nThermal) for res in results])
+SqsGFMC = fetch.([Threads.@spawn getSq(res,200÷nBra,nThermal) for res in results])
 ##
 function SqFieldTheory(x,y)
     num = cos(x) - cos(y) +2sin(x)sin(y) 

@@ -60,7 +60,17 @@ function findAffectedPlaquettes!(Plaq_indices,Config,i,j)
     end
     return Plaq_indices
 end
+# findAffectedPlaquettes(Config,i,j) = findAffectedPlaquettes!(Vector{Int}(),Config,i,j)
 
+function precomputeAffectedPlaquettes(Config)
+    AffPlaqMatrix = [Vector{Int}() for i in 1:size(Config,1), j in 1:size(Config,2)]
+
+    for (index,I) in enumerate(plaquetteIterator(Config))
+        i,j = I
+        findAffectedPlaquettes!(AffPlaqMatrix[i,j],Config,i,j)
+    end
+    return AffPlaqMatrix
+end
 # Assumes that length(n_plaq) == length(plaquetteIterator(Config))
 function getNPlaq!(n_plaq, Config)
     for (i,I) in enumerate(plaquetteIterator(Config))
@@ -119,8 +129,8 @@ function getNPlaq_difference(nPlaq_x,nPlaq_x´,affectedPlaquettes)
     return N□
 end
 
-function getWeightList!(Walker::SpiderWebWalker,weightfunc::T,Λ) where T
-    (;Config,moves,weights,indices,n_x,n_x´) = Walker
+function getWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc::T,Λ) where T
+    (;Config,moves,weights,n_x,n_x´) = Walker
     empty!(weights)
 
     moves = getMoves!(moves,Config)
@@ -129,7 +139,7 @@ function getWeightList!(Walker::SpiderWebWalker,weightfunc::T,Λ) where T
     
     for operator in moves
         i,j,opNum = operator
-        findAffectedPlaquettes!(indices,Config,i,j)
+        indices = AffectedPlaquetteList[i,j]
         applyPlaquette!(Config, i, j, opNum)
         
         getNPlaq!(n_x´,Config,indices)
@@ -147,9 +157,9 @@ function getWeightList!(Walker::SpiderWebWalker,weightfunc::T,Λ) where T
     return weights
 end
 
-function performMarkovStep!(Walker::SpiderWebWalker,weightfunc::T,Λ) where T
+function performMarkovStep!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc::T,Λ) where T
     # moves = getMoves!(moves,Config)
-    weights = getWeightList!(Walker,weightfunc,Λ)
+    weights = getWeightList!(Walker,AffectedPlaquetteList,weightfunc,Λ)
 
     if isempty(weights)
         @info "No moves available" 
@@ -352,6 +362,8 @@ end
 
 function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,Λ) where T
     # Walkers = fetch.([Threads.@spawn spiderWebWalker(InitialState) for _ in 1:Nwalkers])# use threads to initialize walkers on correct NUMA domains (hopefully)
+    AffectedPlaquetteList = precomputeAffectedPlaquettes(InitialState)
+    
     Walkers = [spiderWebWalker(InitialState) for _ in 1:Nwalkers]
 
     weights = ones(Nwalkers)
@@ -370,12 +382,12 @@ function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,
 
             w = 1
             for step in 1:nBranch
-                move,weightList = performMarkovStep!(Walker,weightfunc,Λ)
+                move,weightList = performMarkovStep!(Walker,AffectedPlaquetteList,weightfunc,Λ)
                 bx = sum(weightList)/size(InitialState,1)
                 w *= bx
             end
             weights[α] = w
-            getWeightList!(Walker,weightfunc,Λ)
+            getWeightList!(Walker,AffectedPlaquetteList,weightfunc,Λ)
         end
         energies[i] = getLocalEnergyWalkers_before(weights,Walkers,Λ)
 
