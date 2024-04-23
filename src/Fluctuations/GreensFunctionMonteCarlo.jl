@@ -1,8 +1,26 @@
 
-function initialize_GFMC(L,Spin = 1)
-    Config = stencilConfig(zeros(Int8, L, L), Int8(Spin)) 
+abstract type AbstractWalker end
+
+struct SpiderWebWalker{C} <: AbstractWalker
+    Config::C
+    moves::Vector{Tuple{Int8,Int8,Int8}}
+    weights::Vector{Float64}
+    indices::Vector{Int}
+    n_x::Vector{Int}
+    n_x´::Vector{Int}
+end
+function spiderWebWalker(S)
+    Config = copy(S)
+    moves = Vector{Tuple{Int8,Int8,Int8}}()
+    weights = Vector{Float64}()
+    indices = Vector{Int}()
+    n_x = zeros(Int,length(collect(plaquetteIterator(Config))))
+    n_x´ = Vector{Int}()
+    return SpiderWebWalker(Config,moves,weights,indices,n_x,n_x´)
 end
 
+get_config(Walker::SpiderWebWalker) = Walker.Config
+get_weights(Walker::SpiderWebWalker) = Walker.weights
 
 getOperatorRep(i,j,opNum) = i,j,opNum
 # getOperatorRep(i,j,opNum) = CartesianIndex(i,j,opNum)
@@ -31,34 +49,47 @@ function getMoves!(
     return moves
 end
 
-
-
 import StatsBase
-function performMarkovStep!(weights,moves,Config,weightfunc::T,Λ) where T
-    empty!(weights)
-    # moves = getMoves!(moves,Config)
-    weights = getWeightList!(weights,moves,Config,weightfunc,Λ)
 
-    # TotalWeight = sum(weights)
-    if isempty(weights)
-        @info "No moves available" 
+function findAffectedPlaquettes!(Plaq_indices,Config,i,j)
+    empty!(Plaq_indices)
+    for (index,I) in enumerate(plaquetteIterator(Config))
+        if !plaquettesAreSeparated(I,(i,j))
+            push!(Plaq_indices,index)
+        end
     end
-    moveidx = StatsBase.sample(StatsBase.Weights(weights))
-    move = moves[moveidx]
-    if move != (0,0,0)
-        applyPlaquette!(Config, move[1], move[2], move[3]) 
-    end
-    return move,weights
+    return Plaq_indices
 end
 
-# function findAffectedPlaquettes!(plaqs,Config,i,j)
-#     for I in plaquetteIterator(Config)
-#         if !plaquettesAreSeparated(I,(i,j))
-#             push!(plaqs,CartesianIndex(I))
-#         end
-#     end
-#     return plaqs
-# end
+# Assumes that length(n_plaq) == length(plaquetteIterator(Config))
+function getNPlaq!(n_plaq, Config)
+    for (i,I) in enumerate(plaquetteIterator(Config))
+        @inbounds applPlus, applMinus = P_applicable(Config, I)
+        n = applPlus + applMinus
+        n_plaq[i] = n
+    end
+    return n_plaq
+end
+
+function getNPlaq!(n_plaq, Config,Plaq_indices)
+    ind = 1
+    # resize!(n_plaq,length(Plaq_indices))
+    # println(Plaq_indices)
+    empty!(n_plaq)
+    for (i,I) in enumerate(plaquetteIterator(Config))
+        if i == Plaq_indices[ind]
+            # println("\t",i," ",I, " ",ind)
+            # i ∉ Plaq_indices && continue
+            # ind += 1
+            @inbounds applPlus, applMinus = P_applicable(Config, I)
+            n = applPlus + applMinus
+            push!(n_plaq,n)
+            ind += 1
+            ind > length(Plaq_indices) && break
+        end
+    end
+    return n_plaq
+end
 
 function getWeightList!(weights,moves,Config,weightfunc::T,Λ) where T
     empty!(weights)
@@ -79,10 +110,61 @@ function getWeightList!(weights,moves,Config,weightfunc::T,Λ) where T
     return weights
 end
 
+
+function getNPlaq_difference(nPlaq_x,nPlaq_x´,affectedPlaquettes)
+    N□ = 0
+    for (i,plaqIndex) in enumerate(affectedPlaquettes)
+        N□ += nPlaq_x´[i] - nPlaq_x[plaqIndex]
+    end
+    return N□
+end
+
+function getWeightList!(Walker::SpiderWebWalker,weightfunc::T,Λ) where T
+    (;Config,moves,weights,indices,n_x,n_x´) = Walker
+    empty!(weights)
+
+    moves = getMoves!(moves,Config)
+
+    getNPlaq!(n_x,Config)
+    
+    for operator in moves
+        i,j,opNum = operator
+        findAffectedPlaquettes!(indices,Config,i,j)
+        applyPlaquette!(Config, i, j, opNum)
+        
+        getNPlaq!(n_x´,Config,indices)
+        
+        N□ = getNPlaq_difference(n_x,n_x´,indices) 
+        weight = weightfunc(N□)
+
+        push!(weights,weight)
+        applyPlaquette!(Config, i, j, -opNum)
+    end
+    if Λ != 0
+        push!(moves, (0,0,0))
+        push!(weights,Λ)
+    end
+    return weights
+end
+
+function performMarkovStep!(Walker::SpiderWebWalker,weightfunc::T,Λ) where T
+    # moves = getMoves!(moves,Config)
+    weights = getWeightList!(Walker,weightfunc,Λ)
+
+    if isempty(weights)
+        @info "No moves available" 
+    end
+    moveidx = StatsBase.sample(StatsBase.Weights(weights))
+    move = Walker.moves[moveidx]
+    if move != (0,0,0)
+        applyPlaquette!(Walker.Config, move[1], move[2], move[3]) 
+    end
+    return move,weights
+end
+
 function getLocalEnergy(weights,Λ)
     return -sum(weights) + Λ
 end
-
 
 function NPlaquettes(Conf)
     moves = 0
@@ -269,76 +351,67 @@ function splitIntoBins(array,binsize)
 end
 
 function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,Λ) where T
-    Walkers = [copy(InitialState) for _ in 1:Nwalkers]
+    # Walkers = fetch.([Threads.@spawn spiderWebWalker(InitialState) for _ in 1:Nwalkers])# use threads to initialize walkers on correct NUMA domains (hopefully)
+    Walkers = [spiderWebWalker(InitialState) for _ in 1:Nwalkers]
 
-    bx_List = [Float64[] for _ in 1:Nwalkers] # List of weights for each walker at each step
-    
     weights = ones(Nwalkers)
-    SaveConfigs = Vector{Vector{typeof(InitialState)}}()
-
-    LocalMoves = [ Vector{Tuple{Int8,Int8,Int8}}() for _ in 1:Nwalkers]
     energies = zeros(NSteps)
     TotalWeights = zeros(NSteps)
     reconfigurationList = zeros(Int,Nwalkers)
-
+    
+    SaveConfigs = Vector{Vector{typeof(InitialState)}}()
     reconfTable = zeros(Int,Nwalkers,NSteps)
 
     for i in 1:NSteps
         # for (α,Config) in enumerate(Walkers)
-         for α in eachindex(Walkers)
-            Config = Walkers[α]
-            moveList = LocalMoves[α]
-            weightList = bx_List[α]
-            
-            # weights[α] = one(weights[α])
+        # for α in eachindex(Walkers)
+        Threads.@threads for α in eachindex(Walkers)
+            Walker = Walkers[α]
+
             w = 1
             for step in 1:nBranch
-                move,weightList = performMarkovStep!(weightList,moveList,Config,weightfunc,Λ)
-                bx = sum(weightList)/size(Config,1)
+                move,weightList = performMarkovStep!(Walker,weightfunc,Λ)
+                bx = sum(weightList)/size(InitialState,1)
                 w *= bx
             end
             weights[α] = w
-            getWeightList!(weightList,moveList,Config,weightfunc,Λ)
+            getWeightList!(Walker,weightfunc,Λ)
         end
-        energies[i] = getLocalEnergyWalkers_before(weights,bx_List,Λ)
+        energies[i] = getLocalEnergyWalkers_before(weights,Walkers,Λ)
 
         TotalWeights[i] = mean(weights)
         reconfiguration!(Walkers,reconfigurationList,weights)
         reconfTable[:,i] .= reconfigurationList
 
-        SaveWalkers = empty(Walkers)
         # for (α,α´) in enumerate(reconfigurationList)
         #     if α == α´ # convention: surviving walkers always remain a copy at their index
         #         push!(SaveWalkers,copy(Walkers[α]))
         #     end
         # end
 
-        for Walker in Walkers
-            push!(SaveWalkers,copy(Walker))
-        end
-
-        push!(SaveConfigs,SaveWalkers)
+        push!(SaveConfigs,saveConfigs(Walkers))
     end
     return (;TotalWeights, energies, SaveConfigs,reconfTable)
 end
 
-function reconfiguration!(Walkers,reconfigurationList,weights)
+function reconfiguration!(Walkers::AbstractVector{<:AbstractWalker},reconfigurationList,weights)
     StatsBase.sample!(eachindex(Walkers),StatsBase.Weights(weights),reconfigurationList,ordered = true)
     minimizeReconfiguration!(reconfigurationList)
     for (α,α´) in enumerate(reconfigurationList)
         if α´ != α
-            Walkers[α] .= Walkers[α´]
+            get_config(Walkers[α]) .= get_config(Walkers[α´])
         end
     end
 end
 
-function getLocalEnergyWalkers_before(weights,bx_List,Λ)
+function getLocalEnergyWalkers_before(weights,Walkers::AbstractVector{<:AbstractWalker},Λ)
     Nw = length(weights)
     num = 0.
     denom = 0.
 
-    for α in eachindex(weights,bx_List)
-        eloc = Λ - sum(bx_List[α])
+    for α in eachindex(weights,Walkers)
+        bx = sum(get_weights(Walkers[α]))
+        eloc = Λ - bx
         num += weights[α]*eloc
         denom += weights[α]
     end
@@ -346,14 +419,8 @@ function getLocalEnergyWalkers_before(weights,bx_List,Λ)
     return num/denom
 end
 
-function getLocalEnergyWalkers_after(weights,bx_List,Λ)
-    Nw = length(weights)
-    num = 0.
-
-    for α in eachindex(weights)
-        num += getLocalEnergy(bx_List[α],Λ)
-    end
-    return num/Nw
+function saveConfigs(Walkers::AbstractVector{<:AbstractWalker})
+    [copy(get_config(Walker)) for Walker in Walkers]
 end
 
 """given a sorted list reconfiguration indices, minimizes the number of reconfigurations by swapping elements in the list. Each walker that survives a reconfiguration step remains unchanged while walkers that are killed get assigned to a new index."""

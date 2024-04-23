@@ -40,68 +40,15 @@ magEx = SW.getMagnetization(HConfs, v0)
 @time SqEx = SW.getStructureFac(HConfs,v0)
 # @time SqEx = SW.getEqualWeightStructureFac(HConfs)
 # @time SqEx = SW.getStructureFac(HConfs,SW.normalize!(ones(length(v0))))
-##
-
-
-nThermal = 4_000
-results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+250_000,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:12*12])
-# results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+1300_000,SW.ConstructVaritationalFunc(0.197,S),3) for _ in 1:4*4])
-# results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+900_000,constructExactGuidingFunc(v0,HConfs),3) for _ in 1:8])
-##
-ens = [SW.getEnergies(res.TotalWeights,res.energies,nThermal,100) for res in results]
-en = mean(ens)
-
-# en = SW.getEnergies(results[6].TotalWeights,results[6].energies,nThermal,150)
-# en = mean(
-#     fetch.([Threads.@spawn [SW.getEnergy(res.TotalWeights,res.energies,p,20_000) for p in 1:80] for res in results])
-# )
-##
-with_theme(theme_SimpleTicks()) do
-    fig = Figure(fontsize = 22)
-    ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
-    scatter!(ax,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
-    errorbars!(ax,eachindex(en),en,sqrt.(var(ens)),whiskerwidth = 3.5,color = :black)
-    hlines!([E0],color = :red,label = L"exact $$")
-    axislegend(ax)
-    xlims!(ax,0.5,length(en))
-    ylims!(ax,E0-1e-2,E0+1e-2)
-    fig
-end
-##
-
-@time obs = fetch.([Threads.@spawn SW.getObservables(res,S,float,nThermal,100) for res in results])
-##
-with_theme(theme_SimpleTicks()) do
-    fig = Figure(fontsize = 22)
-    ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
-    en = mean(getfield.(obs,:E0))
-    err = sqrt.(var(getfield.(obs,:E0)))
-    scatter!(ax,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
-    errorbars!(ax,eachindex(en),en,err,whiskerwidth = 3.5,color = :black)
-    hlines!([E0],color = :red,label = L"exact $$")
-    axislegend(ax,merge=true)
-    xlims!(ax,1,length(en))
-    ylims!(ax,E0-1e-2,E0+1e-1)
-    fig
-end
-#
-with_theme(theme_SimpleTicks()) do
-    # fig,ax,hm = heatmap(sqrt.(var(getfield.(obs,:Obs) ./ 2)),colormap = :grays,axis=(;aspect=1))
-    fig,ax,hm = heatmap(mean(getfield.(obs,:Obs) ./ 2),colormap = :grays,axis=(;aspect=1))
-    # Colorbar(fig[1,2],hm)
-    # Colorbar(fig[1,2],hm,ticks = ([-0.5,0.,0.5],[L"|\downarrow>",L"0",L"|\uparrow>"]))
-    Colorbar(fig[1,2],hm,ticks = ([-0.5,0.,0.5]))
-    fig
-end
-#
 #___________ManyWalkers_______________________
 ##
+varFuncTest(N) = SW.varitationalFunc(0.197,N,0)
 
 nThermal = 2_000
 SW.Random.seed!(1234)
 # results = [SW.startManyWalkerGFMC(S,2,55_000,3,nThermal,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:35]
 nBra = 3
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,12,nThermal+400_000÷nBra,nBra,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:12])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,12,nThermal+100_000÷nBra,nBra,x->SW.varitationalFunc(0.197,x,0),1) for _ in 1:12])
 ##
 # nBra = 1
 # @time results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+1200_000,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:6*4])
@@ -201,19 +148,7 @@ with_theme(theme_SimpleTicks()) do
     # hlines!(E0)
     # current_figure()
 end
-# blockingAnalysis(results[1].energies[nThermal:end],results[1].TotalWeights[nThermal:end],2^7-1,150÷nBra)
-##
-using BinningAnalysis
-
-function getEJackKnife(TotWeight,energies,LProjection)
-    Gnp = SW.precomputeNormalizedAccWeight(TotWeight,1,LProjection)
-    
-    # inner(energies,weights) = SW.getEnergies(weights,energies,1,LProjection;Gnp)
-
-    # inner(weights,energies) = SW.getEnergies(weights,energies,1,LProjection)
-    # e,emean = jackknife(inner,TotWeight,energies)
-end
-getEJackKnife(results[1].TotalWeights[nThermal:end],results[1].energies[nThermal:end],20÷nBra)
+# blockingAnalysis(results[1].energies[nThermal:end],results[1].TotalWeights[nThermal:end],2^7-1,150÷nBra
 ##
 # ens = getEnsBinning(results[1].energies,results[1].TotalWeights,nThermal,2*10^4)
 #___________Observables_______________________
@@ -341,9 +276,10 @@ function getSq(res,p,nThermal)
 
     @views res = SW.getObs(Gnp,res.SaveConfigs[nThermal:end],res.reconfTable[:,nThermal:end],SqFunc,p÷2)
     newRes = similar(res,size(res).+1)
-    newRes[1:end-1,1:end-1] .= res
-    @views newRes[end,1:end-1] .= res[1,:]
-    @views newRes[1:end-1,end] .= res[:,1]
+    newRes[begin:end-1,begin:end-1] .= res
+
+    @views newRes[end,begin:end] .= newRes[begin,:]
+    @views newRes[begin:end,end] .= newRes[:,begin]
     newRes ./NSites
     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
@@ -371,5 +307,68 @@ with_theme(theme_PiTicks()) do
     ax2 = Axis(fig[2,1],aspect=1,title = L"exact $$")
     heatmap!(ax2,kx,ky,real(SqEx.Sq),colormap = :viridis,colorrange = extrema(Sq))
     Colorbar(fig[1:2,2],hm,label = L"\langle \mathcal{S}^{zz}(\textbf{q})\rangle")
+    fig
+end
+##
+#___________Spin-1_______________________
+
+S = SW.stencilConfig(zeros(20,20),1)
+nBra = 4
+nThermal = 100
+results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,12,nThermal+20_000÷nBra,nBra,x->SW.varitationalFunc(0.15,x,0),0) for _ in 1:8])
+##
+ens = [SW.getEnergies(w,e,1,200÷nBra) for res in results[1:end] for (w,e) in zip(makeBlocks(res.TotalWeights[nThermal:end],numBlocks=2),makeBlocks(res.energies[nThermal:end],numBlocks=2)) ]
+
+en = mean(ens)
+with_theme(theme_SimpleTicks()) do
+    fig = Figure(fontsize = 22)
+    ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
+
+    err = sqrt.(var(ens))
+    proj = nBra .*eachindex(en)
+
+    scatter!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
+    errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black)
+    axislegend(ax,merge=true)
+    # ylims!(ax,-12.4,-11.9)
+    # save("Application/exactFig/GFMCEnergy.png",fig)
+    fig
+end
+
+##
+SqsGFMC = fetch.([Threads.@spawn getSq(res,50÷nBra,nThermal) for res in results])
+##
+function SqFieldTheory(x,y)
+    num = cos(x) - cos(y) +2sin(x)sin(y) 
+    denom = (cos(x) - cos(y))^2 + (2sin(x)sin(y))^2
+    return num^2/(sqrt(denom)+1e-30)
+end
+
+with_theme(theme_PiTicks()) do 
+    # Sq = sqrt.(var(real(SqsGFMC))) ./4
+    Sq = mean(real(SqsGFMC)) ./4
+    kx = ky = 2pi .* LinRange(0,1,size(Sq,1))
+    fig = Figure(fontsize = 22,size = (800,400))
+    axMC = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"k_y",title = L"GFMC$$",aspect = 1)
+    axerr = Axis(fig[1,2],xlabel = L"k_x",ylabel = L"k_y",title = L"std error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
+
+    axFT = Axis(fig[1,3],xlabel = L"k_x",ylabel = L"k_y",title = L"U(1) theory$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
+
+    # axDiff = Axis(fig[1,4],xlabel = L"k_x",ylabel = L"k_y",title = L"Difference$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
+
+    # err = abs.(Sq .- SqFieldTheory.(kx,kx'))
+    err = sqrt.(var(real(SqsGFMC))) ./4
+    hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
+    SqFT = [SqFieldTheory(x,y) for x in kx, y in ky]
+    hmFT = heatmap!(axFT,kx,ky,SqFT,colormap = :viridis)
+    # heatmap!(axerr,kx,ky,err,colormap = :viridis,colorrange = extrema(!isnan,Sq))
+    hmerr = heatmap!(axerr,kx,ky,err,colormap = :viridis)
+    # heatmap!(axDiff,kx,ky,(Sq ./maximum(Sq)) .- (SqFT ./maximum(SqFT)),colormap = :viridis)
+
+    Colorbar(fig[2,1],hmMC,label = L"\langle \mathcal{S}^{zz}(\textbf{q})\rangle",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
+    Colorbar(fig[2,2],hmerr,label = L"\sigma(\langle \mathcal{S}^{zz}(\textbf{q})\rangle)",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
+    Colorbar(fig[2,3],hmFT,label = L"\langle \mathcal{S}^{zz}(\textbf{q})\rangle",height = Relative(0.8), width = Relative(0.8),vertical=false,ticks = SimpleTicks())
+
+    rowsize!(fig.layout,2,Relative(0.1))
     fig
 end
