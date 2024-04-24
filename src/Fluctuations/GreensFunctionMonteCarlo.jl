@@ -1,4 +1,4 @@
-
+"""Abstract supertype for a walker in a GFMC simulation. A walker needs to have a method `get_config` which returns the configuration (for example the spin configuration), and a method `get_weights` which returns a vector of weights for each possible move."""
 abstract type AbstractWalker end
 
 struct SpiderWebWalker{C} <: AbstractWalker
@@ -365,7 +365,7 @@ function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,
     energies = zeros(NSteps)
     TotalWeights = zeros(NSteps)
     reconfigurationList = zeros(Int,Nwalkers)
-    
+    weightsectors = zeros(Nwalkers)
     SaveConfigs = Vector{Vector{typeof(parent(InitialState))}}()
     reconfTable = zeros(Int,Nwalkers,NSteps)
 
@@ -387,7 +387,7 @@ function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,
         energies[i] = getLocalEnergyWalkers_before(weights,Walkers,Λ)
 
         TotalWeights[i] = mean(weights)
-        reconfiguration!(Walkers,reconfigurationList,weights)
+        reconfiguration!(Walkers,reconfigurationList,weightsectors,weights)
         reconfTable[:,i] .= reconfigurationList
 
         # for (α,α´) in enumerate(reconfigurationList)
@@ -401,8 +401,31 @@ function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,
     return (;TotalWeights, energies, SaveConfigs,reconfTable)
 end
 
-function reconfiguration!(Walkers::AbstractVector{<:AbstractWalker},reconfigurationList,weights)
-    StatsBase.sample!(eachindex(Walkers),StatsBase.Weights(weights),reconfigurationList,ordered = true)
+# function reconfiguration!(Walkers::AbstractVector{<:AbstractWalker},reconfigurationList,weights)
+#     StatsBase.sample!(eachindex(Walkers),StatsBase.Weights(weights),reconfigurationList,ordered = true)
+#     minimizeReconfiguration!(reconfigurationList)
+#     for (α,α´) in enumerate(reconfigurationList)
+#         if α´ != α
+#             get_config(Walkers[α]) .= get_config(Walkers[α´])
+#         end
+#     end
+# end
+"""Performs an efficient reconfiguration of walkers. This reconfiguration will not remove walkers if they all have the same weight, which increases the efficiency as more walkers can contribute to the average.
+
+Matteo Calandra Buonaura and Sandro Sorella
+Phys. Rev. B 57, 11446 (1998)
+"""
+function reconfiguration!(Walkers::AbstractVector{<:AbstractWalker},reconfigurationList,weightsectors,weights)
+    Nw = length(Walkers)
+    weightsectors = cumsum!(weightsectors,weights) 
+    wTotal = sum(weights)
+    weightsectors ./= wTotal
+    for α in eachindex(Walkers)
+        ξα = rand()
+        zα = (α + ξα - 1)/Nw
+        α´ = searchsortedfirst(weightsectors,zα)
+        reconfigurationList[α] = α´
+    end
     minimizeReconfiguration!(reconfigurationList)
     for (α,α´) in enumerate(reconfigurationList)
         if α´ != α
