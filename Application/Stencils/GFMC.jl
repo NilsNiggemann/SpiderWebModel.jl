@@ -6,7 +6,7 @@ using Statistics
 using MakieHelpers
 using SpiderWebModel
 ##
-S = SW.stencilConfig(parent(SW.getStairCase(8)),1/2)
+S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 # S = SW.stencilConfig(SW.constructConfigPath(15,15,SW.ALLGS_S12),1/2)
 HStair = SW.generateHilbertSpace(SW.SpinConfig(S))
 ExSol = SW.SolveHKrylov(HStair.H)
@@ -42,18 +42,20 @@ magEx = SW.getMagnetization(HConfs, v0)
 # @time SqEx = SW.getStructureFac(HConfs,SW.normalize!(ones(length(v0))))
 #___________ManyWalkers_______________________
 ##
+# S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 varFuncTest(N) = SW.varitationalFunc(0.197,N,0)
 
-nThermal = 2_000
+nThermal = 6_000
 SW.Random.seed!(1234)
 # results = [SW.startManyWalkerGFMC(S,2,55_000,3,nThermal,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:35]
-nBra = 3
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,12,nThermal+100_000÷nBra,nBra,x->SW.varitationalFunc(0.197,x,0),1) for _ in 1:12])
+nBra = 6
+##
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,16,nThermal+300_000÷nBra,nBra,varFuncTest,1) for _ in 1:8])
 ##
 # nBra = 1
 # @time results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+1200_000,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:6*4])
 # ens = [SW.getEnergies(res.TotalWeights[nThermal:end],res.energies[nThermal:end],1,150÷nBra) for res in results]
-ens = [SW.getEnergies(w,e,1,150÷nBra) for res in results[1:end] for (w,e) in zip(makeBlocks(res.TotalWeights[nThermal:end],numBlocks=2),makeBlocks(res.energies[nThermal:end],numBlocks=2)) ]
+ens = [SW.getEnergies(w,e,1,250÷nBra) for res in results[1:end] for (w,e) in zip(makeBlocks(res.TotalWeights[nThermal:end],numBlocks=1),makeBlocks(res.energies[nThermal:end],numBlocks=1)) ]
 
 en = mean(ens)
 # errs = getErrBlocking(results[1].energies[nThermal:end],results[1].TotalWeights[nThermal:end],2*10^4,20,E0) ./ ( (length(results[1].energies)-nThermal) ÷ 2*10^4)
@@ -74,83 +76,12 @@ with_theme(theme_SimpleTicks()) do
     hlines!([E0],color = :red,label = L"exact $$")
     axislegend(ax,merge=true)
     xlims!(ax,0.5,last(proj))
-    ylims!(ax,E0-1e-2,E0+3e-2)
+    ylims!(ax,E0-1e-2,E0+2e-2)
     # save("Application/exactFig/GFMCEnergy.png",fig)
     fig
 end
 
 ##
-  # @time obs = [SW.getObservables(res,S,float,1,150 ÷nBra) for res in results]
-# ens = [SW.getEnergies(res.TotalWeights,res.energies,nThermal,150÷nBra) for res in results]
-# binnedData = binningDataEstimates(results,100nThermal)
-# @time ens = fetch.([Threads.@spawn SW.getEnergies(binnedData.TotalWeights[i],binnedData.energies[i],1,100) for i in eachindex(binnedData.TotalWeights)])
-function getEnsBinning(energies,weights,nThermal,BinSize)
-    @views locEn = collect(SW.splitIntoBins(energies[nThermal:end],BinSize))
-    @views locW = collect(SW.splitIntoBins(weights[nThermal:end],BinSize))
-    # for res in results[2:end]
-    #     append!(locEn,collect(SW.splitIntoBins(res.energies[nThermal:end],BinSize)))
-    #     append!(locW,collect(SW.splitIntoBins(res.TotalWeights[nThermal:end],BinSize)))
-    # end
-    pop!(locEn)
-    pop!(locW)
-    @time ens = fetch.([Threads.@spawn SW.getEnergies(locW[i],locEn[i],1,150÷nBra) for i in eachindex(locEn)])
-end
-##
-ens = [SW.getEnergies(res.TotalWeights,res.energies,nThermal,150÷nBra) for res in results]
-binsize = 500000
-
-##
-function getErrBlocking(energies,weights,blocksize,LProjection,E0)
-
-    locEn = collect(SW.splitIntoBins(energies,blocksize))
-    locW = collect(SW.splitIntoBins(weights,blocksize))
-    
-    minsize,maxsize = extrema(length.(locEn))
-    
-    if maxsize!=minsize
-        pop!(locEn)
-        pop!(locW)
-    end
-    # @info "" unique(length.(locEn))
-    M_b = length(locEn)
-
-    X²s = [last(SW.getEnergies(locW[i],locEn[i].^2,1,LProjection)) for i in 1:M_b]
-    # safesum(x) = x<0 ? NaN : x
-    # Xj = [last(SW.getEnergies(locW[i],locEn[i],1,LProjection)) for i in 1:M_b]
-    σb = [√(1/(M_b-1) * sum(X² .- E0^2)) for X² in X²s]
-    # σb = [√(1/(M_b-1) * sum((X .- E0)^2)) for X in Xj]
-
-
-    # err = sqrt(var(last_en))
- 
-    # err = sqrt()
-end
-
-with_theme(theme_SimpleTicks()) do
-    # BlockSizes = [2^i for i in 3:10]
-    maxSize = length(results[1].energies) -nThermal
-    BlockSizes = [round(Int,2^i) for i in LinRange(log2(100),log2(maxSize ÷4),40)]
-    E0MC = ens[1][20÷nBra]
-    
-    err = fetch.([Threads.@spawn last(getErrBlocking(results[1].energies[nThermal:end],results[1].TotalWeights[nThermal:end],bs,20÷nBra,E0MC)) for bs in BlockSizes])
-    
-    numBins = maxSize .÷ BlockSizes
-    # return numBins
-    fig = Figure(fontsize = 22)
-    ax = Axis(fig[1,1],xlabel = L"block size $$",ylabel = L"\sigma_b",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5),xscale = log10)
-
-    # RX = BlockSizes .* err.^2 ./1
-    # scatter!(ax,BlockSizes,RX)
-    scatter!(ax,BlockSizes,err)
-    vlines!(ax,BlockSizes[findfirst(<(32),numBins)],color = :red)
-    fig
-    # scatter(BlockSizes,E_mean)
-    # hlines!(E0)
-    # current_figure()
-end
-# blockingAnalysis(results[1].energies[nThermal:end],results[1].TotalWeights[nThermal:end],2^7-1,150÷nBra
-##
-# ens = getEnsBinning(results[1].energies,results[1].TotalWeights,nThermal,2*10^4)
 #___________Observables_______________________
 ##
 # getAvgMag(Conf) = sum(Conf) ./ (2*length(Conf))
@@ -160,7 +91,7 @@ function getMag(results,pmax,I,nThermal)
 
     getMag(Conf) = Conf[I] /2
 
-    @views getObs(p) = [SW.getObs(Gnp[:,1:p],res.SaveConfigs[nThermal:end],res.reconfTable[:,nThermal:end],getMag,p÷2) for (res,Gnp) in zip(results,Gnps)]
+    @views getObs(p) = [SW.getObs(Gnp[:,1:p],res.SaveConfigs[:,:,:,nThermal:end],res.reconfTable[:,nThermal:end],getMag,p÷2) for (res,Gnp) in zip(results,Gnps)]
     obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
 
@@ -170,7 +101,7 @@ function getSiSj(results,pmax,I,J,nThermal)
 
     getCorr(Conf) = (Conf[I]*Conf[J]) *0.25
 
-    @views getObs(p) = [SW.getObs(Gnp[:,1:p],res.SaveConfigs[nThermal:end],res.reconfTable[:,nThermal:end],getCorr,p÷2) for (res,Gnp) in zip(results,Gnps)]
+    @views getObs(p) = [SW.getObs(Gnp[:,1:p],res.SaveConfigs[:,:,:,nThermal:end],res.reconfTable[:,nThermal:end],getCorr,p÷2) for (res,Gnp) in zip(results,Gnps)]
     obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
 ##
@@ -243,8 +174,11 @@ end
 @views function getFullMag(res,p,nThermal)
     # I = CartesianIndex(I)
     Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights[nThermal:end],1,p)
-
-    res = SW.getObs(Gnp,res.SaveConfigs[nThermal:end],res.reconfTable[:,nThermal:end],float,p÷2)
+    buffer = zeros(size(res.SaveConfigs[1][1]))
+    function m(Conf)
+        buffer .= Conf ./2
+    end
+    res = SW.getObs(Gnp,res.SaveConfigs[:,:,:,nThermal:end],res.reconfTable[:,nThermal:end],m,p÷2)
 end
 magFull = fetch.([Threads.@spawn getFullMag(res,100÷nBra,nThermal) for res in results])
 
@@ -260,8 +194,9 @@ end
 ##
 function getSq(res,p,nThermal)
     @views Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights[nThermal:end],1,p)
+    # @views Gnp = ones(length(res.TotalWeights[nThermal:end]),p)
 
-    Conf = parent(res.SaveConfigs[1][1])
+    Conf = @view res.SaveConfigs[:,:,begin,begin]
     NSites = length(Conf)
     Sq = similar(Conf, ComplexF64)
     
@@ -274,7 +209,7 @@ function getSq(res,p,nThermal)
         Sq .= abs2.(Sq)
     end
 
-    @views res = SW.getObs(Gnp,res.SaveConfigs[nThermal:end],res.reconfTable[:,nThermal:end],SqFunc,p÷2)
+    @views res = SW.getObs(Gnp,res.SaveConfigs[:,:,:,nThermal:end],res.reconfTable[:,nThermal:end],SqFunc,p÷2)
     newRes = similar(res,size(res).+1)
     newRes[begin:end-1,begin:end-1] .= res
 
@@ -289,7 +224,7 @@ end
 
 #     Sq(x) = abs2.(SW.LatticeFFTs.fft(x))
 
-#     res = SW.getObs(Gnp,res.SaveConfigs[nThermal:end],res.reconfTable[:,nThermal:end],Sq,p÷2)
+#     res = SW.getObs(Gnp,res.SaveConfigs[:,:,:,nThermal:end],res.reconfTable[:,nThermal:end],Sq,p÷2)
 #     newRes = similar(res,size(res).+1)
 #     newRes[1:end-1,1:end-1] .= res
 #     newRes[end,1:end-1] .= res[1,:]
@@ -311,13 +246,16 @@ with_theme(theme_PiTicks()) do
 end
 ##
 #___________Spin-1_______________________
-
+SW.Random.seed!(1234)
 S = SW.stencilConfig(zeros(30,30),1)
-nBra = 4
-nThermal = 3000
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,12,nThermal+300_000÷nBra,nBra,x->SW.varitationalFunc(0.15,x,0),1) for _ in 1:8])
+nBra = 10
+varFuncTest(x) = SW.varitationalFunc(0.15,x,0)
+nThermal = 1
 ##
-ens = [SW.getEnergies(w,e,1,200÷nBra) for res in results[1:end] for (w,e) in zip(makeBlocks(res.TotalWeights[4nThermal:end],numBlocks=1),makeBlocks(res.energies[4nThermal:end],numBlocks=1)) ]
+# @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,8,nThermal+3_000÷nBra,nBra,varFuncTest,1) for _ in 1:8])
+@time results = [SW.startManyWalkerGFMC(S,8,nThermal+3_000÷nBra,nBra,varFuncTest,1) for _ in 1:8]
+##
+ens = [SW.getEnergies(w,e,1,200÷nBra) for res in results[1:end] for (w,e) in zip(makeBlocks(res.TotalWeights[nThermal:end],numBlocks=1),makeBlocks(res.energies[nThermal:end],numBlocks=1)) ]
 
 en = mean(ens)
 with_theme(theme_SimpleTicks()) do
@@ -330,13 +268,13 @@ with_theme(theme_SimpleTicks()) do
     scatter!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
     errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black)
     axislegend(ax,merge=true)
-    # ylims!(ax,-12.4,-11.9)
+    # ylims!(ax,-75.05,-71.9)
     # save("Application/exactFig/GFMCEnergy.png",fig)
     fig
 end
 
 ##
-SqsGFMC = fetch.([Threads.@spawn getSq(res,120÷nBra,500) for res in results])
+SqsGFMC = fetch.([Threads.@spawn getSq(res,150÷nBra,nThermal) for res in results])
 ##
 function SqFieldTheory(x,y)
     num = cos(x) - cos(y) +2sin(x)sin(y) 
