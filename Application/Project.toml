@@ -1,6 +1,7 @@
 [deps]
 BinningAnalysis = "b7192094-8e58-5052-a244-180a858778ee"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+H5Zblosc = "c8ec2601-a99c-407f-b158-e79c03c2f5f7"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
 LargeN = "00c0e18a-d63a-4c8e-bbe6-b34667ceda92"
 LatticeFFTs = "83e9f648-131d-4a3c-a1de-d155351cd207"

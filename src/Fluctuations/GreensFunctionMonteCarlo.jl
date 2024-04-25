@@ -295,25 +295,6 @@ function setupProjector(weights,nThermal)
     Gn1 = bn./meanweight
 end
 
-
-function computeGnpForward(weights,p,N=0)
-    meanweight = mean(weights)
-    # meanweight = mean(weights)
-    
-    Gnp = zeros(length(weights),p+N)
-
-    for n in axes(Gnp,1)
-        Gnp[n,1] = weights[n]/meanweight 
-    end
-    for p in 2:PMax
-        for n in p:length(weights)
-            # Gnp[n,p] = Gnp[n,p-1]*weights[n-p]/meanweight
-            Gnp[n,p] = Gnp[n-1,p-1]*Gnp[n+N,1]*Gnp[n-p+1,1]
-        end
-    end
-    return Gnp
-end
-
 add_elementwise!(x::AbstractArray,y) = (x .+= y)
 add_elementwise!(x::Number,y::Number) = x + y
 
@@ -324,24 +305,32 @@ divide_elementwise!(x::Number,y::Number) = x / y
 divide_elementwise!(x::AbstractArray,y::AbstractArray) = (x ./= y)
 
 function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m=size(Gnp,2)÷2)
-    N = lastindex(AllConfigs)
-    Obs = ObsFunc(AllConfigs[1][1])
+    N = lastindex(AllConfigs,4)
+    exampleConf = @view AllConfigs[:,:,begin,begin]
+    Obs = ObsFunc(exampleConf)
     num = zero(Obs)
     denom = zero(Obs)
     # fill!(Obs,zero(eltype(Obs)))
 
     Nw = size(reconfigurationTable,1)
     p = size(Gnp,2)
+    # surviving_walker_mapping_list = zeros(Int,Nw)
+
     for n in m+1:N
         Gn = Gnp[n,p]
         # denom += Gn*Nw
         denom = add_elementwise!(denom,Gn*Nw)
+        # reconfigList = @view reconfigurationTable[:,n-m]
+        # surviving_walker_mapping!(surviving_walker_mapping_list,reconfigList)
         for α in 1:Nw
             α´ = α
             for i_m in 1:m
                 α´ = reconfigurationTable[α´,n-i_m]
             end
-            O = ObsFunc(AllConfigs[n-m][α´])
+            conf = @view AllConfigs[:,:,α´,n-m]
+            O = ObsFunc(conf)
+            # surviving_index = surviving_walker_mapping_list[α´]
+            # O = ObsFunc(AllConfigs[n-m][surviving_index])
             GnO = mult_elementwise!(O,Gn)
             # @. num += Gn*O
             num = add_elementwise!(num,GnO)
@@ -350,23 +339,51 @@ function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m=size(Gnp,2)÷2)
     return divide_elementwise!(num,denom)
 end
 
+function surviving_walker_mapping!(mappingarr,reconfigList)
+    fill!(mappingarr,0)
+    surviving_walkers = 0
+    for (α,α´) in enumerate(reconfigList)
+        if α == α´
+            surviving_walkers += 1
+            mappingarr[α´] = surviving_walkers
+        end
+    end
+    # println(reconfigList)
+    # println(mappingarr)
+    for α in eachindex(reconfigList,mappingarr)
+        if mappingarr[α] == 0
+            α´ = reconfigList[α]
+            # println((α,α´,mappingarr[α´]))
+            mappingarr[α] = mappingarr[α´]
+        end
+    end
+    return mappingarr
+end
+
 function splitIntoBins(array,binsize)
     Iterators.partition(array,binsize)
 end
 
-function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,Λ) where T
-    # Walkers = fetch.([Threads.@spawn spiderWebWalker(InitialState) for _ in 1:Nwalkers])# use threads to initialize walkers on correct NUMA domains (hopefully)
+function startManyWalkerGFMC(InitialState::ConfType,Nwalkers,NSteps,nBranch,weightfunc::Fun,Λ) where {T,ConfType <: StencilSpinConfig{T},Fun}
     AffectedPlaquetteList = precomputeAffectedPlaquettes(InitialState)
     plaquettePositions = collect(plaquetteIterator(InitialState))
     # createWalker(InitialState) = SpiderWebWalker(InitialState,plaquettePositions)
-    Walkers = [SpiderWebWalker(InitialState,plaquettePositions) for _ in 1:Nwalkers]
-
+    # Walkers = [SpiderWebWalker(InitialState,plaquettePositions) for _ in 1:Nwalkers]
+    # Walkers = fetch.([Threads.@spawn SpiderWebWalker(InitialState,plaquettePositions) for _ in 1:Nwalkers])# use threads to initialize walkers on correct NUMA domains (hopefully)
+    Walkers = Vector{SpiderWebWalker{ConfType}}(undef,Nwalkers)
+    Threads.@threads for α in eachindex(Walkers)
+        Walkers[α] = SpiderWebWalker(InitialState,plaquettePositions)
+    end
     weights = ones(Nwalkers)
     energies = zeros(NSteps)
     TotalWeights = zeros(NSteps)
     reconfigurationList = zeros(Int,Nwalkers)
     weightsectors = zeros(Nwalkers)
-    SaveConfigs = Vector{Vector{typeof(parent(InitialState))}}()
+
+    ConfigDims = size(InitialState)
+
+    SaveConfigs = zeros(T,ConfigDims...,Nwalkers,NSteps)
+
     reconfTable = zeros(Int,Nwalkers,NSteps)
 
     for i in 1:NSteps
@@ -390,13 +407,8 @@ function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc::T,
         reconfiguration!(Walkers,reconfigurationList,weightsectors,weights)
         reconfTable[:,i] .= reconfigurationList
 
-        # for (α,α´) in enumerate(reconfigurationList)
-        #     if α == α´ # convention: surviving walkers always remain a copy at their index
-        #         push!(SaveWalkers,copy(Walkers[α]))
-        #     end
-        # end
-
-        push!(SaveConfigs,saveConfigs(Walkers))
+        CurrentConfs = @view SaveConfigs[:,:,:,i]
+        saveConfigs!(CurrentConfs,Walkers)
     end
     return (;TotalWeights, energies, SaveConfigs,reconfTable)
 end
@@ -449,19 +461,26 @@ function getLocalEnergyWalkers_before(weights,Walkers::AbstractVector{<:Abstract
     return num/denom
 end
 
-function saveConfigs(Walkers::AbstractVector{<:AbstractWalker})
-    [copy(parent(get_config(Walker))) for Walker in Walkers]
+function saveConfigs!(SaveConfigs,Walkers::AbstractVector{<:AbstractWalker})
+    for (α,Config) in enumerate(Walkers)
+        SaveConfigs[:,:,α] .= get_config(Config)
+    end
+
 end
 
-"""given a sorted list reconfiguration indices, minimizes the number of reconfigurations by swapping elements in the list. Each walker that survives a reconfiguration step remains unchanged while walkers that are killed get assigned to a new index."""
+"""given a list of reconfiguration indices, minimizes the number of reconfigurations by swapping elements in the list. Each walker that survives a reconfiguration step remains unchanged while walkers that are killed get assigned to a new index."""
 function minimizeReconfiguration!(list)
-    for i in eachindex(list)
-        jRange = searchsorted(list,i)
-        if length(jRange) != 0
-            li = list[i]
-            list[i] = i
-            list[jRange[1]] = li
+    for (α,α´) in enumerate(list)
+        if α´ != α
+            otherIndex = findfirst(isequal(α),list)
+            isnothing(otherIndex) && continue
+            swapIndices!(list,α,otherIndex)
         end
     end
+    return list
+end
+
+function swapIndices!(list,i,j)
+    list[i],list[j] = list[j],list[i]
     return list
 end

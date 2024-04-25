@@ -2,7 +2,7 @@
 
 julia_version = "1.10.0"
 manifest_format = "2.0"
-project_hash = "a88bf6ec011fdbc35f39371f940a440feaa6b315"
+project_hash = "8f0188e4c87bfaf83add94f000b063231d075999"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -1802,7 +1802,7 @@ weakdeps = ["ChainRulesCore", "InverseFunctions"]
 
 [[deps.Stencils]]
 deps = ["Adapt", "ConstructionBase", "Dates", "KernelAbstractions", "LinearAlgebra", "Random", "SparseArrays", "StaticArrays", "UnicodeGraphics"]
-git-tree-sha1 = "f1c8f7e097f96778fc4fdbdb582a19ab6e317c79"
+path = "/storage/niggeni/.julia_janeway/dev/Stencils"
 uuid = "264155e8-78a8-466a-aa59-c9b28c34d21a"
 version = "0.3.0"
 
