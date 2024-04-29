@@ -247,7 +247,7 @@ end
 ##
 #___________Spin-1_______________________
 SW.Random.seed!(1234)
-S = SW.stencilConfig(zeros(30,30),1)
+S = SW.stencilConfig(zeros(40,40),1)
 nBra = 10
 varFuncTest(x) = SW.varitationalFunc(0.15,x,0)
 nThermal = 1
@@ -310,3 +310,4 @@ with_theme(theme_PiTicks()) do
     rowsize!(fig.layout,2,Relative(0.1))
     fig
 end
+##
