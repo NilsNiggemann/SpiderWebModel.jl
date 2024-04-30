@@ -32,6 +32,18 @@ allSpinsInBounds(S::StencilSpinConfig; kwargs...) = allSpinsInBounds(S,S.M; kwar
 plotSpinConfig!(ax, S::StencilSpinConfig; kwargs...) = plotSpinConfig!(ax, SpinConfig(S); kwargs...)
 plotSpinConfig(S::StencilSpinConfig; kwargs...) = plotSpinConfig(SpinConfig(S); kwargs...)
 
+function plaquetteIterator(S::Stencils.StencilArray)
+    bound = Stencils.boundary(S)
+    return stencil_plaquetteIterator(S,bound)
+end
+
+function stencil_plaquetteIterator(S,::Stencils.Wrap)
+    inboundsInds = Base.Iterators.product(axes(S, 1), axes(S, 2))
+    filterInds = Iterators.filter(ind -> isodd(sum(ind)), inboundsInds)
+end
+stencil_plaquetteIterator(S,::Any) = plaquetteIterator(parent(S))    
+
+
 @inline Base.@propagate_inbounds getPlaquetteStencil(
     S::Stencils.StencilArray,
     i::Int,
@@ -60,13 +72,40 @@ end
 @inline Base.@propagate_inbounds getPlaquetteSites(S::StencilSpinConfig, i::Int, j::Int) =
     getPlaquetteSites(parent(S), i, j)
 
-Base.@propagate_inbounds function applyPlaquette!(Config,i,j,sgn)
-    sites = Stencils.indices(Stencils.stencil(parent(Config)), CartesianIndex(i, j))
+Base.@propagate_inbounds applyPlaquette!(Config,i,j,sgn) = applyPlaquette!(parent(Config), i, j, sgn)
+
+Base.@propagate_inbounds function applyPlaquette!(Mat::Stencils.AbstractStencilArray,i,j,sgn)
+    # sites = Stencils.indices(Stencils.stencil(Mat), CartesianIndex(i, j))
+    sites = safe_indices(Mat, (i, j))
     for (ij,s) in zip(sites,P1_STENCIL)
         i,j = ij
-        Config[i,j] += sgn *s
+        Mat[i,j] += sgn *s
     end
-    return Config
+    return Mat
+end
+
+@inline function safe_indices(A::Stencils.AbstractStencilArray,I)
+    return safe_indices(A, Stencils.boundary(A), Stencils.padding(A), CartesianIndex(I))
+end
+@inline function safe_indices(A::Stencils.AbstractStencilArray,::Stencils.Wrap,::Stencils.Conditional,I::CartesianIndex)
+    inds = Stencils.indices(Stencils.stencil(A), I)
+    return get_wrappend_inds.(Ref(A), inds)
+end
+@inline function safe_indices(A::Stencils.AbstractStencilArray,::Stencils.Remove,::Stencils.Conditional,I::CartesianIndex)
+    inds = Stencils.indices(Stencils.stencil(A), I)
+end
+@inline function safe_indices(A::Stencils.AbstractStencilArray,::Any,::Any,I::CartesianIndex)
+    error("setindex for generic Stencil not implemented yet")
+end
+
+# `Conditional` needs handling for specific boundary conditions.
+# For Wrap we swap the side.
+function get_wrappend_inds(A::Stencils.AbstractStencilArray{S,R}, I::Tuple) where {S,R}
+    sz = Stencils.tuple_contents(S)
+    wrapped_inds = map(I, sz) do i, s
+        i < 1 ? i + s : (i > s ? i - s : i)
+    end
+    return wrapped_inds
 end
 
 

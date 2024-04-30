@@ -1,6 +1,22 @@
 using Test
 import SpiderWebModel as SW
 
+@testset "StencilSpinConfig" begin
+    
+    S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
+    oldVals = SW.getPlaquetteStencil(S,5,2)
+    SW.applyPlaquette!(S,5,2,1)
+    newVals = SW.getPlaquetteStencil(S,5,2)
+    @test oldVals == -newVals
+
+    S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2;boundary = Wrap(),padding = SW.Stencils.Conditional())
+    oldVals = SW.getPlaquetteStencil(S,2,1)
+    SW.applyPlaquette!(S,2,1,-1)
+    newVals = SW.getPlaquetteStencil(S,2,1)
+    @test oldVals == -newVals
+
+end
+##
 Conf = SW.periodicState5x5(10)
 @testset "applicablePlaquettes" begin
     @test SW.getApplicablePlaquettes(Conf) == [
