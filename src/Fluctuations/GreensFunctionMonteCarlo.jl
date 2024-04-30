@@ -51,7 +51,13 @@ end
 
 import StatsBase
 
-function findAffectedPlaquettes!(Plaq_indices,Config,i,j)
+function findAffectedPlaquettes!(Plaq_indices,S,i,j) 
+    A = parent(S)
+    bound = Stencils.boundary(A)
+    pad = Stencils.padding(A)
+    findAffectedPlaquettes!(Plaq_indices,S,i,j,bound,pad)
+end
+function findAffectedPlaquettes!(Plaq_indices,Config,i,j,::Stencils.Remove,::Stencils.Conditional)
     empty!(Plaq_indices)
     for (index,I) in enumerate(plaquetteIterator(Config))
         if !plaquettesAreSeparated(I,(i,j))
@@ -60,7 +66,21 @@ function findAffectedPlaquettes!(Plaq_indices,Config,i,j)
     end
     return Plaq_indices
 end
-# findAffectedPlaquettes(Config,i,j) = findAffectedPlaquettes!(Vector{Int}(),Config,i,j)
+function findAffectedPlaquettes!(Plaq_indices,Config,i,j,::Stencils.Wrap,::Stencils.Conditional)
+    empty!(Plaq_indices)
+    AllPlaqs = collect(plaquetteIterator(Config))
+    A = parent(Config)
+    for i´ in i-2:i+2
+        for j´ in j-2:j+2
+            isodd(i´+j´) || continue
+            (i´,j´) = get_wrappend_inds(A,(i´,j´))
+            index = findfirst(isequal((i´,j´)),AllPlaqs)
+            push!(Plaq_indices,index)
+        end
+    end
+    return Plaq_indices
+end
+
 
 function precomputeAffectedPlaquettes(Config)
     AffPlaqMatrix = [Vector{Int}() for i in 1:size(Config,1), j in 1:size(Config,2)]
@@ -388,8 +408,8 @@ function startManyWalkerGFMC(InitialState::ConfType,Nwalkers,NSteps,nBranch,weig
 
     for i in 1:NSteps
         # for (α,Config) in enumerate(Walkers)
-        # for α in eachindex(Walkers)
-        Threads.@threads for α in eachindex(Walkers)
+        for α in eachindex(Walkers)
+        # Threads.@threads for α in eachindex(Walkers)
             Walker = Walkers[α]
 
             w = 1

@@ -55,32 +55,34 @@ nBra = 6
 # nBra = 1
 # @time results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+1200_000,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:6*4])
 # ens = [SW.getEnergies(res.TotalWeights[nThermal:end],res.energies[nThermal:end],1,150÷nBra) for res in results]
-ens = [SW.getEnergies(w,e,1,250÷nBra) for res in results[1:end] for (w,e) in zip(makeBlocks(res.TotalWeights[nThermal:end],numBlocks=1),makeBlocks(res.energies[nThermal:end],numBlocks=1)) ]
+function plotEnergies(results,nBra,nThermal,E0;Emin=E0-1e-2,Emax=E0+2e-2)
+    ens = [SW.getEnergies(w,e,1,250÷nBra) for res in results[1:end] for (w,e) in zip(makeBlocks(res.TotalWeights[nThermal:end],numBlocks=1),makeBlocks(res.energies[nThermal:end],numBlocks=1)) ]
 
-en = mean(ens)
-# errs = getErrBlocking(results[1].energies[nThermal:end],results[1].TotalWeights[nThermal:end],2*10^4,20,E0) ./ ( (length(results[1].energies)-nThermal) ÷ 2*10^4)
-##
-with_theme(theme_SimpleTicks()) do
-    fig = Figure(fontsize = 22)
-    ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
-    # ens = getfield.(obs,:E0)
     en = mean(ens)
-    # M = length(results[1].energies)
-    # Mk = M ÷ length(ens)
-    # println(Mk)
-    err = sqrt.(var(ens))
-    # err = 0.004 .* ones(length(en))
-    proj = nBra .*eachindex(en)
-    scatter!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
-    errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black)
-    hlines!([E0],color = :red,label = L"exact $$")
-    axislegend(ax,merge=true)
-    xlims!(ax,0.5,last(proj))
-    ylims!(ax,E0-1e-2,E0+2e-2)
-    # save("Application/exactFig/GFMCEnergy.png",fig)
-    fig
+    # errs = getErrBlocking(results[1].energies[nThermal:end],results[1].TotalWeights[nThermal:end],2*10^4,20,E0) ./ ( (length(results[1].energies)-nThermal) ÷ 2*10^4)
+    ##
+    with_theme(theme_SimpleTicks()) do
+        fig = Figure(fontsize = 22)
+        ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
+        # ens = getfield.(obs,:E0)
+        en = mean(ens)
+        # M = length(results[1].energies)
+        # Mk = M ÷ length(ens)
+        # println(Mk)
+        err = sqrt.(var(ens))
+        # err = 0.004 .* ones(length(en))
+        proj = nBra .*eachindex(en)
+        scatter!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
+        errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black)
+        hlines!([E0],color = :red,label = L"exact $$")
+        axislegend(ax,merge=true)
+        xlims!(ax,0.5,last(proj))
+        ylims!(ax,Emin,Emax)
+        # save("Application/exactFig/GFMCEnergy.png",fig)
+        fig
+    end
 end
-
+plotEnergies(results,nBra,nThermal,E0)
 ##
 #___________Observables_______________________
 ##
@@ -311,3 +313,29 @@ with_theme(theme_PiTicks()) do
     fig
 end
 ##
+#___________Periodic Boundaries_______________________
+function getPeriodic(parent)
+    state = parent |> Array
+    SW.SpinConfig(SW.PeriodicMatrix(state), parent.S)
+end
+
+S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2;boundary = Wrap(),padding = SW.Stencils.Conditional())
+S_ED = getPeriodic(SW.getStairCase(size(S,1)))
+# S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
+# S_ED = SW.getStairCase(size(S,1))
+HStair = SW.generateHilbertSpace(S_ED)
+
+ExSol = SW.SolveHKrylov(HStair.H)
+E0 = ExSol.values[1]
+v0 = ExSol.vectors[1]
+HConfs = SW.spinConfig.(HStair.AllStates,Ref(S_ED),Ref(HStair.plaqMapping))
+magEx = SW.getMagnetization(HConfs, v0)
+SqEx = SW.getStructureFac(HConfs,v0)
+##
+nThermal = 500
+nBra = 2
+varFuncTest(N) = SW.varitationalFunc(0.197,N,0)
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,15,(nThermal+300000)÷nBra,nBra,varFuncTest,1) for _ in 1:6])
+
+##
+plotEnergies(results,nBra,nThermal,E0,Emin=E0-1e-2,Emax=E0+2e-2)
