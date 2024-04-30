@@ -18,6 +18,7 @@ ConfSpiral = SW.constructConfigPath(8, 8, SW.ALLGS_S12, SW.spiralPath)
     @test SW.fulFillsConstraint(ConfSpiral)
 end
 ##
+SW.initGurobi()
 @testset "JuMP construction" begin
 
     L = 20

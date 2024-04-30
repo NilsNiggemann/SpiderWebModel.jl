@@ -87,9 +87,15 @@ end
 @inline function safe_indices(A::Stencils.AbstractStencilArray,I)
     return safe_indices(A, Stencils.boundary(A), Stencils.padding(A), CartesianIndex(I))
 end
-@inline function safe_indices(A::Stencils.AbstractStencilArray,::Stencils.Wrap,::Stencils.Conditional,I::CartesianIndex)
+@inline function safe_indices(A::Stencils.AbstractStencilArray{<:Any,R,<:Any,N}, ::Stencils.Wrap, ::Stencils.Conditional,I ::CartesianIndex
+) where {R,N}
     inds = Stencils.indices(Stencils.stencil(A), I)
-    return get_wrappend_inds.(Ref(A), inds)
+    radii = CartesianIndex(ntuple(_ -> -R, N))
+    if checkbounds(Bool, A, I + radii) && checkbounds(Bool, A, I - radii)
+        return inds
+    else
+        return get_wrappend_inds.(Ref(A), inds)
+    end
 end
 @inline function safe_indices(A::Stencils.AbstractStencilArray,::Stencils.Remove,::Stencils.Conditional,I::CartesianIndex)
     inds = Stencils.indices(Stencils.stencil(A), I)

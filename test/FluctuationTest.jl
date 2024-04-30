@@ -9,7 +9,7 @@ import SpiderWebModel as SW
     newVals = SW.getPlaquetteStencil(S,5,2)
     @test oldVals == -newVals
 
-    S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2;boundary = Wrap(),padding = SW.Stencils.Conditional())
+    S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
     oldVals = SW.getPlaquetteStencil(S,2,1)
     SW.applyPlaquette!(S,2,1,-1)
     newVals = SW.getPlaquetteStencil(S,2,1)

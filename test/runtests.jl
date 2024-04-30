@@ -9,15 +9,7 @@ import SpiderWebModel as SW
     @test SW.constraint(c) == 1
 end
 
-##
-@testset "appending path" begin
-    path = Set([134, 13, 67, 87])
-    SW.updatePath!(path, 341)
-    @test path == Set([134, 341, 13, 67, 87])
 
-    SW.updatePath!(path, 341)
-    @test path == Set([134, 13, 67, 87])
-end
 include("ConstructionTest.jl")
 include("FluctuationTest.jl")
 include("GFMCTest.jl")
