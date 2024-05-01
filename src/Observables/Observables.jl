@@ -35,10 +35,28 @@ function getStructureFacWeights(AllStates::AbstractVector{<:SpinConfig}, weights
     # k = Sq[1].itp.ranges[1]
     # Sq_k = fetch.([Threads.@spawn SSq(Tuple(I)...) for I in CartesianIndices(Sq[1])])
     result = result .* (avgweight)
-    resultFull[end,1:end-1] .= resultFull[1,1:end-1]
-    resultFull[1:end-1,end] .= resultFull[1:end-1,1]
+    resultFull[end,1:end] .= resultFull[1,1:end]
+    resultFull[1:end,end] .= resultFull[1:end,1]
 
     return (; kx,ky, Sq = resultFull)
+end
+
+function getSqCont(SqMat)
+    Lx,Ly = size(SqMat)
+
+    function Sq(kx,ky)
+        # kx´ = mod2pi(kx)
+        # ky´ = mod2pi(ky)
+        ix = round(Int,kx/2pi*(Lx))
+        iy = round(Int,ky/2pi*(Ly))
+        ix = rem(ix,Lx)+1
+        iy = rem(iy,Ly)+1
+        # ix = rem2pi(kx´)*(Lx-1)+1
+        return SqMat[ix,iy]
+    end
+
+    Sq(k) = Sq(k[1],k[2])
+    return Sq
 end
 
 function getStructureFac(

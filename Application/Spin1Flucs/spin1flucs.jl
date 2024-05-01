@@ -1,8 +1,9 @@
 import SpiderWebModel as SW
-using StaticArrays, CairoMakie
+using CairoMakie
 using MakieHelpers
+using HDF5
 ##
-StartState = SW.SpinConfig(zeros(60, 60), 1)
+StartState = SW.SpinConfig(zeros(100, 100), 1)
 # StartState = SW.SpinConfig(Array(SW.getStairCase(24)),1)
 SW.plotApplPlaquettes(StartState, SW.P2)
 ##
@@ -42,21 +43,20 @@ function getRandomConfs(StartState, N, acceptanceRate; prethermalizationSteps = 
     return allconfs
 end
 ##
-@time confs = getRandomConfs(StartState, 2000, 0.0002; prethermalizationSteps = 10000000)
+@time confs = getRandomConfs(StartState, 2000, 0.0000001; prethermalizationSteps = 8000)
 ##
-Sq = SW.getEqualWeightStructureFac(confs)
-##
-with_theme(theme_PiTicks()) do
-    fig = Figure()
-    ax = Axis(fig[1, 1], aspect = 1)
+h5write("Application/ConfsRaw/Spin1Fluc_6.h5","Confs",stack(confs,dims=3))
 
-    hm = heatmap!(ax, Sq.k, Sq.k, real(Sq.Sq_k))
-    # @info "" sumrule = sum(real(Sq.Sq_k[1:end-1, 1:end-1])) sumRuleExpected = L^2 / 4
-    Colorbar(fig[1, 2], hm)
-    fig
-    save("Application/figs/Sq_S1_onlyS0Fluctuations.pdf", fig)
-    fig
-end
-◖
+# Sq = SW.getEqualWeightStructureFac(confs)
+# ##
+# with_theme(theme_PiTicks()) do
+#     fig = Figure()
+#     ax = Axis(fig[1, 1], aspect = 1)
 
-◗
+#     hm = heatmap!(ax, Sq.k, Sq.k, real(Sq.Sq_k))
+#     # @info "" sumrule = sum(real(Sq.Sq_k[1:end-1, 1:end-1])) sumRuleExpected = L^2 / 4
+#     Colorbar(fig[1, 2], hm)
+#     fig
+#     save("Application/figs/Sq_S1_onlyS0Fluctuations.pdf", fig)
+#     fig
+# end

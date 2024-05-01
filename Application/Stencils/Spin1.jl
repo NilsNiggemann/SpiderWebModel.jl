@@ -92,20 +92,6 @@ end
 projectionSteps = 250
 SqsGFMC = getSqs(AllResults,projectionSteps)
 ##
-function getSqCont(SqMat)
-    Lx,Ly = size(SqMat)
-
-    function Sq(kx,ky)
-        kx´ = mod2pi(kx)
-        ky´ = mod2pi(ky)
-        ix = round(Int,kx´/(2pi)*(Lx-1))+1
-        iy = round(Int,ky´/(2pi)*(Ly-1))+1
-        return SqMat[ix,iy]
-    end
-
-    Sq(k) = Sq(k[1],k[2])
-    return Sq
-end
 
 function SqFieldTheory(x,y)
     num = cos(x) - cos(y) +2sin(x)sin(y) 
@@ -116,11 +102,11 @@ SqFieldTheory(k) = SqFieldTheory(k[1],k[2])
 with_theme(theme_PiTicks()) do 
     # Sq = sqrt.(var(real(SqsGFMC))) ./4
     SqMat = mean(real(SqsGFMC)) ./4
-    SqFunc = getSqCont(SqMat)
+    SqFunc = SW.getSqCont(SqMat)
     
     # errMat = sqrt.(var(real(SqsGFMC))) ./4 ./SqMat
     errMat = sqrt.(var(real(SqsGFMC))) ./4
-    errFunc = getSqCont(errMat)
+    errFunc = SW.getSqCont(errMat)
     kx = ky = 2pi .* LinRange(0,1,size(SqMat,1)) .+ 0.5pi
     
     Sq = [SqFunc(x,y) for x in kx, y in ky]
@@ -165,11 +151,11 @@ end
 with_theme(theme_PiTicks()) do 
     # Sq = sqrt.(var(real(SqsGFMC))) ./4
     SqMat = mean(real(SqsGFMC)) ./4
-    SqFunc = getSqCont(SqMat)
+    SqFunc = SW.getSqCont(SqMat)
     
     # errMat = sqrt.(var(real(SqsGFMC))) ./4 ./SqMat
     errMat = sqrt.(var(real(SqsGFMC))) ./4
-    errFunc = getSqCont(errMat)
+    errFunc = SW.getSqCont(errMat)
     kx = ky = 2pi .* LinRange(0,1,size(SqMat,1)) .- 1.5pi
     kxSmall = kySmall = filter(x->abs(x) < pi/2,kx)
 
@@ -217,10 +203,10 @@ end
 
 with_theme(theme_PiTicks()) do 
     SqMat = mean(real(SqsGFMC)) ./4
-    SqFunc = getSqCont(SqMat)
+    SqFunc = SW.getSqCont(SqMat)
 
     errMat = sqrt.(var(real(SqsGFMC))) ./4
-    errFunc = getSqCont(errMat)
+    errFunc = SW.getSqCont(errMat)
     kx = ky = 2pi .* LinRange(0,1,size(SqMat,1)) .+ 0.5pi
     
     Sq = [SqFunc(x,y) for x in kx, y in ky]
@@ -255,7 +241,7 @@ with_theme(theme_PiTicks()) do
     Sqp = Sq[p1_discrete]
     
     Sqp ./= maximum(Sqp)
-    # SqFT_coarse = getSqCont(SqFT)
+    # SqFT_coarse = SW.getSqCont(SqFT)
     Sqp_all = [S[p1_discrete]./4 for S in real(SqsGFMC)]
     Sqerr = sqrt.(var(Sqp_all))
     # SqFTp = SqFieldTheory.(p1)

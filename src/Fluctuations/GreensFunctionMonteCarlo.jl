@@ -387,9 +387,6 @@ end
 function startManyWalkerGFMC(InitialState::ConfType,Nwalkers,NSteps,nBranch,weightfunc::Fun,Λ) where {T,ConfType <: StencilSpinConfig{T},Fun}
     AffectedPlaquetteList = precomputeAffectedPlaquettes(InitialState)
     plaquettePositions = collect(plaquetteIterator(InitialState))
-    # createWalker(InitialState) = SpiderWebWalker(InitialState,plaquettePositions)
-    # Walkers = [SpiderWebWalker(InitialState,plaquettePositions) for _ in 1:Nwalkers]
-    # Walkers = fetch.([Threads.@spawn SpiderWebWalker(InitialState,plaquettePositions) for _ in 1:Nwalkers])# use threads to initialize walkers on correct NUMA domains (hopefully)
     Walkers = Vector{SpiderWebWalker{ConfType}}(undef,Nwalkers)
     Threads.@threads for α in eachindex(Walkers)
         Walkers[α] = SpiderWebWalker(InitialState,plaquettePositions)
@@ -408,8 +405,8 @@ function startManyWalkerGFMC(InitialState::ConfType,Nwalkers,NSteps,nBranch,weig
 
     for i in 1:NSteps
         # for (α,Config) in enumerate(Walkers)
-        for α in eachindex(Walkers)
-        # Threads.@threads for α in eachindex(Walkers)
+        # for α in eachindex(Walkers)
+        Threads.@threads for α in eachindex(Walkers)
             Walker = Walkers[α]
 
             w = 1
