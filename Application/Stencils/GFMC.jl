@@ -319,7 +319,7 @@ function getPeriodic(parent)
     SW.SpinConfig(SW.PeriodicMatrix(state), parent.S)
 end
 
-S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2;boundary = Wrap(),padding = SW.Stencils.Conditional())
+S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
 S_ED = getPeriodic(SW.getStairCase(size(S,1)))
 # S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 # S_ED = SW.getStairCase(size(S,1))
@@ -335,7 +335,18 @@ SqEx = SW.getStructureFac(HConfs,v0)
 nThermal = 500
 nBra = 2
 varFuncTest(N) = SW.varitationalFunc(0.197,N,0)
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,15,(nThermal+300000)÷nBra,nBra,varFuncTest,1) for _ in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,15,(nThermal+1000)÷nBra,nBra,varFuncTest,1) for _ in 1:6])
 
 ##
-plotEnergies(results,nBra,nThermal,E0,Emin=E0-1e-2,Emax=E0+2e-2)
+plotEnergies(results,nBra,nThermal,E0,Emin=E0-1e-1,Emax=E0+2e-1)
+
+##___________ StraightForwardWalking _______________________
+resSFW = fetch.([Threads.@spawn SW.measure_B2_correlators(S,res.SaveConfigs,10,nBra,(6,7),varFuncTest,1) for res in results])
+##
+Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,10) for res in results]
+##
+obs = [SW.get_observables_sfw(Gnp,res[:,:,1],10) for (Gnp,res) in zip(Gnps,resSFW)]
+##
+scatterlines(mean(obs))
+errorbars!(1:nBra:10*nBra,mean(obs),10 .*sqrt.(var(obs)))
+current_figure()

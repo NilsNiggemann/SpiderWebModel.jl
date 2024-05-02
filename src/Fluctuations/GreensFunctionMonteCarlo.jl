@@ -398,23 +398,23 @@ function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers,NSteps) where {C
     weights = ones(Nwalkers)
     TotalWeights = zeros(NSteps)
     reconfiguration_buffer = zeros(Nwalkers)
+    reconfigurationList = zeros(Int,Nwalkers)
     
-    return (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer)
+    return (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationList)
 end
 
 function setupObservables(InitialState,Nwalkers,NSteps)
     energies = zeros(NSteps)
     ConfigDims = size(InitialState)
     SaveConfigs = zeros(eltype(InitialState),ConfigDims...,Nwalkers,NSteps)
-    reconfigurationList = zeros(Int,Nwalkers)
     reconfTable = zeros(Int,Nwalkers,NSteps)
-    return (;energies,SaveConfigs,reconfigurationList,reconfTable)
+    return (;energies,SaveConfigs,reconfTable)
 end
 
 function startManyWalkerGFMC(InitialState::ConfType,Nwalkers,NSteps,nBranch,weightfunc::Fun,Λ,saveObs=true) where {T,ConfType <: StencilSpinConfig{T},Fun}
     
-    (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer) = setup_many_walker_GFMC(InitialState,Nwalkers,NSteps)
-    (;energies,SaveConfigs,reconfigurationList,reconfTable) = setupObservables(InitialState,Nwalkers,NSteps)
+    (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationList) = setup_many_walker_GFMC(InitialState,Nwalkers,NSteps)
+    (;energies,SaveConfigs,reconfTable) = setupObservables(InitialState,Nwalkers,NSteps)
 
     for i in 1:NSteps
         # for (α,Config) in enumerate(Walkers)
