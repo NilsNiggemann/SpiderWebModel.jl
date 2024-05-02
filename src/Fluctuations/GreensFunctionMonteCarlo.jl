@@ -31,12 +31,13 @@ getOperatorRep(i,j,opNum) = i,j,opNum
 # end
 
 function getMoves!(
-    moves,
-    Conf
+    Walker::SpiderWebWalker
 )
-    empty!(moves)
 
-    for I in plaquetteIterator(Conf)
+    Conf = get_config(Walker)
+    moves = Walker.moves
+    empty!(moves)
+    for I in plaquetteIterator(Walker)
         applPlus, applMinus = P_applicable(Conf, I)
         i,j = I
         if applMinus
@@ -46,8 +47,10 @@ function getMoves!(
             push!(moves, getOperatorRep(i,j,1))
         end
     end
+
     return moves
 end
+# getMoves!(Walker::SpiderWebWalker) = getMoves!(Walker.moves,Walker)
 
 import StatsBase
 
@@ -80,7 +83,6 @@ function findAffectedPlaquettes!(Plaq_indices,Config,i,j,::Stencils.Wrap,::Stenc
     end
     return Plaq_indices
 end
-
 
 function precomputeAffectedPlaquettes(Config)
     AffPlaqMatrix = [Vector{Int}() for i in 1:size(Config,1), j in 1:size(Config,2)]
@@ -149,8 +151,6 @@ function getWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc
     (;Config,moves,weights,n_x,n_x´) = Walker
     empty!(weights)
 
-    moves = getMoves!(moves,Config)
-
     getNPlaq!(Walker)
     
     for operator in moves
@@ -174,7 +174,10 @@ function getWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc
 end
 
 function performMarkovStep!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc::T,Λ) where T
-    # moves = getMoves!(moves,Config)
+    moves = getMoves!(Walker)
+    for (i,j,opNum) in moves
+        @assert i != 0 && j != 0 "err"
+    end
     weights = getWeightList!(Walker,AffectedPlaquetteList,weightfunc,Λ)
 
     if isempty(weights)
@@ -234,6 +237,7 @@ function startSingleWalkerGFMC(InitialState,NSteps,weightfunc::T,Λ) where T
         TotalWeights[i] = bx_TotalWeight
         
         Allmoves[i] = move
+        moves = getMoves!(moves,Config)
         getWeightList!(weights,LocalMoves,Config,weightfunc,Λ)
         energies[i] = getLocalEnergy(weights,Λ)
         
@@ -384,7 +388,7 @@ function splitIntoBins(array,binsize)
     Iterators.partition(array,binsize)
 end
 
-function startManyWalkerGFMC(InitialState::ConfType,Nwalkers,NSteps,nBranch,weightfunc::Fun,Λ) where {T,ConfType <: StencilSpinConfig{T},Fun}
+function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers,NSteps) where {ConfType <: StencilSpinConfig}
     AffectedPlaquetteList = precomputeAffectedPlaquettes(InitialState)
     plaquettePositions = collect(plaquetteIterator(InitialState))
     Walkers = Vector{SpiderWebWalker{ConfType}}(undef,Nwalkers)
@@ -392,36 +396,34 @@ function startManyWalkerGFMC(InitialState::ConfType,Nwalkers,NSteps,nBranch,weig
         Walkers[α] = SpiderWebWalker(InitialState,plaquettePositions)
     end
     weights = ones(Nwalkers)
-    energies = zeros(NSteps)
     TotalWeights = zeros(NSteps)
-    reconfigurationList = zeros(Int,Nwalkers)
-    weightsectors = zeros(Nwalkers)
+    reconfiguration_buffer = zeros(Nwalkers)
+    
+    return (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer)
+end
 
+function setupObservables(InitialState,Nwalkers,NSteps)
+    energies = zeros(NSteps)
     ConfigDims = size(InitialState)
-
-    SaveConfigs = zeros(T,ConfigDims...,Nwalkers,NSteps)
-
+    SaveConfigs = zeros(eltype(InitialState),ConfigDims...,Nwalkers,NSteps)
+    reconfigurationList = zeros(Int,Nwalkers)
     reconfTable = zeros(Int,Nwalkers,NSteps)
+    return (;energies,SaveConfigs,reconfigurationList,reconfTable)
+end
+
+function startManyWalkerGFMC(InitialState::ConfType,Nwalkers,NSteps,nBranch,weightfunc::Fun,Λ,saveObs=true) where {T,ConfType <: StencilSpinConfig{T},Fun}
+    
+    (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer) = setup_many_walker_GFMC(InitialState,Nwalkers,NSteps)
+    (;energies,SaveConfigs,reconfigurationList,reconfTable) = setupObservables(InitialState,Nwalkers,NSteps)
 
     for i in 1:NSteps
         # for (α,Config) in enumerate(Walkers)
-        # for α in eachindex(Walkers)
-        Threads.@threads for α in eachindex(Walkers)
-            Walker = Walkers[α]
+        propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc,Λ,nBranch)
 
-            w = 1
-            for step in 1:nBranch
-                move,weightList = performMarkovStep!(Walker,AffectedPlaquetteList,weightfunc,Λ)
-                bx = sum(weightList)/size(InitialState,1)
-                w *= bx
-            end
-            weights[α] = w
-            getWeightList!(Walker,AffectedPlaquetteList,weightfunc,Λ)
-        end
         energies[i] = getLocalEnergyWalkers_before(weights,Walkers,Λ)
 
         TotalWeights[i] = mean(weights)
-        reconfiguration!(Walkers,reconfigurationList,weightsectors,weights)
+        reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
         reconfTable[:,i] .= reconfigurationList
 
         CurrentConfs = @view SaveConfigs[:,:,:,i]
@@ -430,6 +432,22 @@ function startManyWalkerGFMC(InitialState::ConfType,Nwalkers,NSteps,nBranch,weig
     return (;TotalWeights, energies, SaveConfigs,reconfTable)
 end
 
+function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc::Fun,Λ,nBranch) where {Fun}
+    L = size(get_config(first(Walkers)),1)
+    # for α in eachindex(Walkers)
+    Threads.@threads for α in eachindex(Walkers)
+        Walker = Walkers[α]
+        w = 1
+        for step in 1:nBranch
+            move,weightList = performMarkovStep!(Walker,AffectedPlaquetteList,weightfunc,Λ)
+            bx = sum(weightList)/L
+            w *= bx
+        end
+        weights[α] = w
+        getMoves!(Walker)
+        getWeightList!(Walker,AffectedPlaquetteList,weightfunc,Λ)
+    end
+end
 # function reconfiguration!(Walkers::AbstractVector{<:AbstractWalker},reconfigurationList,weights)
 #     StatsBase.sample!(eachindex(Walkers),StatsBase.Weights(weights),reconfigurationList,ordered = true)
 #     minimizeReconfiguration!(reconfigurationList)
@@ -444,15 +462,15 @@ end
 Matteo Calandra Buonaura and Sandro Sorella
 Phys. Rev. B 57, 11446 (1998)
 """
-function reconfiguration!(Walkers::AbstractVector{<:AbstractWalker},reconfigurationList,weightsectors,weights)
+function reconfiguration!(Walkers::AbstractVector{<:AbstractWalker},reconfigurationList,reconfiguration_buffer,weights)
     Nw = length(Walkers)
-    weightsectors = cumsum!(weightsectors,weights) 
+    reconfiguration_buffer = cumsum!(reconfiguration_buffer,weights) 
     wTotal = sum(weights)
-    weightsectors ./= wTotal
+    reconfiguration_buffer ./= wTotal
     for α in eachindex(Walkers)
         ξα = rand()
         zα = (α + ξα - 1)/Nw
-        α´ = searchsortedfirst(weightsectors,zα)
+        α´ = searchsortedfirst(reconfiguration_buffer,zα)
         reconfigurationList[α] = α´
     end
     minimizeReconfiguration!(reconfigurationList)
