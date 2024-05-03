@@ -332,21 +332,55 @@ HConfs = SW.spinConfig.(HStair.AllStates,Ref(S_ED),Ref(HStair.plaqMapping))
 magEx = SW.getMagnetization(HConfs, v0)
 SqEx = SW.getStructureFac(HConfs,v0)
 ##
-nThermal = 500
+nThermal = 100
 nBra = 2
 varFuncTest(N) = SW.varitationalFunc(0.197,N,0)
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,15,(nThermal+1000)÷nBra,nBra,varFuncTest,1) for _ in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,8,(nThermal+700)÷nBra,nBra,varFuncTest,1) for _ in 1:6])
 
 ##
 plotEnergies(results,nBra,nThermal,E0,Emin=E0-1e-1,Emax=E0+2e-1)
 
 ##___________ StraightForwardWalking _______________________
-resSFW = fetch.([Threads.@spawn SW.measure_B2_correlators(S,res.SaveConfigs,10,nBra,(6,7),varFuncTest,1) for res in results])
+allPlaqs = SW.getApplicablePlaquettes(S_ED)
+refPlaq = allPlaqs[begin + 13]
+pairPlaqs = filter(!=(refPlaq),allPlaqs)
+exactCorrs = [SW.getBij_square(HStair.AllStates,HStair.plaqMapping,v0,refPlaq,Pj) for Pj in pairPlaqs]
+##
+let 
+    fig = Figure()
+    ax = Axis(fig[1,1];SW.getConfigAxis(S)...,backgroundcolor = :white)
+    points = Point.(pairPlaqs)
+    sizefunc(x) = x*100
+    scatter!(ax,Point(refPlaq), marker = '×',markersize = 60, color = :red)
+    scatter!(ax,points, markersize = sizefunc.(exactCorrs),colormap = :viridis, color = exactCorrs)
+    fig
+end
+##
+resSFW = fetch.([Threads.@spawn SW.measure_B2_correlators(S,res.SaveConfigs,10,nBra,refPlaq,varFuncTest,1) for res in results])
 ##
 Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,10) for res in results]
 ##
-obs = [SW.get_observables_sfw(Gnp,res[:,:,1],10) for (Gnp,res) in zip(Gnps,resSFW)]
+GFMCPlaqs = collect(SW.plaquetteIterator(S))
+
+obs = [[SW.get_observables_sfw(Gnp,res[:,:,j],10)[end] for j in eachindex(GFMCPlaqs)] for (Gnp,res) in zip(Gnps,resSFW) ]
 ##
-scatterlines(mean(obs))
-errorbars!(1:nBra:10*nBra,mean(obs),10 .*sqrt.(var(obs)))
+let 
+    fig = Figure()
+    ax = Axis(fig[1,1];SW.getConfigAxis(S)...,backgroundcolor = :white)
+    points = Point.(GFMCPlaqs)
+    sizefunc(x) = x*10
+    scatter!(ax,Point(refPlaq), marker = '×',markersize = 60, color = :red)
+    scatter!(ax,points, markersize = sizefunc.(mean(obs)),colormap = :viridis, color = mean(obs))
+
+
+    points = Point.(pairPlaqs)
+    sizefunc2(x) = x*500
+    scatter!(ax,points, markersize = sizefunc2.(exactCorrs),colormap = :viridis, color = exactCorrs,marker = '∘')
+    fig
+end
+##
+errorbars(1:nBra:10*nBra,mean(obs),sqrt.(var(obs)))
+lines!(1:nBra:10*nBra,mean(obs),linewidth = 0.5)
+exactCorr = exactCorrs[only(findfirst(==((8,3)),pairPlaqs))]
+hlines!([exactCorr],color = :red)
 current_figure()

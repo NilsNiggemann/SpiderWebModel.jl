@@ -8,26 +8,29 @@ function get_B2_moves!(Walker::SpiderWebWalker,I)
 end
 
 function apply_B2_Operator!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc,I,J)
+    w = 1.
     for site in (I,J)
         get_B2_moves!(Walker,site)
         if isempty(Walker.moves) 
             empty!(Walker.weights)
             push!(Walker.weights,0)
-            return (0,0,0),Walker.weights
+            return 0. #(0,0,0),Walker.weights
         end
         weights = getWeightList!(Walker,AffectedPlaquetteList,weightfunc,0)
+        w *= sum(weights)
         moveidx = StatsBase.sample(StatsBase.Weights(weights))
         move = Walker.moves[moveidx]
         applyPlaquette!(Walker.Config, move[1], move[2], move[3]) 
     end
+    return w
 end
 
 function initialize_forward_walkingB2!(setup,Configs,I,J,weightfunc)
-    (;AffectedPlaquetteList,Walkers) = setup
+    (;AffectedPlaquetteList,Walkers,weights) = setup
 
     for (α, Walker) in enumerate(Walkers)
         get_config(Walker) .= @view Configs[:,:,α]
-        apply_B2_Operator!(Walker,AffectedPlaquetteList,weightfunc,I,J)
+        weights[α] = apply_B2_Operator!(Walker,AffectedPlaquetteList,weightfunc,I,J)
     end
     return setup
 end
@@ -39,10 +42,10 @@ function straight_forward_walkingB2!(setup,NSteps,nBranch,Configs,weightfunc::T,
     (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationList) = setup
 
     Operator_weight = mean(weights)
-
     reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
     
     if all(iszero,weights)
+        TotalWeights .= 0
         return TotalWeights
     end
 
@@ -65,8 +68,10 @@ function measure_B2_correlators(InitialState,saveConfigs,mProj,nBranch,I,weightf
     for n in 1:NSteps
         Configs = @view saveConfigs[:,:,:,n]
         for (j,J) in enumerate(plaquetteIterator(InitialState))
+            # J == (5,6) || continue
             res = straight_forward_walkingB2!(setup,mProj,nBranch,Configs,weightfunc,I,J,Λ)
             results[n,:,j] .= res
+
         end
     end
     return results

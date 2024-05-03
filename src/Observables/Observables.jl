@@ -115,3 +115,26 @@ function getMagnetization(AllStates, ψ0::AbstractVector)
     end
     return mag
 end
+
+
+function getBij_square(AllStates,plaqMapping,ψ0::AbstractVector,I,J)
+    res = 0.
+    AllStatesDict = Dict(AllStates[i] => i for i in eachindex(AllStates))
+    @inline function flipPlaquette(StateRep,ij)
+        plaqstate = StateRep[ij]
+        setindex(StateRep, ij, !plaqstate)
+    end
+
+    for n in eachindex(ψ0)
+        x = AllStates[n]
+
+        x´ = flipPlaquette(x, plaqMapping(I))
+        x´ = flipPlaquette(x´,plaqMapping(J))
+        
+        if x´ in keys(AllStatesDict)
+            m´ = AllStatesDict[x´]
+            res += ψ0[n] * ψ0[m´]
+        end
+    end
+    return res
+end
