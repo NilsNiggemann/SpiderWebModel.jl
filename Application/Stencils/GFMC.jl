@@ -35,26 +35,6 @@ function makeBlocks(arr;blocksize = nothing, numBlocks = 32)
     end
     return blockedArr
 end
-magEx = SW.getMagnetization(HConfs, v0)
-##
-@time SqEx = SW.getStructureFac(HConfs,v0)
-# @time SqEx = SW.getEqualWeightStructureFac(HConfs)
-# @time SqEx = SW.getStructureFac(HConfs,SW.normalize!(ones(length(v0))))
-#___________ManyWalkers_______________________
-##
-# S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
-varFuncTest(N) = SW.varitationalFunc(0.197,N,0)
-
-nThermal = 6_000
-SW.Random.seed!(1234)
-# results = [SW.startManyWalkerGFMC(S,2,55_000,3,nThermal,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:35]
-nBra = 6
-##
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,16,nThermal+300_000÷nBra,nBra,varFuncTest,1) for _ in 1:8])
-##
-# nBra = 1
-# @time results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+1200_000,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:6*4])
-# ens = [SW.getEnergies(res.TotalWeights[nThermal:end],res.energies[nThermal:end],1,150÷nBra) for res in results]
 function plotEnergies(results,nBra,nThermal,E0;Emin=E0-1e-2,Emax=E0+2e-2)
     ens = [SW.getEnergies(w,e,1,250÷nBra) for res in results[1:end] for (w,e) in zip(makeBlocks(res.TotalWeights[nThermal:end],numBlocks=1),makeBlocks(res.energies[nThermal:end],numBlocks=1)) ]
 
@@ -82,6 +62,27 @@ function plotEnergies(results,nBra,nThermal,E0;Emin=E0-1e-2,Emax=E0+2e-2)
         fig
     end
 end
+magEx = SW.getMagnetization(HConfs, v0)
+##
+@time SqEx = SW.getStructureFac(HConfs,v0)
+# @time SqEx = SW.getEqualWeightStructureFac(HConfs)
+# @time SqEx = SW.getStructureFac(HConfs,SW.normalize!(ones(length(v0))))
+#___________ManyWalkers_______________________
+##
+# S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
+varFuncTest(N) = SW.varitationalFunc(0.197,N,0)
+
+nThermal = 6_000
+SW.Random.seed!(1234)
+# results = [SW.startManyWalkerGFMC(S,2,55_000,3,nThermal,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:35]
+nBra = 6
+##
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,16,nThermal+300_000÷nBra,nBra,varFuncTest,1) for _ in 1:8])
+##
+# nBra = 1
+# @time results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+1200_000,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:6*4])
+# ens = [SW.getEnergies(res.TotalWeights[nThermal:end],res.energies[nThermal:end],1,150÷nBra) for res in results]
+
 plotEnergies(results,nBra,nThermal,E0)
 ##
 #___________Observables_______________________
@@ -335,7 +336,7 @@ SqEx = SW.getStructureFac(HConfs,v0)
 nThermal = 100
 nBra = 2
 varFuncTest(N) = SW.varitationalFunc(0.197,N,0)
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,8,(nThermal+700)÷nBra,nBra,varFuncTest,1) for _ in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,10,(nThermal+3000)÷nBra,nBra,varFuncTest,1) for _ in 1:6])
 
 ##
 plotEnergies(results,nBra,nThermal,E0,Emin=E0-1e-1,Emax=E0+2e-1)
@@ -343,7 +344,8 @@ plotEnergies(results,nBra,nThermal,E0,Emin=E0-1e-1,Emax=E0+2e-1)
 ##___________ StraightForwardWalking _______________________
 allPlaqs = SW.getApplicablePlaquettes(S_ED)
 refPlaq = allPlaqs[begin + 13]
-pairPlaqs = filter(!=(refPlaq),allPlaqs)
+# pairPlaqs = filter(!=(refPlaq),allPlaqs)
+pairPlaqs = copy(allPlaqs)
 exactCorrs = [SW.getBij_square(HStair.AllStates,HStair.plaqMapping,v0,refPlaq,Pj) for Pj in pairPlaqs]
 ##
 let 
@@ -356,31 +358,46 @@ let
     fig
 end
 ##
-resSFW = fetch.([Threads.@spawn SW.measure_B2_correlators(S,res.SaveConfigs,10,nBra,refPlaq,varFuncTest,1) for res in results])
+resSFW = fetch.([Threads.@spawn SW.measure_B2_correlators(S,res.SaveConfigs,5,nBra,refPlaq,varFuncTest,1) for res in results])
 ##
 Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,10) for res in results]
-##
+
 GFMCPlaqs = collect(SW.plaquetteIterator(S))
 
-obs = [[SW.get_observables_sfw(Gnp,res[:,:,j],10)[end] for j in eachindex(GFMCPlaqs)] for (Gnp,res) in zip(Gnps,resSFW) ]
+obs = [[SW.get_observables_sfw(Gnp,res[:,:,j],mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resSFW,results) ]
 ##
 let 
     fig = Figure()
     ax = Axis(fig[1,1];SW.getConfigAxis(S)...,backgroundcolor = :white)
     points = Point.(GFMCPlaqs)
-    sizefunc(x) = x*10
-    scatter!(ax,Point(refPlaq), marker = '×',markersize = 60, color = :red)
-    scatter!(ax,points, markersize = sizefunc.(mean(obs)),colormap = :viridis, color = mean(obs))
 
+    corrEnd = 1 .* last.(mean(obs))
 
+    localCorr = only(findfirst(==(refPlaq),GFMCPlaqs))
+    corrEnd[localCorr] /= 3
+
+    exactCorrsRescale = copy(exactCorrs)
+    localCorr = only(findfirst(==(refPlaq),pairPlaqs))
+    exactCorrsRescale[localCorr] /= 3
+
+    sizefunc(x) = x*30*7
+    # scatter!(ax,Point(refPlaq), marker = '×',markersize = 60, color = :red)
+    scatter!(ax,points, markersize = sizefunc.(corrEnd),colormap = :viridis, color = sizefunc.(corrEnd),marker = '●',alpha = 1)
+    
+    
     points = Point.(pairPlaqs)
-    sizefunc2(x) = x*500
-    scatter!(ax,points, markersize = sizefunc2.(exactCorrs),colormap = :viridis, color = exactCorrs,marker = '∘')
+    sizefunc2(x) = sizefunc(x)
+    # scatter!(ax,points, markersize = sizefunc2.(exactCorrs),colormap = :viridis, color = exactCorrs,marker = '∘')
+    scatter!(ax,points, markersize = sizefunc2.(exactCorrsRescale),colormap = :viridis, color = :red,alpha = 0.0,marker = '●',strokewidth = 0.8000,strokecolor = :red) 
+    # scatter!(ax,points, markersize = sizefunc2.(exactCorrs),colormap = :viridis, color = exactCorrs,alpha = 0.4)
     fig
 end
 ##
-errorbars(1:nBra:10*nBra,mean(obs),sqrt.(var(obs)))
-lines!(1:nBra:10*nBra,mean(obs),linewidth = 0.5)
-exactCorr = exactCorrs[only(findfirst(==((8,3)),pairPlaqs))]
+Plaq2 = (7,4)
+gfmcPlaq = only(findfirst(==(Plaq2),GFMCPlaqs))
+obsArr = 2 .* stack(stack(obs))[:,gfmcPlaq,:]
+errorbars(eachindex(nBra .* obsArr[:,1]),mean(obsArr,dims=2)[:],sqrt.(var(obsArr,dims=2))[:])
+lines!(eachindex(nBra .* obsArr[:,1]),mean(obsArr,dims=2)[:],linewidth = 0.5)
+exactCorr = exactCorrs[only(findfirst(==(Plaq2),pairPlaqs))]
 hlines!([exactCorr],color = :red)
 current_figure()

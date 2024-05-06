@@ -20,7 +20,7 @@ function apply_B2_Operator!(Walker::SpiderWebWalker,AffectedPlaquetteList,weight
         w *= sum(weights)
         moveidx = StatsBase.sample(StatsBase.Weights(weights))
         move = Walker.moves[moveidx]
-        applyPlaquette!(Walker.Config, move[1], move[2], move[3]) 
+        applyPlaquette!(Walker.Config, move[1], move[2], move[3])
     end
     return w
 end
@@ -67,7 +67,7 @@ function measure_B2_correlators(InitialState,saveConfigs,mProj,nBranch,I,weightf
     results = zeros(NSteps,mProj,length(AllPlaqs))
     for n in 1:NSteps
         Configs = @view saveConfigs[:,:,:,n]
-        for (j,J) in enumerate(plaquetteIterator(InitialState))
+        for (j,J) in enumerate(AllPlaqs)
             # J == (5,6) || continue
             res = straight_forward_walkingB2!(setup,mProj,nBranch,Configs,weightfunc,I,J,Λ)
             results[n,:,j] .= res
@@ -77,12 +77,12 @@ function measure_B2_correlators(InitialState,saveConfigs,mProj,nBranch,I,weightf
     return results
 end
 
-function get_observables_sfw(Gnp,sfw_weights,m = size(sfw_weights,1))
+function get_observables_sfw(Gnp,sfw_weights,meanweight,m = size(sfw_weights,2))
     num = zeros(m)
     denom = zeros(m)
     for p in 1:m
         for n in p:lastindex(Gnp,1)
-            num[p] += sfw_weights[n,p]
+            num[p] += prod(sfw_weights[n,i]/meanweight for i in 1:p)
             denom[p] += Gnp[n,p]
         end
     end
