@@ -129,6 +129,7 @@ function getBij_square(AllStates,plaqMapping,ψ0::AbstractVector,I,J)
         x = AllStates[n]
 
         x´ = flipPlaquette(x, plaqMapping(I))
+        x´ in keys(AllStatesDict) || continue # do not allow virtual tunneling out of Hilbert space
         x´ = flipPlaquette(x´,plaqMapping(J))
         
         if x´ in keys(AllStatesDict)
