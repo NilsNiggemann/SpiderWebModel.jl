@@ -1,6 +1,8 @@
 """Abstract supertype for a walker in a GFMC simulation. A walker needs to have a method `get_config` which returns the configuration (for example the spin configuration), and a method `get_weights` which returns a vector of weights for each possible move."""
 abstract type AbstractWalker end
 
+abstract type AbstractGuidingFunction end
+
 struct SpiderWebWalker{C} <: AbstractWalker
     Config::C
     moves::Vector{Tuple{Int8,Int8,Int8}}
@@ -29,6 +31,27 @@ getOperatorRep(i,j,opNum) = i,j,opNum
 # function getOperatorFromNumber(Config, opNumber, operators)
 
 # end
+
+struct PlaquetteNumberGuidingFunction <: AbstractGuidingFunction
+    α::Float64
+end
+(ψG::PlaquetteNumberGuidingFunction)(ΔNPlaq::Integer) = exp(ψG.α*ΔNPlaq)
+
+function varitationalFunc(α,NPlaq::Integer,NPlaqEstimate)
+    return exp(α*(NPlaq-NPlaqEstimate))
+end
+
+function ConstructVaritationalFunc(α,ConfEx=nothing)
+    NPlaqEst = 0
+    if ConfEx !== nothing
+        NPlaqEst = NPlaquettes(ConfEx)
+    end
+    ψ = let α = α, NPlaqEst = NPlaqEst
+        Conf -> varitationalFunc(α,NPlaquettes(Conf),NPlaqEst)
+    end
+    # return Conf -> varitationalFunc(α,NPlaquettes(Conf),NPlaqEst)
+end
+
 
 function getMoves!(
     Walker::SpiderWebWalker
@@ -87,7 +110,7 @@ end
 function precomputeAffectedPlaquettes(Config)
     AffPlaqMatrix = [Vector{Int}() for i in 1:size(Config,1), j in 1:size(Config,2)]
 
-    for (index,I) in enumerate(plaquetteIterator(Config))
+    for I in plaquetteIterator(Config)
         i,j = I
         findAffectedPlaquettes!(AffPlaqMatrix[i,j],Config,i,j)
     end
@@ -105,7 +128,6 @@ function getNPlaq!(Walker::SpiderWebWalker)
 end
 
 function getNPlaq!(Walker::SpiderWebWalker,affected_indices)
-    ind = 1
     (;n_x´,Config,Plaquette_positions) = Walker
     resize!(n_x´,length(affected_indices))
     # println(affected_indices)
@@ -202,21 +224,6 @@ function NPlaquettes(Conf)
         moves += applPlus + applMinus
     end
     return moves
-end
-
-function varitationalFunc(α,NPlaq::Integer,NPlaqEstimate)
-    return exp(α*(NPlaq-NPlaqEstimate))
-end
-
-function ConstructVaritationalFunc(α,ConfEx=nothing)
-    NPlaqEst = 0
-    if ConfEx !== nothing
-        NPlaqEst = NPlaquettes(ConfEx)
-    end
-    ψ = let α = α, NPlaqEst = NPlaqEst
-        Conf -> varitationalFunc(α,NPlaquettes(Conf),NPlaqEst)
-    end
-    # return Conf -> varitationalFunc(α,NPlaquettes(Conf),NPlaqEst)
 end
 
 function startSingleWalkerGFMC(InitialState,NSteps,weightfunc::T,Λ) where T
