@@ -322,14 +322,15 @@ end
 
 S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
 S_ED = getPeriodic(SW.getStairCase(size(S,1)))
-# S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
+# S_ED = SW.getStairCase(size(S,1))
+# S = SW.stencilConfig(parent(SW.getStairCase(7)),1/2)
 # S_ED = SW.getStairCase(size(S,1))
 HStair = SW.generateHilbertSpace(S_ED)
 
 ExSol = SW.SolveHKrylov(HStair.H)
 E0 = ExSol.values[1]
 v0 = ExSol.vectors[1]
-HConfs = SW.spinConfig.(HStair.AllStates,Ref(S_ED),Ref(HStair.plaqMapping))
+HConfs = getPeriodic.(SW.spinConfig.(HStair.AllStates,Ref(S_ED),Ref(HStair.plaqMapping)))
 magEx = SW.getMagnetization(HConfs, v0)
 SqEx = SW.getStructureFac(HConfs,v0)
 ##
@@ -337,17 +338,21 @@ nThermal = 100
 nBra = 2
 ψG = SW.PlaquetteNumberGuidingFunction(0.197)
 # ψG(N) = 1
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,4,(nThermal+1300)÷nBra,nBra,ψG,1) for _ in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,4,(nThermal+9800)÷nBra,nBra,ψG,1) for _ in 1:6])
 
 ##
 plotEnergies(results,nBra,nThermal,E0,Emin=E0-1e-1,Emax=E0+2e-1)
 
 ##___________ StraightForwardWalking _______________________
+# allPlaqs = collect(SW.plaquetteIterator(S))
 allPlaqs = SW.getApplicablePlaquettes(S_ED)
-refPlaq = allPlaqs[begin + 13]
+refPlaq = first(SW.getApplicablePlaquettes(S_ED))
 # pairPlaqs = filter(!=(refPlaq),allPlaqs)
 pairPlaqs = copy(allPlaqs)
-exactCorrs = [SW.getBij_square(HStair.AllStates,HStair.plaqMapping,v0,refPlaq,Pj) for Pj in pairPlaqs]
+exactBB = [SW.getBij_square(HStair.AllStates,HStair.plaqMapping,v0,refPlaq,Pj) for Pj in pairPlaqs]
+exactB = [SW.getBi_square(HStair.AllStates,HStair.plaqMapping,v0,Pj) for Pj in pairPlaqs]
+refPlaqPos = only(findfirst(==(refPlaq),pairPlaqs))
+exactCorrs = exactBB .- exactB[refPlaqPos] .*exactB 
 ##
 let 
     fig = Figure()
@@ -359,29 +364,37 @@ let
     fig
 end
 ##
-resSFW = fetch.([Threads.@spawn SW.measure_B2_correlators(S,res.SaveConfigs,5,nBra,refPlaq,ψG,1) for res in results])
+BOp = SW.PlaquetteFlipOperator(S)
+resB = fetch.([Threads.@spawn SW.measure_operator(S,res.SaveConfigs,8,nBra,BOp,ψG,1) for res in results])
 ##
-Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,20) for res in results]
+BBOp = SW.BBOperator(S,refPlaq)
+resBB = fetch.([Threads.@spawn SW.measure_operator(S,res.SaveConfigs,8,nBra,BBOp,ψG,1) for res in results])
+
+##
+Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,10) for res in results]
 
 GFMCPlaqs = collect(SW.plaquetteIterator(S))
 
-obs = [[SW.get_observables_sfw(Gnp,res[:,:,j],mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resSFW,results) ]
+BVals = [[SW.get_observables_sfw(Gnp,res[:,:,j],mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resB,results) ]
+BBVals = [[SW.get_observables_sfw(Gnp,res[:,:,j],mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resBB,results) ]
 ##
 let 
     fig = Figure()
     ax = Axis(fig[1,1];SW.getConfigAxis(S)...,backgroundcolor = :white)
     pointsGFMC = Point.(GFMCPlaqs)
 
-    corrEnd = last.(mean(obs))
-
+    BBEnd = last.(mean(BBVals)) 
+    BEnd = last.(mean(BVals))
     localCorr = only(findfirst(==(refPlaq),GFMCPlaqs))
+    corrEnd = BBEnd .- BEnd[localCorr] .*BEnd
+    
     corrEnd[localCorr] /= 2
 
     exactCorrsRescale = copy(exactCorrs)
     localCorr = only(findfirst(==(refPlaq),pairPlaqs))
     exactCorrsRescale[localCorr] /= 2
 
-    sizefunc(x) = x*30*7
+    sizefunc(x) = x*30*25
     # scatter!(ax,Point(refPlaq), marker = '×',markersize = 60, color = :red)
     
     points = Point.(pairPlaqs)
@@ -394,13 +407,121 @@ let
     fig
 end
 ##
-Plaq2 = (8,7)
+Plaq2 = (3,4)
+# Plaq2 = rand(pairPlaqs)
 # Plaq2 = refPlaq
 
 gfmcPlaq = only(findfirst(==(Plaq2),GFMCPlaqs))
-obsArr = stack(stack(obs))[:,gfmcPlaq,:]
+obsArr = stack(stack(BBVals))[:,gfmcPlaq,:]
 errorbars(eachindex(nBra .* obsArr[:,1]),mean(obsArr,dims=2)[:],sqrt.(var(obsArr,dims=2))[:])
 lines!(eachindex(nBra .* obsArr[:,1]),mean(obsArr,dims=2)[:],linewidth = 0.5)
 exactCorr = exactCorrs[only(findfirst(==(Plaq2),pairPlaqs))]
 hlines!([exactCorr],color = :red)
+# ylims!(exactCorr -5e-1,exactCorr + 5e-1)
 current_figure()
+##
+#___________Spin-1_______________________
+ψG = SW.PlaquetteNumberGuidingFunction(0.15)
+S = SW.stencilConfig(zeros(15,15),1/2;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
+##
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,4,300÷nBra,nBra,ψG,1) for _ in 1:6])
+##
+plotEnergies(results,nBra,nThermal,mean(results[1].energies),Emin=mean(results[1].energies)-5,Emax=mean(results[1].energies)+5)
+##
+resBB = fetch.([Threads.@spawn SW.measure_operator(S,res.SaveConfigs,8,nBra,refPlaq,ψG,1) for res in results])
+##
+
+Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,10) for res in results]
+GFMCPlaqs = collect(SW.plaquetteIterator(S))
+
+BBVals = [[SW.get_observables_sfw(Gnp,res[:,:,j],mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resBB,results) ]
+##
+let 
+    fig = Figure()
+    ax = Axis(fig[1,1];SW.getConfigAxis(S)...,backgroundcolor = :white)
+    pointsGFMC = Point.(GFMCPlaqs)
+
+    corrEnd = last.(mean(BBVals))
+    sizefunc(x) = x*30*2
+    sizes = sizefunc.(corrEnd) 
+
+
+    localCorr = only(findfirst(==(refPlaq),GFMCPlaqs))
+    corrEnd[localCorr] /= 1.9
+    
+    points = Point.(pairPlaqs)
+    
+    scatter!(ax,pointsGFMC, markersize = sizes,colormap = :viridis, color = sizefunc.(corrEnd),alpha = 1.0,marker = '●',strokewidth = 0.8000,strokecolor = :red,linestyle = :dash) 
+    fig
+end
+##
+with_theme(theme_PiTicks()) do
+    
+    obsMat = zeros(size(S))
+    obsVals = last.(mean(BBVals))
+    for (i,I) in enumerate(SW.plaquetteIterator(S))
+        obsMat[I...] = obsVals[i]
+    end
+    FT = SW.LatticeFFTs.fft(obsMat)
+    FT[1,1] = NaN
+    fig = Figure()
+    ax = Axis(fig[1,1];aspect = 1)
+    k = 0:size(FT,1) ./ size(FT,1) .*2pi
+    heatmap!(ax,k,k,real(FT))
+    fig
+end
+##
+function mapToPlaquetteBasis(I)
+    r = SW.SA[I...]
+    T = SW.SA[
+        1 -1;
+        1  1
+    ]
+    return T*r .÷2
+end
+
+function FTPlaq(rPlaq,Vals,k)
+    res = 0.
+    for (r,Val) in zip(rPlaq,Vals)
+        res += Val * cos(k'*r)
+    end
+    res
+end
+
+with_theme(theme_PiTicks()) do
+    
+    ri = collect(SW.plaquetteIterator(S))
+    rPlaq = [mapToPlaquetteBasis(r .- refPlaq) for r in ri]
+    
+    obsVals = last.(mean(BBVals))
+    k = LinRange(-pi,pi,500)
+    Tinv = SW.SA[
+        1 1;
+        -1 1
+    ]
+    FT = [FTPlaq(rPlaq,obsVals,Tinv * SW.SA[kx,ky]) for (kx,ky) in Iterators.product(k,k)]
+    fig = Figure()
+    ax = Axis(fig[1,1];aspect = 1)
+    hm = heatmap!(ax,k,k,FT)
+    Colorbar(fig[1,2],hm)
+    fig
+end
+##
+allPlaqs = SW.getApplicablePlaquettes(S_ED)
+refPlaq = allPlaqs[begin + 13]
+# pairPlaqs = filter(!=(refPlaq),allPlaqs)
+pairPlaqs = copy(allPlaqs)
+exactBiBj = [SW.getBij_square(HStair.AllStates,HStair.plaqMapping,v0,refPlaq,Pj) for Pj in pairPlaqs]
+exactBi = [SW.getBi_square(HStair.AllStates,HStair.plaqMapping,v0,Pj) for Pj in pairPlaqs]
+localCorr = only(findfirst(==(refPlaq),pairPlaqs))
+exactCorr = [BiBj - exactBiBj[localCorr]*Bj for (BiBj,Bj) in zip(exactBiBj,exactBi)]
+##
+let 
+    fig = Figure()
+    ax = Axis(fig[1,1];SW.getConfigAxis(S_ED)...,backgroundcolor = :white)
+    points = Point.(pairPlaqs)
+    sizefunc(x) = abs(x)*100
+    scatter!(ax,Point(refPlaq), marker = '×',markersize = 60, color = :red)
+    scatter!(ax,points, markersize = sizefunc.(exactCorr),colormap = :viridis, color = exactCorr)
+    fig
+end

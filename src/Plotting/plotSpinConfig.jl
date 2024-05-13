@@ -51,8 +51,9 @@ function plotSpinConfig(S; kwargs...)
     fig = Figure(size = 1.2 .* (450, 400))
     ax = Axis(fig[1, 1]; getConfigAxis(S)...)
     hm = plotSpinConfig!(ax, S; kwargs...)
-    us = filter!(x -> !ismissing(x) && !isnan(x), unique(S))
-    isempty(us) && (us = [-1, 1])
+    # us = filter!(x -> !ismissing(x) && !isnan(x), unique(S))
+    us = -S.S:S.S
+    # isempty(us) && (us = [-1, 1])
     Colorbar(fig[1, 2], hm, ticks = us)
     return fig
 end

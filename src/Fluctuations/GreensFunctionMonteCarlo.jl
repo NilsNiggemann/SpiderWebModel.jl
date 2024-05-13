@@ -95,24 +95,27 @@ end
 function findAffectedPlaquettes!(Plaq_indices,Config,i,j,::Stencils.Wrap,::Stencils.Conditional)
     empty!(Plaq_indices)
     AllPlaqs = collect(plaquetteIterator(Config))
+    IndexDict = Dict(AllPlaqs[i] => i for i in eachindex(AllPlaqs))
     A = parent(Config)
-    for i´ in i-2:i+2
-        for j´ in j-2:j+2
+    for i_vic in i-2:i+2
+        for j_vic in j-2:j+2
+            (i´,j´) = get_wrappend_inds(A,(i_vic,j_vic))
             isodd(i´+j´) || continue
-            (i´,j´) = get_wrappend_inds(A,(i´,j´))
-            index = findfirst(isequal((i´,j´)),AllPlaqs)
-            push!(Plaq_indices,index)
+            index = get(IndexDict,(i´,j´),0)
+            index !== 0 && push!(Plaq_indices,index)
         end
     end
     return Plaq_indices
 end
 
 function precomputeAffectedPlaquettes(Config)
-    AffPlaqMatrix = [Vector{Int}() for i in 1:size(Config,1), j in 1:size(Config,2)]
+    AffPlaqMatrix = Matrix{Vector{Int}}(undef,size(Config))
 
     for I in plaquetteIterator(Config)
         i,j = I
-        findAffectedPlaquettes!(AffPlaqMatrix[i,j],Config,i,j)
+        AffPlaqs = Vector{Int}()
+        findAffectedPlaquettes!(AffPlaqs,Config,i,j)
+        AffPlaqMatrix[i,j] = AffPlaqs
     end
     return AffPlaqMatrix
 end
