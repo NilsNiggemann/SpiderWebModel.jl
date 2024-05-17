@@ -458,6 +458,7 @@ function saveParameters(filename::String,Λ,equilibration_steps,nBranch,weightfu
         saveVariationalParameter(file,weightfunc)
     end
 end
+saveParameters(::Nothing,args...) = nothing
 
 function saveVariationalParameter(file::HDF5.File,weightfunc)
     pars = variational_parameters(weightfunc)
