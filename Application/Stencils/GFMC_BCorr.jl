@@ -6,8 +6,8 @@ using Statistics
 using MakieHelpers
 using SpiderWebModel
 
-function plotEnergies(results,nBra,nThermal)
-    ens = [SW.getEnergies(res.TotalWeights[nThermal:end],res.energies[nThermal:end],1,250÷nBra) for res in results]
+function plotEnergies(results,nBra)
+    ens = [SW.getEnergies(res.TotalWeights,res.energies,1,250÷nBra) for res in results]
 
     en = mean(ens)
     # errs = getErrBlocking(results[1].energies[nThermal:end],results[1].TotalWeights[nThermal:end],2*10^4,20,E0) ./ ( (length(results[1].energies)-nThermal) ÷ 2*10^4)
@@ -55,15 +55,20 @@ HConfs = getPeriodic.(SW.spinConfig.(HStair.AllStates,Ref(S_ED),Ref(HStair.plaqM
 magEx = SW.getMagnetization(HConfs, v0)
 SqEx = SW.getStructureFac(HConfs,v0)
 ##
-nThermal = 100
-nBra = 2
+GC.gc()
+GC.gc()
+
+outfile = "Data/temp/S12_5/"
+rm(outfile;recursive=true,force=true)
+mkpath(outfile)
+nThermal = 1000
+nBra = 3
 ψG = SW.PlaquetteNumberGuidingFunction(0.197)
 # ψG(N) = 1
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,4,(nThermal+4800)÷nBra,nBra,ψG,1) for _ in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,8,1000÷nBra,nBra,ψG,1;outfile=string(outfile,i,".h5")) for i in 1:6])
 
 ##
-plotEnergies(results,nBra,nThermal)
-
+plotEnergies(results,nBra)
 
 ##___________ StraightForwardWalking _______________________
 # allPlaqs = collect(SW.plaquetteIterator(S))
@@ -87,26 +92,26 @@ let
 end
 ##
 BOp = SW.PlaquetteFlipOperator(S)
-resB = fetch.([Threads.@spawn SW.measure_operator(S,res.SaveConfigs,8,nBra,BOp,ψG,1) for res in results])
+resB = fetch.([Threads.@spawn SW.measure_operator(S,res.SaveConfigs,5,nBra,BOp,ψG,1;outfile = string(outfile,i,".h5")) for (i,res) in enumerate(results)])
 ##
 BBOp = SW.BBOperator(S,refPlaq)
-resBB = fetch.([Threads.@spawn SW.measure_operator(S,res.SaveConfigs,8,nBra,BBOp,ψG,1) for res in results])
+resBB = fetch.([Threads.@spawn SW.measure_operator(S,res.SaveConfigs,5,nBra,BBOp,ψG,1;outfile = string(outfile,i,".h5")) for (i,res) in enumerate(results)])
 
 ##
 Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,10) for res in results]
 
 GFMCPlaqs = collect(SW.plaquetteIterator(S))
 
-BVals = [[SW.get_observables_sfw(Gnp,res[:,:,j],mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resB,results) ]
-BBVals = [[SW.get_observables_sfw(Gnp,res[:,:,j],mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resBB,results) ]
+BVals = [[SW.get_observables_sfw(Gnp,res[:,j,:]',mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resB,results) ]
+BBVals = [[SW.get_observables_sfw(Gnp,res[:,j,:]',mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resBB,results) ]
 ##
 let 
     fig = Figure()
     ax = Axis(fig[1,1];SW.getConfigAxis(S)...,backgroundcolor = :white)
     pointsGFMC = Point.(GFMCPlaqs)
-
-    BBEnd = last.(mean(BBVals)) 
-    BEnd = last.(mean(BVals))
+    nth(x) = x[end]
+    BBEnd = nth.(mean(BBVals)) 
+    BEnd = nth.(mean(BVals))
     localCorr = only(findfirst(==(refPlaq),GFMCPlaqs))
     corrEnd = BBEnd .- BEnd[localCorr] .*BEnd
     
@@ -134,10 +139,10 @@ Plaq2 = (3,4)
 # Plaq2 = refPlaq
 
 gfmcPlaq = only(findfirst(==(Plaq2),GFMCPlaqs))
-obsArr = stack(stack(BBVals))[:,gfmcPlaq,:]
+obsArr = stack(stack(BBVals))[:,gfmcPlaq,:] 
 errorbars(eachindex(nBra .* obsArr[:,1]),mean(obsArr,dims=2)[:],sqrt.(var(obsArr,dims=2))[:])
 lines!(eachindex(nBra .* obsArr[:,1]),mean(obsArr,dims=2)[:],linewidth = 0.5)
-exactCorr = exactCorrs[only(findfirst(==(Plaq2),pairPlaqs))]
+exactCorr = exactBB[only(findfirst(==(Plaq2),pairPlaqs))]
 hlines!([exactCorr],color = :red)
 # ylims!(exactCorr -5e-1,exactCorr + 5e-1)
 current_figure()
@@ -146,9 +151,10 @@ current_figure()
 ψG = SW.PlaquetteNumberGuidingFunction(0.15)
 S = SW.stencilConfig(zeros(8,8),1;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
 ##
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,8,52000÷nBra,nBra,ψG,1) for _ in 1:6])
+
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,8,1000÷nBra,nBra,ψG,1) for i in 1:6])
 ##
-plotEnergies(results,nBra,nThermal)
+plotEnergies(results,nBra)
 ##
 refPlaq = (5,6)
 wrap_idx(x,L) = abs(x) >= L ÷ 2 ? x - sign(x)*L : x

@@ -35,8 +35,8 @@ function makeBlocks(arr;blocksize = nothing, numBlocks = 32)
     end
     return blockedArr
 end
-function plotEnergies(results,nBra,nThermal,E0;Emin=E0-1e-2,Emax=E0+2e-2)
-    ens = [SW.getEnergies(w,e,1,250÷nBra) for res in results[1:end] for (w,e) in zip(makeBlocks(res.TotalWeights[nThermal:end],numBlocks=1),makeBlocks(res.energies[nThermal:end],numBlocks=1)) ]
+function plotEnergies(results,nBra,E0;Emin=E0-1e-2,Emax=E0+2e-2)
+    ens = [SW.getEnergies(res.TotalWeights,res.energies,1,250÷nBra) for res in results]
 
     en = mean(ens)
     # errs = getErrBlocking(results[1].energies[nThermal:end],results[1].TotalWeights[nThermal:end],2*10^4,20,E0) ./ ( (length(results[1].energies)-nThermal) ÷ 2*10^4)
@@ -72,18 +72,22 @@ magEx = SW.getMagnetization(HConfs, v0)
 # S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 ψG = SW.PlaquetteNumberGuidingFunction(0.197)
 
-nThermal = 6_000
+nThermal = 6000
 SW.Random.seed!(1234)
 # results = [SW.startManyWalkerGFMC(S,2,55_000,3,nThermal,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:35]
 nBra = 6
 ##
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,16,nThermal+300_000÷nBra,nBra,ψG,1) for _ in 1:8])
+outfile = "Data/temp/S12/"
+rm(outfile;recursive=true,force=true)
+mkpath(outfile)
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,16,10000÷nBra,nBra,ψG,1;equilibration_steps=nThermal,outfile =string(outfile,i,".h5")) for i in 1:8])
+# @time SW.startManyWalkerGFMC(S,16,nThermal+500_00÷nBra,nBra,ψG,1;outfile = string(outfile,1,".h5"))
 ##
 # nBra = 1
 # @time results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+1200_000,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:6*4])
 # ens = [SW.getEnergies(res.TotalWeights[nThermal:end],res.energies[nThermal:end],1,150÷nBra) for res in results]
 
-plotEnergies(results,nBra,nThermal,E0)
+plotEnergies(results,nBra,E0)
 ##
 #___________Observables_______________________
 ##
@@ -250,13 +254,45 @@ end
 ##
 #___________Spin-1_______________________
 SW.Random.seed!(1234)
-S = SW.stencilConfig(zeros(40,40),1)
-nBra = 10
-ψG = SW.PlaquetteNumberGuidingFunction(0.15) 
-nThermal = 1
+S = SW.stencilConfig(zeros(15,15),1)
+nBra = 5
+nThermal = 0
 ##
+function variationalEnergy(res)
+    Es = mean(res.energies for res in res)
+    
+    E = mean(Es)
+    err = sqrt(var(Es))
+    return E,err
+end
 # @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,8,nThermal+3_000÷nBra,nBra,ψG,1) for _ in 1:8])
-@time results = [SW.startManyWalkerGFMC(S,8,nThermal+3_000÷nBra,nBra,ψG,1) for _ in 1:8]
+function getVarEnergies(alphaRange;nBra,nSteps,nWalkers,nRuns = 6)
+    Es = zeros(size(alphaRange))
+    errs = zeros(size(alphaRange))
+
+    for (i,α) in enumerate(alphaRange)
+        ψG = SW.PlaquetteNumberGuidingFunction(α)
+        @time results = [SW.startManyWalkerGFMC(S,nWalkers,nSteps÷nBra,nBra,ψG,1) for _ in 1:nRuns]
+        E,err = variationalEnergy(results)
+        println("α = $α, E = $E, err = $err")
+        Es[i] = E
+        errs[i] = err
+    end
+    return Es,errs
+end
+# @time results = [SW.startManyWalkerGFMC(S,10,20_000÷nBra,nBra,ψG,1;equilibration_steps=nThermal) for _ in 1:24]
+alpharange = LinRange(0.1,0.16,20)
+E,err = getVarEnergies(alpharange;nBra = 2,nSteps = 12_000,nWalkers = 4,nRuns = 24)
+##
+with_theme(theme_SimpleTicks()) do
+    fig = Figure(fontsize = 22)
+    ax = Axis(fig[1,1],xlabel = L"\alpha",ylabel = L"E^\textrm{var}_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
+    scatter!(ax,alpharange,E,label = L"$$",color = :black, marker = '●',markersize = 5)
+    errorbars!(ax,alpharange,E,err,whiskerwidth = 3.5,color = :black)
+    fig
+
+    
+end
 ##
 ens = [SW.getEnergies(w,e,1,200÷nBra) for res in results[1:end] for (w,e) in zip(makeBlocks(res.TotalWeights[nThermal:end],numBlocks=1),makeBlocks(res.energies[nThermal:end],numBlocks=1)) ]
 

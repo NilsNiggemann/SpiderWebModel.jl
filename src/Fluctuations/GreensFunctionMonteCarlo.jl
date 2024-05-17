@@ -37,6 +37,13 @@ struct PlaquetteNumberGuidingFunction <: AbstractGuidingFunction
 end
 (ψG::PlaquetteNumberGuidingFunction)(ΔNPlaq::Integer) = exp(ψG.α*ΔNPlaq)
 
+guidingfunc_name(F::Function) = string(typeof(F))
+guidingfunc_name(F::AbstractGuidingFunction) = string(typeof(F))
+guidingfunc_name(F::PlaquetteNumberGuidingFunction) = "PlaquetteNumberGuidingFunction"
+
+variational_parameters(P::PlaquetteNumberGuidingFunction) = Dict([:alpha=>P.α])
+variational_parameters(P::Function) = Dict([x => getproperty(P,x) for x in propertynames(P)])
+
 function varitationalFunc(α,NPlaq::Integer,NPlaqEstimate)
     return exp(α*(NPlaq-NPlaqEstimate))
 end
@@ -408,39 +415,90 @@ function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers,NSteps) where {C
     weights = ones(Nwalkers)
     TotalWeights = zeros(NSteps)
     reconfiguration_buffer = zeros(Nwalkers)
-    reconfigurationList = zeros(Int,Nwalkers)
+    reconfigurationTable = zeros(Int,Nwalkers,NSteps)
     
-    return (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationList)
+    return (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationTable)
 end
 
-function setupObservables(InitialState,Nwalkers,NSteps)
+function setupObservables(InitConfig,NWalkers,NSteps,outfile::Nothing)
     energies = zeros(NSteps)
-    ConfigDims = size(InitialState)
-    SaveConfigs = zeros(eltype(InitialState),ConfigDims...,Nwalkers,NSteps)
-    reconfTable = zeros(Int,Nwalkers,NSteps)
-    return (;energies,SaveConfigs,reconfTable)
+    Lx,Ly = size(InitConfig)
+    SaveConfigs = zeros(eltype(InitConfig),Lx,Ly,NWalkers,NSteps)
+    return (;energies,SaveConfigs)
 end
 
-function startManyWalkerGFMC(InitialState::ConfType,Nwalkers,NSteps,nBranch,weightfunc::Fun,Λ,saveObs=true) where {T,ConfType <: StencilSpinConfig{T},Fun}
+function createMMapArray(file::HDF5.File,datasetname::String,type,dims)
+    SaveConfigs_dset = create_dataset(file,datasetname,datatype(type),dataspace(dims);alloc_time = HDF5.H5D_ALLOC_TIME_EARLY)
+    @assert HDF5.ismmappable(SaveConfigs_dset) "Dataset is not mappable for given type $(eltype(InitConfig))"
+    return HDF5.readmmap(SaveConfigs_dset)
+end
+
+function readMMapArray(filename::AbstractString,datasetname::String)
+    h5open(filename,"r") do file
+        SaveConfigs_dset = file[datasetname]
+        @assert HDF5.ismmappable(SaveConfigs_dset) "Dataset is not mappable for given type $(eltype(InitConfig))"
+        return HDF5.readmmap(SaveConfigs_dset)
+    end
+end
+
+function setupObservables(InitConfig,NWalkers,NSteps,filename::String)
+    energies = zeros(NSteps)
+    Lx,Ly = size(InitConfig)
+    SaveConfigs = h5open(filename,"cw") do file
+        createMMapArray(file,"SaveConfigs",eltype(InitConfig),(Lx,Ly,NWalkers,NSteps))
+    end
+    return (;energies,SaveConfigs)
+end
+
+function saveParameters(filename::String,Λ,equilibration_steps,nBranch,weightfunc)
+    h5open(filename,"cw") do file
+        file["Λ"] = Λ
+        file["equilibration_steps"] = equilibration_steps
+        file["nBranch"] = nBranch
+        saveVariationalParameter(file,weightfunc)
+    end
+end
+
+function saveVariationalParameter(file::HDF5.File,weightfunc)
+    pars = variational_parameters(weightfunc)
+    funcName = guidingfunc_name(weightfunc)
+    for (key,val) in pars
+        file[string(funcName,"/",key)] = val
+    end
+end
+
+function startManyWalkerGFMC(InitialState::ConfType,outfile,Nwalkers::Int,NSteps::Int,equilibration_steps::Int,nBranch::Int,weightfunc::Fun,Λ::Real) where {T,ConfType <: StencilSpinConfig{T},Fun}
     
-    (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationList) = setup_many_walker_GFMC(InitialState,Nwalkers,NSteps)
-    (;energies,SaveConfigs,reconfTable) = setupObservables(InitialState,Nwalkers,NSteps)
+    (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationTable) = setup_many_walker_GFMC(InitialState,Nwalkers,NSteps)
+    (;energies,SaveConfigs) = setupObservables(InitialState,Nwalkers,NSteps,outfile)
+    saveParameters(outfile,Λ,equilibration_steps,nBranch,weightfunc)
+
+    for _ in 1:equilibration_steps
+        propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc,Λ,nBranch)
+        reconfigurationList = @view reconfigurationTable[:,1]
+        reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
+    end
 
     for i in 1:NSteps
         # for (α,Config) in enumerate(Walkers)
         propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc,Λ,nBranch)
 
         energies[i] = getLocalEnergyWalkers_before(weights,Walkers,Λ)
-
         TotalWeights[i] = mean(weights)
+        
+        reconfigurationList = @view reconfigurationTable[:,i]
         reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
-        reconfTable[:,i] .= reconfigurationList
 
-        CurrentConfs = @view SaveConfigs[:,:,:,i]
-        saveConfigs!(CurrentConfs,Walkers)
+        saveConfigs!(SaveConfigs,i,Walkers)            
     end
-    return (;TotalWeights, energies, SaveConfigs,reconfTable)
+    saveObservables(outfile,TotalWeights,energies,reconfigurationTable)
+    return (;TotalWeights, energies, SaveConfigs, reconfigurationTable)
 end
+
+function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc,Λ;equilibration_steps = 0,outfile=nothing)
+    startManyWalkerGFMC(InitialState,outfile,Nwalkers,NSteps,equilibration_steps,nBranch,weightfunc,Λ)
+end
+
 
 function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc::Fun,Λ,nBranch) where {Fun}
     L = size(get_config(first(Walkers)),1)
@@ -506,9 +564,19 @@ function getLocalEnergyWalkers_before(weights,Walkers::AbstractVector{<:Abstract
     return num/denom
 end
 
-function saveConfigs!(SaveConfigs,Walkers::AbstractVector{<:AbstractWalker})
+function saveObservables(outfile,TotalWeights,energies,reconfigurationTable)
+    h5open(outfile,"cw") do file
+        file["energies"] = energies
+        file["TotalWeights"] = TotalWeights
+        file["reconfigurationTable"] = reconfigurationTable
+    end
+end
+
+saveObservables(::Nothing,args...;kwargs...) = nothing
+
+function saveConfigs!(SaveConfigs,i,Walkers::AbstractVector{<:AbstractWalker})
     for (α,Config) in enumerate(Walkers)
-        SaveConfigs[:,:,α] .= get_config(Config)
+        SaveConfigs[:,:,α,i] .= get_config(Config)
     end
 
 end
@@ -529,3 +597,4 @@ function swapIndices!(list,i,j)
     list[i],list[j] = list[j],list[i]
     return list
 end
+

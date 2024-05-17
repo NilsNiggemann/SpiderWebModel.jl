@@ -1,8 +1,9 @@
 abstract type AbstractOperator end
-
+operatorname(X::T) where T <: AbstractOperator = string(T)
 struct PlaquetteFlipOperator <: AbstractOperator 
     AffectedPlaquettes::Matrix{Vector{Int}}
 end
+operatorname(X::PlaquetteFlipOperator) = "PlaquetteFlipOperator"
 
 function PlaquetteFlipOperator(S::StencilSpinConfig)
     AffectedPlaquettes = precomputeAffectedPlaquettes(S)
@@ -147,12 +148,12 @@ function initialize_forward_walking!(Walkers,weights,O::AbstractOperator,Configs
     end
 end
 
-function straight_forward_walking!(setup,NSteps,nBranch,weightfunc::T,Λ) where T
+function straight_forward_walking!(setup,NSteps,nBranch,weightfunc::T,Λ;buffersize = NSteps,outfile=nothing) where T
     
-    (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationList) = setup
+    (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationTable) = setup
 
     Operator_weight = mean(weights)
-
+    reconfigurationList = @view reconfigurationTable[:,1]
     reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
     
     if all(iszero,weights)
@@ -163,27 +164,49 @@ function straight_forward_walking!(setup,NSteps,nBranch,weightfunc::T,Λ) where 
         propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc,Λ,nBranch)
 
         TotalWeights[i] = mean(weights)
+        reconfigurationList = @view reconfigurationTable[:,i]
         reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
     end
     TotalWeights[begin] *= Operator_weight
     return TotalWeights
 end
 
-function measure_operator(InitialState,saveConfigs,mProj,nBranch,O::AbstractOperator,weightfunc::T,Λ,AllPlaqs = collect(plaquetteIterator(InitialState))) where T
-    Lx,Ly,Nwalkers,NSteps = size(saveConfigs)
+function setup_operatorObservables(mProj,NumObs,NSteps,Op::AbstractOperator,outfile::AbstractString)
+    dataset_name = string("Weights",operatorname(Op))
+    OperatorWeights = h5open(outfile,"cw") do file
+        createMMapArray(file,dataset_name,Float64,(mProj,NumObs,NSteps))
+    end
+    return OperatorWeights
+end
+
+setup_operatorObservables(mProj,NumObs,NSteps,Op::AbstractOperator,outfile::Nothing) = zeros(NSteps,mProj,NumObs)
+
+function measure_operator(InitialState,outfile,SaveConfigs,mProj,nBranch,O::AbstractOperator,weightfunc::T,Λ,AllPlaqs = collect(plaquetteIterator(InitialState))) where T
+    Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
     NSteps = NSteps
     setup = setup_many_walker_GFMC(InitialState,Nwalkers,mProj)
-    results = zeros(NSteps,mProj,length(AllPlaqs))
+    results = setup_operatorObservables(mProj,length(AllPlaqs),NSteps,O,outfile)
     for n in 1:NSteps
-        Configs = @view saveConfigs[:,:,:,n]
+        Configs = @view SaveConfigs[:,:,:,n]
         for (j,J) in enumerate(AllPlaqs)
             initialize_forward_walking!(setup.Walkers,setup.weights,O,Configs,J,weightfunc)
             res = straight_forward_walking!(setup,mProj,nBranch,weightfunc,Λ)
-            results[n,:,j] .= res
+            results[:,j,n] .= res
 
         end
     end
     return results
+end
+
+function measure_operator(InitialState,SaveConfigs,mProj,nBranch,O::AbstractOperator,weightfunc,Λ,AllPlaqs = collect(plaquetteIterator(InitialState));outfile = nothing)
+    measure_operator(InitialState,outfile,SaveConfigs,mProj,nBranch,O,weightfunc,Λ,AllPlaqs)
+end
+
+function measure_operator(InitialState,inputfile::AbstractString,O::AbstractOperator,mProj::Integer,weightfunc,AllPlaqs = collect(plaquetteIterator(InitialState));outfile = nothing)
+    SaveConfigs = readMMapArray(inputfile,"SaveConfigs")
+    nBranch = readMMapArray(inputfile,"nBra")
+    Λ = readMMapArray(inputfile,"Λ")
+    measure_operator(InitialState,SaveConfigs,mProj,nBranch,O,weightfunc,Λ,AllPlaqs;outfile)
 end
 
 function get_observables_sfw(Gnp,sfw_weights,meanweight,m = size(sfw_weights,2))
