@@ -12,7 +12,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=48
 #SBATCH --mem=90GB         # memory , more means less gc time
-#SBATCH --time=0-12:00:00          # total run time limit (HH:MM:SS)
+#SBATCH --time=0-24:00:00          # total run time limit (HH:MM:SS)
 #SBATCH --mail-type=END
 #SBATCH --output=/p/project/pmfrg/niggemann1/JobsOutput/Spiderweb/GFMC/Spin1_%a.out    # File to which standard Out- will be written
 
@@ -33,9 +33,11 @@ cd(@__DIR__)
 
 i_arg = parse(Int, ARGS[1])
 L = 40
-nBra = 15
-NSteps = 6_000_000
-NWalkers = 48*10
+nBra = 12
+NSteps = 700_000
+equilibration_steps = 260_000
+NWalkers = 48*20
+w_avg_estimate = L^2/4 #estimated average weight for each iteration, to reduce floating point errors
 α = 0.15
 λ = 1
 
@@ -47,26 +49,12 @@ mkpath(dirname(outfile))
 using Pkg
 Pkg.activate(@__DIR__)
 import SpiderWebModel as SW
-using HDF5, H5Zblosc
-##
-h5open(outfile,"w") do f
-    f["test",blosc=9] = rand(Int8,20,20)
-end
-rm(outfile)
+using HDF5
 #___________Spin-1_______________________
 ##
-parentState = SW.stencilConfig(zeros(L,L),1)
+parentState = SW.stencilConfig(zeros(L,L),1;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
 
-GuidingWaveFunction(x) = SW.varitationalFunc(α,x,0)
+ψG = SW.PlaquetteNumberGuidingFunction(α)
 ##
 @info "starting run"  
-# @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,8,nThermal+3_000÷nBra,nBra,varFuncTest,1) for _ in 1:8])
-@time results = SW.startManyWalkerGFMC(parentState,NWalkers,NSteps÷nBra,nBra,GuidingWaveFunction,λ)
-##
-h5open(outfile,"w") do f
-    f["TotalWeights",blosc=9] = results.TotalWeights
-    f["energies",blosc=9] = results.energies
-    f["SaveConfigs",blosc=9] = results.SaveConfigs
-    f["reconfigurationTable",blosc=9] = results.reconfTable
-    f["nBra"] = nBra
-end
+@time results = SW.startManyWalkerGFMC(parentState,NWalkers,NSteps,nBra,ψG,λ;outfile,equilibration_steps,w_avg_estimate)
