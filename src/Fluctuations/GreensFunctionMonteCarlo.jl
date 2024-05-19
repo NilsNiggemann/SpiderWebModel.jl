@@ -236,32 +236,6 @@ function NPlaquettes(Conf)
     return moves
 end
 
-function startSingleWalkerGFMC(InitialState,NSteps,weightfunc::T,Λ) where T
-    # Config = initialize_GFMC(InitialState)
-    # Config = copy(InitialState)
-    Config = copy(InitialState)
-    weights = Float64[]
-    Allmoves = fill((Int8(0),Int8(0),Int8(0)),NSteps)
-    LocalMoves = empty(Allmoves)
-    energies = zeros(NSteps)
-    TotalWeights = zeros(NSteps)
-    
-    for i in 1:NSteps
-        move,weights = performMarkovStep!(weights,LocalMoves,Config,weightfunc,Λ)
-        
-        bx_TotalWeight = sum(weights)
-        
-        TotalWeights[i] = bx_TotalWeight
-        
-        Allmoves[i] = move
-        moves = getMoves!(moves,Config)
-        getWeightList!(weights,LocalMoves,Config,weightfunc,Λ)
-        energies[i] = getLocalEnergy(weights,Λ)
-        
-    end
-    return (;Allmoves,energies,TotalWeights)
-end
-
 function normalizedAccWeight(weights,n,p)
     meanweight = mean(weights)
     # meanweight = 1
@@ -450,11 +424,12 @@ function setupObservables(InitConfig,NWalkers,NSteps,filename::String)
     return (;energies,SaveConfigs)
 end
 
-function saveParameters(filename::String,Λ,equilibration_steps,nBranch,weightfunc)
+function saveParameters(filename::String,Λ,equilibration_steps,nBranch,weightfunc,w_avg_estimate)
     h5open(filename,"cw") do file
         file["Λ"] = Λ
         file["equilibration_steps"] = equilibration_steps
         file["nBranch"] = nBranch
+        file["w_avg_estimate"] = w_avg_estimate
         saveVariationalParameter(file,weightfunc)
     end
 end
@@ -468,21 +443,21 @@ function saveVariationalParameter(file::HDF5.File,weightfunc)
     end
 end
 
-function startManyWalkerGFMC(InitialState::ConfType,outfile,Nwalkers::Int,NSteps::Int,equilibration_steps::Int,nBranch::Int,weightfunc::Fun,Λ::Real) where {T,ConfType <: StencilSpinConfig{T},Fun}
+function startManyWalkerGFMC(InitialState::ConfType,outfile,Nwalkers::Int,NSteps::Int,equilibration_steps::Int,nBranch::Int,weightfunc::Fun,Λ::Real,w_avg_estimate) where {T,ConfType <: StencilSpinConfig{T},Fun}
     
     (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationTable) = setup_many_walker_GFMC(InitialState,Nwalkers,NSteps)
     (;energies,SaveConfigs) = setupObservables(InitialState,Nwalkers,NSteps,outfile)
-    saveParameters(outfile,Λ,equilibration_steps,nBranch,weightfunc)
+    saveParameters(outfile,Λ,equilibration_steps,nBranch,weightfunc,w_avg_estimate)
 
     for _ in 1:equilibration_steps
-        propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc,Λ,nBranch)
+        propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc,Λ,nBranch,w_avg_estimate)
         reconfigurationList = @view reconfigurationTable[:,1]
         reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
     end
 
     for i in 1:NSteps
         # for (α,Config) in enumerate(Walkers)
-        propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc,Λ,nBranch)
+        propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc,Λ,nBranch,w_avg_estimate)
 
         energies[i] = getLocalEnergyWalkers_before(weights,Walkers,Λ)
         TotalWeights[i] = mean(weights)
@@ -496,20 +471,21 @@ function startManyWalkerGFMC(InitialState::ConfType,outfile,Nwalkers::Int,NSteps
     return (;TotalWeights, energies, SaveConfigs, reconfigurationTable)
 end
 
-function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc,Λ;equilibration_steps = 0,outfile=nothing)
-    startManyWalkerGFMC(InitialState,outfile,Nwalkers,NSteps,equilibration_steps,nBranch,weightfunc,Λ)
+function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc,Λ;equilibration_steps = 0,outfile=nothing,w_avg_estimate=size(InitialState,1))
+    startManyWalkerGFMC(InitialState,outfile,Nwalkers,NSteps,equilibration_steps,nBranch,weightfunc,Λ,w_avg_estimate)
 end
 
 
-function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc::Fun,Λ,nBranch) where {Fun}
-    L = size(get_config(first(Walkers)),1)
+function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc::Fun,Λ,nBranch,w_avg_estimate) where {Fun}
+    # L = size(get_config(first(Walkers)),1)
     # for α in eachindex(Walkers)
+    w_avg_estimate⁻¹ = 1. / w_avg_estimate
     Threads.@threads for α in eachindex(Walkers)
         Walker = Walkers[α]
-        w = 1
+        w = 1.
         for step in 1:nBranch
             move,weightList = performMarkovStep!(Walker,AffectedPlaquetteList,weightfunc,Λ)
-            bx = sum(weightList)/L
+            bx = sum(weightList)*w_avg_estimate⁻¹
             w *= bx
         end
         weights[α] = w

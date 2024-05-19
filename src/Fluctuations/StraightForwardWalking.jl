@@ -148,7 +148,7 @@ function initialize_forward_walking!(Walkers,weights,O::AbstractOperator,Configs
     end
 end
 
-function straight_forward_walking!(setup,NSteps,nBranch,weightfunc::T,Λ;buffersize = NSteps,outfile=nothing) where T
+function straight_forward_walking!(setup,NSteps,nBranch,weightfunc::T,Λ,w_avg_estimate) where T
     
     (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationTable) = setup
 
@@ -161,7 +161,7 @@ function straight_forward_walking!(setup,NSteps,nBranch,weightfunc::T,Λ;buffers
         return TotalWeights
     end
     for i in 1:NSteps
-        propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc,Λ,nBranch)
+        propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc,Λ,nBranch,w_avg_estimate)
 
         TotalWeights[i] = mean(weights)
         reconfigurationList = @view reconfigurationTable[:,i]
@@ -181,7 +181,7 @@ end
 
 setup_operatorObservables(mProj,NumObs,NSteps,Op::AbstractOperator,outfile::Nothing) = zeros(NSteps,mProj,NumObs)
 
-function measure_operator(InitialState,outfile,SaveConfigs,mProj,nBranch,O::AbstractOperator,weightfunc::T,Λ,AllPlaqs = collect(plaquetteIterator(InitialState))) where T
+function measure_operator(InitialState,outfile,SaveConfigs,mProj,nBranch,O::AbstractOperator,weightfunc::T,Λ,w_avg_estimate,AllPlaqs = collect(plaquetteIterator(InitialState))) where T
     Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
     NSteps = NSteps
     setup = setup_many_walker_GFMC(InitialState,Nwalkers,mProj)
@@ -190,7 +190,7 @@ function measure_operator(InitialState,outfile,SaveConfigs,mProj,nBranch,O::Abst
         Configs = @view SaveConfigs[:,:,:,n]
         for (j,J) in enumerate(AllPlaqs)
             initialize_forward_walking!(setup.Walkers,setup.weights,O,Configs,J,weightfunc)
-            res = straight_forward_walking!(setup,mProj,nBranch,weightfunc,Λ)
+            res = straight_forward_walking!(setup,mProj,nBranch,weightfunc,Λ,w_avg_estimate)
             results[:,j,n] .= res
 
         end
@@ -198,15 +198,15 @@ function measure_operator(InitialState,outfile,SaveConfigs,mProj,nBranch,O::Abst
     return results
 end
 
-function measure_operator(InitialState,SaveConfigs,mProj,nBranch,O::AbstractOperator,weightfunc,Λ,AllPlaqs = collect(plaquetteIterator(InitialState));outfile = nothing)
-    measure_operator(InitialState,outfile,SaveConfigs,mProj,nBranch,O,weightfunc,Λ,AllPlaqs)
+function measure_operator(InitialState,SaveConfigs,mProj,nBranch,O::AbstractOperator,weightfunc,Λ,w_avg_estimate,AllPlaqs = collect(plaquetteIterator(InitialState));outfile = nothing)
+    measure_operator(InitialState,outfile,SaveConfigs,mProj,nBranch,O,weightfunc,Λ,w_avg_estimate,AllPlaqs)
 end
 
-function measure_operator(InitialState,inputfile::AbstractString,O::AbstractOperator,mProj::Integer,weightfunc,AllPlaqs = collect(plaquetteIterator(InitialState));outfile = nothing)
+function measure_operator(InitialState,inputfile::AbstractString,O::AbstractOperator,mProj::Integer,weightfunc,w_avg_estimate,AllPlaqs = collect(plaquetteIterator(InitialState));outfile = nothing)
     SaveConfigs = readMMapArray(inputfile,"SaveConfigs")
     nBranch = readMMapArray(inputfile,"nBra")
     Λ = readMMapArray(inputfile,"Λ")
-    measure_operator(InitialState,SaveConfigs,mProj,nBranch,O,weightfunc,Λ,AllPlaqs;outfile)
+    measure_operator(InitialState,SaveConfigs,mProj,nBranch,O,weightfunc,Λ,w_avg_estimate,AllPlaqs;outfile)
 end
 
 function get_observables_sfw(Gnp,sfw_weights,meanweight,m = size(sfw_weights,2))
