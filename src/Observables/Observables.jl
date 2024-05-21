@@ -41,21 +41,30 @@ function getStructureFacWeights(AllStates::AbstractVector{<:SpinConfig}, weights
     return (; kx,ky, Sq = resultFull)
 end
 
+import LatticeFFTs.Interpolations
+
+function _convertToInds(k,L)
+    k´ = mod2pi(k)
+    i = round(Int,k´/2pi*L)+1
+    # i = rem(i,L)+1
+end
+
 function getSqCont(SqMat)
-    Lx,Ly = size(SqMat)
+    Lx,Ly = size(SqMat) .-1
 
     function Sq(kx,ky)
-        # kx´ = mod2pi(kx)
-        # ky´ = mod2pi(ky)
-        ix = round(Int,kx/2pi*(Lx))
-        iy = round(Int,ky/2pi*(Ly))
-        ix = rem(ix,Lx)+1
-        iy = rem(iy,Ly)+1
+        ix = _convertToInds(kx,Lx)
+        iy = _convertToInds(ky,Ly)
         # ix = rem2pi(kx´)*(Lx-1)+1
         return SqMat[ix,iy]
     end
+    # dims = size(SqMat) .-1
+    # nk = Tuple(0:N for N in dims)
+    # Sq = Interpolations.interpolate(SqMat, Interpolations.NoInterp())
+    # Sq = Interpolations.scale(Sq, 2π ./ dims .* nk)
+    # Sq = Interpolations.extrapolate(Sq, Periodic())
 
-    Sq(k) = Sq(k[1],k[2])
+    # Sq(k) = Sq(k[1],k[2])
     return Sq
 end
 

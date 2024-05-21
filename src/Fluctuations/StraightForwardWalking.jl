@@ -204,8 +204,8 @@ end
 
 function measure_operator(InitialState,inputfile::AbstractString,O::AbstractOperator,mProj::Integer,weightfunc,w_avg_estimate,AllPlaqs = collect(plaquetteIterator(InitialState));outfile = nothing)
     SaveConfigs = readMMapArray(inputfile,"SaveConfigs")
-    nBranch = readMMapArray(inputfile,"nBra")
-    Λ = readMMapArray(inputfile,"Λ")
+    nBranch = h5read(inputfile,"nBra")
+    Λ = h5read(inputfile,"Λ")
     measure_operator(InitialState,SaveConfigs,mProj,nBranch,O,weightfunc,Λ,w_avg_estimate,AllPlaqs;outfile)
 end
 

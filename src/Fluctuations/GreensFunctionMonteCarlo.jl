@@ -5,14 +5,14 @@ abstract type AbstractGuidingFunction end
 
 struct SpiderWebWalker{C} <: AbstractWalker
     Config::C
-    moves::Vector{Tuple{Int8,Int8,Int8}}
+    moves::Vector{Tuple{Int,Int,Int}}
     weights::Vector{Float64}
     Plaquette_positions::Vector{Tuple{Int,Int}}
     n_x::Vector{Int8}
     n_x´::Vector{Int8}
 end
 function SpiderWebWalker(Config,Plaquette_positions)
-    moves = Vector{Tuple{Int8,Int8,Int8}}()
+    moves = Vector{Tuple{Int,Int,Int}}()
     weights = Vector{Float64}()
     # Plaquette_positions = collect(plaquetteIterator(Config))
     n_x = zeros(Int8,length(Plaquette_positions))
