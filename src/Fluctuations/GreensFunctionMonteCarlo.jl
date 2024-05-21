@@ -151,26 +151,6 @@ function getNPlaq!(Walker::SpiderWebWalker,affected_indices)
     return n_x´
 end
 
-function getWeightList!(weights,moves,Config,weightfunc::T,Λ) where T
-    empty!(weights)
-    moves = getMoves!(moves,Config)
-    ψₓ = weightfunc(Config)
-
-    for operator in moves
-        i,j,opNum = operator
-        applyPlaquette!(Config, i, j, opNum)
-        ψₓ´ = weightfunc(Config)
-        push!(weights,ψₓ´/ψₓ)
-        applyPlaquette!(Config, i, j, -opNum)
-    end
-    if Λ != 0
-        push!(moves, (0,0,0))
-        push!(weights,Λ)
-    end
-    return weights
-end
-
-
 function getNPlaq_difference(nPlaq_x,nPlaq_x´,affectedPlaquettes)
     N□ = 0
     for (i,plaqIndex) in enumerate(affectedPlaquettes)
