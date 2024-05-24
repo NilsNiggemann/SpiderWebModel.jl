@@ -72,7 +72,10 @@ end
 @inline Base.@propagate_inbounds getPlaquetteSites(S::StencilSpinConfig, i::Int, j::Int) =
     getPlaquetteSites(parent(S), i, j)
 
-Base.@propagate_inbounds applyPlaquette!(Config,i,j,sgn) = applyPlaquette!(parent(Config), i, j, sgn)
+Base.@propagate_inbounds function applyPlaquette!(Config,i,j,sgn)
+    applyPlaquette!(parent(Config), i, j, sgn)
+    return Config
+end
 
 Base.@propagate_inbounds function applyPlaquette!(Mat::Stencils.AbstractStencilArray,i,j,sgn)
     # sites = Stencils.indices(Stencils.stencil(Mat), CartesianIndex(i, j))

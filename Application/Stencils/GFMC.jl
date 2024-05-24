@@ -9,9 +9,17 @@ using SpiderWebModel
 S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 # S = SW.stencilConfig(SW.constructConfigPath(15,15,SW.ALLGS_S12),1/2)
 HStair = SW.generateHilbertSpace(SW.SpinConfig(S))
-ExSol = SW.SolveHKrylov(HStair.H)
+HTest = Array(HStair.H)
+for i in 1:size(HTest,1)
+    SW.normalize!(@view(HTest[i,:]),1)
+end
+ExSol = SW.SolveHKrylov(HTest)
 E0 = ExSol.values[1]
+
+getRKWavefunction(ψ) = SW.normalize!(one.(ψ))
+
 v0 = ExSol.vectors[1]
+# v0 = getRKWavefunction(ExSol.vectors[1])
 HConfs = SW.spinConfig.(HStair.AllStates,Ref(SW.
 SpinConfig(S)),Ref(HStair.plaqMapping))
 function constructExactGuidingFunc(v0,AllStates)
@@ -54,10 +62,10 @@ function plotEnergies(results,nBra,E0;Emin=E0-1e-2,Emax=E0+2e-2)
         proj = nBra .*eachindex(en)
         scatter!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
         errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black)
-        hlines!([E0],color = :red,label = L"exact $$")
+        !isnan(E0)&& hlines!([E0],color = :red,label = L"exact $$")
         axislegend(ax,merge=true)
         xlims!(ax,0.5,last(proj))
-        ylims!(ax,Emin,Emax)
+        !isnan(E0)&& ylims!(ax,Emin,Emax)
         # save("Application/exactFig/GFMCEnergy.png",fig)
         fig
     end
@@ -70,54 +78,69 @@ magEx = SW.getMagnetization(HConfs, v0)
 #___________ManyWalkers_______________________
 ##
 # S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
-ψG = SW.PlaquetteNumberGuidingFunction(0.197)
+# ψG = SW.PlaquetteNumberGuidingFunction(0.197)
+ψG = SW.PlaquetteNumberGuidingFunction(0.0)
 
-nThermal = 6000
+nThermal = 10_000
 SW.Random.seed!(1234)
 # results = [SW.startManyWalkerGFMC(S,2,55_000,3,nThermal,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:35]
-nBra = 6
+nBra = 1
 ##
-outfile = "Data/temp/S12/"
-rm(outfile;recursive=true,force=true)
-mkpath(outfile)
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,16,10000÷nBra,nBra,ψG,1;equilibration_steps=nThermal,outfile =string(outfile,i,".h5")) for i in 1:8])
+# outfile = "Data/temp/S12/"
+# rm(outfile;recursive=true,force=true)
+# mkpath(outfile)
+# @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,16,50000÷nBra,nBra,ψG,1;equilibration_steps=nThermal,outfile =string(outfile,i,".h5")) for i in 1:8])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,1,30000÷nBra,nBra,ψG,10;equilibration_steps=nThermal) for i in 1:32])
 # @time SW.startManyWalkerGFMC(S,16,nThermal+500_00÷nBra,nBra,ψG,1;outfile = string(outfile,1,".h5"))
 ##
+
 # nBra = 1
 # @time results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+1200_000,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:6*4])
 # ens = [SW.getEnergies(res.TotalWeights[nThermal:end],res.energies[nThermal:end],1,150÷nBra) for res in results]
 
 plotEnergies(results,nBra,E0)
+# plotEnergies(results,nBra,E0)
 ##
 #___________Observables_______________________
 ##
 # getAvgMag(Conf) = sum(Conf) ./ (2*length(Conf))
-function getMag(results,pmax,I,nThermal)
+function getMag(results,pmax,I)
     # I = CartesianIndex(I)
-    Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights[nThermal:end],1,pmax) for res in results]
-
+    Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,pmax) for res in results]
     getMag(Conf) = Conf[I] /2
 
-    @views getObs(p) = [SW.getObs(Gnp[:,1:p],res.SaveConfigs[:,:,:,nThermal:end],res.reconfTable[:,nThermal:end],getMag,p÷2) for (res,Gnp) in zip(results,Gnps)]
+    @views getObs(p) = [SW.getObs(Gnp[:,1:p],res.SaveConfigs,res.reconfigurationTable,getMag,p÷2) for (res,Gnp) in zip(results,Gnps)]
     obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
 
-function getSiSj(results,pmax,I,J,nThermal)
+function getMagRK(results,p,I)
     # I = CartesianIndex(I)
-    Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights[nThermal:end],1,pmax) for res in results]
+    TotWeights = [SW.mean(res.TotalWeights) for res in results]
+    weights = [abs2.(res.TotalWeights ./ W) for (res,W) in zip(results,TotWeights)]
+    # SW.normalize!.(weights,1)
+    i,j = Tuple(I)
+    @views getObs(ws,res) = SW.mean(w * mag/2 for (w,mag) in zip(ws,res.SaveConfigs[i,j,1,:]))
+
+    obs = fetch.([Threads.@spawn getObs(ws,res) for (ws,res) in zip(weights,results)])
+    return [obs for i in 1:p]
+end
+
+function getSiSj(results,pmax,I,J)
+    # I = CartesianIndex(I)
+    Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,pmax) for res in results]
 
     getCorr(Conf) = (Conf[I]*Conf[J]) *0.25
 
-    @views getObs(p) = [SW.getObs(Gnp[:,1:p],res.SaveConfigs[:,:,:,nThermal:end],res.reconfTable[:,nThermal:end],getCorr,p÷2) for (res,Gnp) in zip(results,Gnps)]
+    @views getObs(p) = [SW.getObs(Gnp[:,1:p],res.SaveConfigs,res.reconfigurationTable,getCorr,p÷2) for (res,Gnp) in zip(results,Gnps)]
     obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
 ##
-mags1 = getMag(results,100÷nBra,CartesianIndex(3,3),nThermal) 
-mags2 = getMag(results,100÷nBra,CartesianIndex(4,1),nThermal) 
-mags3 = getMag(results,100÷nBra,CartesianIndex(2,3),nThermal) 
+mags1 = getMagRK(results,100÷nBra,CartesianIndex(3,3)) 
+mags2 = getMagRK(results,100÷nBra,CartesianIndex(4,1)) 
+mags3 = getMagRK(results,100÷nBra,CartesianIndex(2,3)) 
 ##
 IJ_SS = (CartesianIndex(3,4),CartesianIndex(4,2))
-SiSj = getSiSj(results,100÷nBra,IJ_SS[1],IJ_SS[2],nThermal) 
+SiSj = getSiSj(results,100÷nBra,IJ_SS[1],IJ_SS[2]) 
 SiSjex = SW.getSij(HConfs,v0,IJ_SS[1],IJ_SS[2])
 ##
 
@@ -157,10 +180,10 @@ with_theme(theme_SimpleTicks()) do
     chi = mean.(SiSj)
 
     chiScale = -3
-    scatter!(ax,proj,chiScale .*chi,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
-    err =sqrt.(var.(SiSj))
-    errorbars!(ax,proj,chiScale .*chi,chiScale .*err,whiskerwidth = 3.5,color =  :black)
-    hlines!([chiScale*SiSjex],color = :black,label = L"exact $$")
+    # scatter!(ax,proj,chiScale .*chi,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
+    # err =sqrt.(var.(SiSj))
+    # errorbars!(ax,proj,chiScale .*chi,chiScale .*err,whiskerwidth = 3.5,color =  :black)
+    # hlines!([chiScale*SiSjex],color = :black,label = L"exact $$")
     i,j = Tuple.(IJ_SS)
     text!(ax,(proj[end÷2],chiScale*SiSjex-0.015),color = :black,text = L"%$chiScale\times \langle S^z_{%$i} S^z_{%$j}\rangle",align = (:center,:center))
 
@@ -178,16 +201,16 @@ with_theme(theme_SimpleTicks()) do
     fig
 end
 ##
-@views function getFullMag(res,p,nThermal)
+@views function getFullMag(res,p)
     # I = CartesianIndex(I)
-    Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights[nThermal:end],1,p)
-    buffer = zeros(size(res.SaveConfigs[1][1]))
+    Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights,1,p)
+    buffer = zeros(size(res.SaveConfigs[:,:,begin,begin]))
     function m(Conf)
-        buffer .= Conf ./2
+        buffer .= Conf
     end
-    res = SW.getObs(Gnp,res.SaveConfigs[:,:,:,nThermal:end],res.reconfTable[:,nThermal:end],m,p÷2)
+    res = SW.getObs(Gnp,res.SaveConfigs,res.reconfigurationTable,m,p÷2)
 end
-magFull = fetch.([Threads.@spawn getFullMag(res,100÷nBra,nThermal) for res in results])
+magFull = fetch.([Threads.@spawn getFullMag(res,100÷nBra) for res in results])
 
 ##
 with_theme(theme_SimpleTicks()) do 
@@ -199,8 +222,8 @@ with_theme(theme_SimpleTicks()) do
     fig
 end
 ##
-function getSq(res,p,nThermal)
-    @views Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights[nThermal:end],1,p)
+function getSq(res,p)
+    @views Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights,1,p)
     # @views Gnp = ones(length(res.TotalWeights[nThermal:end]),p)
 
     Conf = @view res.SaveConfigs[:,:,begin,begin]
@@ -216,7 +239,7 @@ function getSq(res,p,nThermal)
         Sq .= abs2.(Sq)
     end
 
-    @views res = SW.getObs(Gnp,res.SaveConfigs[:,:,:,nThermal:end],res.reconfTable[:,nThermal:end],SqFunc,p÷2)
+    @views res = SW.getObs(Gnp,res.SaveConfigs,res.reconfigurationTable,SqFunc,p÷2)
     newRes = similar(res,size(res).+1)
     newRes[begin:end-1,begin:end-1] .= res
 
@@ -225,26 +248,12 @@ function getSq(res,p,nThermal)
     newRes ./NSites
     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
-# @views function getSq(res,p,nThermal)
-#     # I = CartesianIndex(I)
-#     Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights[nThermal:end],1,p)
-
-#     Sq(x) = abs2.(SW.LatticeFFTs.fft(x))
-
-#     res = SW.getObs(Gnp,res.SaveConfigs[:,:,:,nThermal:end],res.reconfTable[:,nThermal:end],Sq,p÷2)
-#     newRes = similar(res,size(res).+1)
-#     newRes[1:end-1,1:end-1] .= res
-#     newRes[end,1:end-1] .= res[1,:]
-#     newRes[1:end-1,end] .= res[:,1]
-#     newRes./length(res)
-#     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
-# end
 ##
-SqsGFMC = fetch.([Threads.@spawn getSq(res,100÷nBra,nThermal) for res in results])
+SqsGFMC = fetch.([Threads.@spawn getSq(res,100÷nBra) for res in results])
 ##
 with_theme(theme_PiTicks()) do 
     Sq = mean(real(SqsGFMC)) ./4
-    (;kx,ky) = SqEx
+    (;kx,ky) = Sq
     fig,ax,hm = heatmap(kx,ky,Sq,colormap = :viridis,axis=(;aspect=1,title = L"GFMC$$"),figure = (;size = (360,500)))
     ax2 = Axis(fig[2,1],aspect=1,title = L"exact $$")
     heatmap!(ax2,kx,ky,real(SqEx.Sq),colormap = :viridis,colorrange = extrema(Sq))
@@ -280,7 +289,6 @@ function getVarEnergies(alphaRange;nBra,nSteps,nWalkers,nRuns = 6)
     end
     return Es,errs
 end
-# @time results = [SW.startManyWalkerGFMC(S,10,20_000÷nBra,nBra,ψG,1;equilibration_steps=nThermal) for _ in 1:24]
 alpharange = LinRange(0.1,0.16,20)
 E,err = getVarEnergies(alpharange;nBra = 2,nSteps = 12_000,nWalkers = 4,nRuns = 24)
 ##
@@ -294,26 +302,21 @@ with_theme(theme_SimpleTicks()) do
     
 end
 ##
-ens = [SW.getEnergies(w,e,1,200÷nBra) for res in results[1:end] for (w,e) in zip(makeBlocks(res.TotalWeights[nThermal:end],numBlocks=1),makeBlocks(res.energies[nThermal:end],numBlocks=1)) ]
-
-en = mean(ens)
-with_theme(theme_SimpleTicks()) do
-    fig = Figure(fontsize = 22)
-    ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
-
-    err = sqrt.(var(ens))
-    proj = nBra .*eachindex(en)
-
-    scatter!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
-    errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black)
-    axislegend(ax,merge=true)
-    # ylims!(ax,-75.05,-71.9)
-    # save("Application/exactFig/GFMCEnergy.png",fig)
-    fig
-end
+SW.Random.seed!(1234)
+S = SW.stencilConfig(zeros(16,16),1;
+boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+)
+nBra = 10
+nThermal = 10_000
+ψG = SW.PlaquetteNumberGuidingFunction(0.17)
+##
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,10,120_000÷nBra,nBra,ψG,1;equilibration_steps=nThermal) for _ in 1:6])
 
 ##
-SqsGFMC = fetch.([Threads.@spawn getSq(res,150÷nBra,nThermal) for res in results])
+plotEnergies(results,nBra,NaN)
+
+##
+SqsGFMC = fetch.([Threads.@spawn getSq2(res,80÷nBra) for res in results[1:6]])
 ##
 function SqFieldTheory(x,y)
     num = cos(x) - cos(y) +2sin(x)sin(y) 
@@ -350,3 +353,28 @@ with_theme(theme_PiTicks()) do
     fig
 end
 ##
+projection_orders = 150:-50:50
+SqsGFMC_p = [ fetch.([Threads.@spawn getSq(res,p÷nBra) for res in results]) for p in projection_orders]
+##
+# with_theme(merge(theme_PiTicks(),theme_dark())) do 
+with_theme(theme_PiTicks()) do 
+    fig = Figure(fontsize = 18,size = (500,400))
+    ax = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"\mathcal{S}(\mathbf{q})",title = L"GFMC$$",yticks = SimpleTicks())
+    kx = 2pi .* LinRange(0,1,size(S,1).+1)
+
+    for (p,Sqs) in zip(projection_orders,SqsGFMC_p)
+        Sq = mean(real(Sqs))[:,1] ./4
+        Sqerr = sqrt.(var(real(Sqs)))[:,1] ./4
+        Sq ./= maximum(Sq)
+        Sqerr ./= maximum(Sq)
+        lines!(ax,kx,Sq,color = p,colorrange = extrema(projection_orders),colormap = :viridis,linewidth = 3,label = L"$p=%$(p)$")
+        errorbars!(ax,kx,Sq,Sqerr,whiskerwidth = 3.5)
+    end
+
+    kx = 2pi .* LinRange(0,1,300)
+    SqFT = SqFieldTheory.(kx,0)
+    SqFT ./= maximum(SqFT)
+    lines!(ax,kx,SqFT,color = :black,linewidth = 2,linestyle = :dash,label = L"U(1)$$")
+    axislegend(ax,merge=true)
+    fig
+end

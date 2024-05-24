@@ -28,6 +28,7 @@ include("Fluctuations/RandomFluctuations.jl")
 include("Fluctuations/ED.jl")
 include("Fluctuations/GreensFunctionMonteCarlo.jl")
 include("Fluctuations/StraightForwardWalking.jl")
+include("Fluctuations/StochasticReconfiguration.jl")
 
 include("Plotting/plotSpinConfig.jl")
 include("Plotting/PlaquetteFlips.jl")
