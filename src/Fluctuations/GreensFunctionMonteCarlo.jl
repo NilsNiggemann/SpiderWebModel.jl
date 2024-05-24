@@ -11,7 +11,7 @@ struct SpiderWebWalker{C} <: AbstractWalker
     n_x::Vector{Int8}
     n_x´::Vector{Int8}
 end
-function SpiderWebWalker(Config,Plaquette_positions)
+function spiderWebWalker(Config,Plaquette_positions)
     moves = Vector{Tuple{Int,Int,Int}}()
     weights = Vector{Float64}()
     # Plaquette_positions = collect(plaquetteIterator(Config))
@@ -364,7 +364,7 @@ function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers,NSteps) where {C
     plaquettePositions = collect(plaquetteIterator(InitialState))
     Walkers = Vector{SpiderWebWalker{ConfType}}(undef,Nwalkers)
     Threads.@threads for α in eachindex(Walkers)
-        Walkers[α] = SpiderWebWalker(InitialState,plaquettePositions)
+        Walkers[α] = spiderWebWalker(InitialState,plaquettePositions)
     end
     weights = ones(Nwalkers)
     TotalWeights = zeros(NSteps)
