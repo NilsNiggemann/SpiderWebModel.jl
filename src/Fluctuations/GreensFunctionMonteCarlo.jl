@@ -8,15 +8,15 @@ struct SpiderWebWalker{C} <: AbstractWalker
     moves::Vector{Tuple{Int,Int,Int}}
     weights::Vector{Float64}
     Plaquette_positions::Vector{Tuple{Int,Int}}
-    n_x::Vector{Int8}
-    n_x´::Vector{Int8}
+    n_x::Vector{Float64}
+    n_x´::Vector{Float64}
 end
 function spiderWebWalker(Config,Plaquette_positions)
     moves = Vector{Tuple{Int,Int,Int}}()
     weights = Vector{Float64}()
     # Plaquette_positions = collect(plaquetteIterator(Config))
-    n_x = zeros(Int8,length(Plaquette_positions))
-    n_x´ = Vector{Int8}()
+    n_x = zeros(Float64,length(Plaquette_positions))
+    n_x´ = zeros(Float64,length(Plaquette_positions))
     return SpiderWebWalker(copy(Config),moves,weights,Plaquette_positions,n_x,n_x´)
 end
 
@@ -35,7 +35,7 @@ getOperatorRep(i,j,opNum) = i,j,opNum
 struct PlaquetteNumberGuidingFunction <: AbstractGuidingFunction
     α::Float64
 end
-(ψG::PlaquetteNumberGuidingFunction)(ΔNPlaq::Integer) = exp(ψG.α*ΔNPlaq)
+(ψG::PlaquetteNumberGuidingFunction)(ΔNPlaq::Real) = exp(ψG.α*ΔNPlaq)
 
 guidingfunc_name(F::Function) = string(typeof(F))
 guidingfunc_name(F::AbstractGuidingFunction) = string(typeof(F))
@@ -44,21 +44,71 @@ guidingfunc_name(F::PlaquetteNumberGuidingFunction) = "PlaquetteNumberGuidingFun
 variational_parameters(P::PlaquetteNumberGuidingFunction) = Dict([:alpha=>P.α])
 variational_parameters(P::Function) = Dict([x => getproperty(P,x) for x in propertynames(P)])
 
-function varitationalFunc(α,NPlaq::Integer,NPlaqEstimate)
+function varitationalFunc(α,NPlaq::Real,NPlaqEstimate)
     return exp(α*(NPlaq-NPlaqEstimate))
 end
 
-function ConstructVaritationalFunc(α,ConfEx=nothing)
-    NPlaqEst = 0
-    if ConfEx !== nothing
-        NPlaqEst = NPlaquettes(ConfEx)
-    end
-    ψ = let α = α, NPlaqEst = NPlaqEst
-        Conf -> varitationalFunc(α,NPlaquettes(Conf),NPlaqEst)
-    end
-    # return Conf -> varitationalFunc(α,NPlaquettes(Conf),NPlaqEst)
+struct VariationalGuidingFunction{A<:AbstractArray} <: AbstractGuidingFunction
+    params::A
 end
 
+function constructVariationalFunction(State,α::Real=0.1)
+    plaqs = collect(plaquetteIterator(State))
+    N = length(plaqs)
+    params = zeros(N,N+1)
+    ψ = VariationalGuidingFunction(params)
+    get_alpha_i(ψ) .= α
+    return ψ
+end
+
+function get_alpha_i(ψG::VariationalGuidingFunction)
+    return @view ψG.params[:,begin]
+end
+
+function get_beta_ij(ψG::VariationalGuidingFunction)
+    return @view ψG.params[:,begin+1:end]
+end
+
+function (ψG::VariationalGuidingFunction)(N□::AbstractArray) 
+    return exp(guidingfunc_exponent(ψG,N□))
+end
+
+function guidingfunc_exponent(ψG::VariationalGuidingFunction,N□::AbstractArray) 
+    α = get_alpha_i(ψG)
+    β = get_beta_ij(ψG)
+    exponent = α' * N□ + dot(N□,β,N□)
+    return exponent
+end
+
+# function (ψG::VariationalGuidingFunction)(N□´::AbstractArray,N□::AbstractArray) 
+#     α = get_alpha_i(ψG)
+#     β = get_beta_ij(ψG)
+#     exponent = zero(eltype(α))
+
+#     for i in eachindex(N□´,N□)
+#         exponent += α[i]*(N□´[i] - N□[i])
+#         for j in eachindex(N□´,N□)  # can be optimized using j < i
+#             exponent += β[i,j]*(N□´[i]*N□´[j] - N□[i]*N□[j])
+#         end
+#     end
+#     return exp(exponent)
+# end
+
+function guidingfuncRatio(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) 
+    return exp(guidingfuncRatio_exponent(ψG,n,n´))
+end
+
+function guidingfuncRatio_exponent(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) 
+    α = get_alpha_i(ψG)
+    β = get_beta_ij(ψG)
+
+    exponent_α = sum(ai*(n´i - ni) for (ai,n´i,ni) in zip(α,n´,n))
+
+    exponent_β = zero(eltype(α))
+    exponent_β = dot(n´,β,n´) - dot(n,β,n)
+
+    return (exponent_α + exponent_β)
+end
 
 function getMoves!(
     Walker::SpiderWebWalker
@@ -148,6 +198,29 @@ function getNPlaq!(Walker::SpiderWebWalker,affected_indices)
         n = applPlus + applMinus
         n_x´[i] = n
     end
+    # println(n_x´,affected_indices)
+    # println(Walker.n_x)
+    # error("")
+    return n_x´
+end
+
+
+function getNPlaqfilled!(Walker::SpiderWebWalker,affected_indices)
+    (;n_x,n_x´,Config,Plaquette_positions) = Walker
+    # println(affected_indices)
+    # empty!(n_x´)
+    # resize!(n_x´,length(n_x))
+
+    n_x´ .= n_x
+
+    for PlaqIndex in affected_indices
+        I = Plaquette_positions[PlaqIndex]
+        @inbounds applPlus, applMinus = P_applicable(Config, I)
+        n = applPlus + applMinus
+        n_x´[PlaqIndex] = n
+    end
+    # println(n_x´)
+    # error("")
     return n_x´
 end
 
@@ -175,6 +248,32 @@ function getWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc
         N□ = getNPlaq_difference(n_x,n_x´,indices) 
         weight = weightfunc(N□)
 
+        push!(weights,weight)
+        applyPlaquette!(Config, i, j, -opNum)
+    end
+    if Λ != 0
+        push!(moves, (0,0,0))
+        push!(weights,Λ)
+    end
+    return weights
+end
+
+function getWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc::VariationalGuidingFunction,Λ)
+    (;Config,moves,weights) = Walker
+    empty!(weights)
+
+    n_x = getNPlaq!(Walker)
+    
+    for operator in moves
+        i,j,opNum = operator
+        indices = AffectedPlaquetteList[i,j]
+        applyPlaquette!(Config, i, j, opNum)
+         
+        n_x´ = getNPlaqfilled!(Walker,indices)
+        
+        weight = guidingfuncRatio(weightfunc,n_x,n_x´)
+        # ndiff = sum(n_x´ .- n_x)
+        # weight = weightfunc(ndiff)
         push!(weights,weight)
         applyPlaquette!(Config, i, j, -opNum)
     end

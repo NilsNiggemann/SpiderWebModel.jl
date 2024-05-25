@@ -10,9 +10,6 @@ S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 # S = SW.stencilConfig(SW.constructConfigPath(15,15,SW.ALLGS_S12),1/2)
 HStair = SW.generateHilbertSpace(SW.SpinConfig(S))
 HTest = Array(HStair.H)
-for i in 1:size(HTest,1)
-    SW.normalize!(@view(HTest[i,:]),1)
-end
 ExSol = SW.SolveHKrylov(HTest)
 E0 = ExSol.values[1]
 
@@ -65,7 +62,7 @@ function plotEnergies(results,nBra,E0;Emin=E0-1e-2,Emax=E0+2e-2)
         !isnan(E0)&& hlines!([E0],color = :red,label = L"exact $$")
         axislegend(ax,merge=true)
         xlims!(ax,0.5,last(proj))
-        !isnan(E0)&& ylims!(ax,Emin,Emax)
+        !isnan(Emin)&& !isnan(Emax) && ylims!(ax,Emin,Emax)
         # save("Application/exactFig/GFMCEnergy.png",fig)
         fig
     end
@@ -77,26 +74,23 @@ magEx = SW.getMagnetization(HConfs, v0)
 # @time SqEx = SW.getStructureFac(HConfs,SW.normalize!(ones(length(v0))))
 #___________ManyWalkers_______________________
 ##
-# S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
+S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 # ψG = SW.PlaquetteNumberGuidingFunction(0.197)
-ψG = SW.PlaquetteNumberGuidingFunction(0.0)
+# ψG = SW.PlaquetteNumberGuidingFunction(0.197)
+ψG = SW.constructVariationalFunction(S,0.197)
 
-nThermal = 10_000
-SW.Random.seed!(1234)
+nThermal = 5_000
 # results = [SW.startManyWalkerGFMC(S,2,55_000,3,nThermal,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:35]
-nBra = 1
+nBra = 3
 ##
+SW.Random.seed!(1234)
 # outfile = "Data/temp/S12/"
 # rm(outfile;recursive=true,force=true)
 # mkpath(outfile)
 # @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,16,50000÷nBra,nBra,ψG,1;equilibration_steps=nThermal,outfile =string(outfile,i,".h5")) for i in 1:8])
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,1,30000÷nBra,nBra,ψG,10;equilibration_steps=nThermal) for i in 1:32])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,6,20000÷nBra,nBra,ψG,1;equilibration_steps=nThermal) for i in 1:6])
 # @time SW.startManyWalkerGFMC(S,16,nThermal+500_00÷nBra,nBra,ψG,1;outfile = string(outfile,1,".h5"))
 ##
-
-# nBra = 1
-# @time results = fetch.([Threads.@spawn SW.startSingleWalkerGFMC(S,nThermal+1200_000,SW.ConstructVaritationalFunc(0.197,S),1) for _ in 1:6*4])
-# ens = [SW.getEnergies(res.TotalWeights[nThermal:end],res.energies[nThermal:end],1,150÷nBra) for res in results]
 
 plotEnergies(results,nBra,E0)
 # plotEnergies(results,nBra,E0)
@@ -231,17 +225,18 @@ function getSq(res,p)
     Sq = similar(Conf, ComplexF64)
     
     Si = similar(Conf, ComplexF64)
-    plan = SW.LatticeFFTs.FFTW.plan_fft(Conf)
+
+    plan = SW.LatticeFFTs.FFTW.plan_fft(Si)
 
     function SqFunc(Conf)
-        Si .= Conf
+        Si.= Conf
         SW.mul!(Sq, plan, Si)
         Sq .= abs2.(Sq)
     end
 
-    @views res = SW.getObs(Gnp,res.SaveConfigs,res.reconfigurationTable,SqFunc,p÷2)
-    newRes = similar(res,size(res).+1)
-    newRes[begin:end-1,begin:end-1] .= res
+    @views resSq = SW.getObs(Gnp,res.SaveConfigs,res.reconfigurationTable,SqFunc,p÷2)
+    newRes = similar(resSq,Float64,size(resSq).+1)
+    newRes[begin:end-1,begin:end-1] .= real.(resSq)
 
     @views newRes[end,begin:end] .= newRes[begin,:]
     @views newRes[begin:end,end] .= newRes[:,begin]
@@ -303,20 +298,20 @@ with_theme(theme_SimpleTicks()) do
 end
 ##
 SW.Random.seed!(1234)
-S = SW.stencilConfig(zeros(16,16),1;
-boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+S = SW.stencilConfig(zeros(12,12),1/2;
+# boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
-nBra = 10
-nThermal = 10_000
-ψG = SW.PlaquetteNumberGuidingFunction(0.17)
+nBra = 5
+nThermal = 3_000
+ψG = SW.PlaquetteNumberGuidingFunction(0.1975)
 ##
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,10,120_000÷nBra,nBra,ψG,1;equilibration_steps=nThermal) for _ in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,5,20_000÷nBra,nBra,ψG,1;equilibration_steps=nThermal) for _ in 1:6])
 
 ##
-plotEnergies(results,nBra,NaN)
+plotEnergies(results,nBra,E0)
 
 ##
-SqsGFMC = fetch.([Threads.@spawn getSq2(res,80÷nBra) for res in results[1:6]])
+SqsGFMC = fetch.([Threads.@spawn getSq(res,150÷nBra) for res in results])
 ##
 function SqFieldTheory(x,y)
     num = cos(x) - cos(y) +2sin(x)sin(y) 
@@ -326,7 +321,7 @@ end
 
 with_theme(theme_PiTicks()) do 
     # Sq = sqrt.(var(real(SqsGFMC))) ./4
-    Sq = mean(real(SqsGFMC)) ./4
+    Sq = mean(SqsGFMC) ./4
     kx = ky = 2pi .* LinRange(0,1,size(Sq,1))
     fig = Figure(fontsize = 22,size = (800,400))
     axMC = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"k_y",title = L"GFMC$$",aspect = 1)
@@ -337,7 +332,7 @@ with_theme(theme_PiTicks()) do
     # axDiff = Axis(fig[1,4],xlabel = L"k_x",ylabel = L"k_y",title = L"Difference$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
 
     # err = abs.(Sq .- SqFieldTheory.(kx,kx'))
-    err = sqrt.(var(real(SqsGFMC))) ./4
+    err = sqrt.(var(SqsGFMC)) ./4
     hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
     SqFT = [SqFieldTheory(x,y) for x in kx, y in ky]
     hmFT = heatmap!(axFT,kx,ky,SqFT,colormap = :viridis)
@@ -345,15 +340,15 @@ with_theme(theme_PiTicks()) do
     hmerr = heatmap!(axerr,kx,ky,err,colormap = :viridis)
     # heatmap!(axDiff,kx,ky,(Sq ./maximum(Sq)) .- (SqFT ./maximum(SqFT)),colormap = :viridis)
 
-    Colorbar(fig[2,1],hmMC,label = L"\langle \mathcal{S}^{zz}(\textbf{q})\rangle",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
-    Colorbar(fig[2,2],hmerr,label = L"\sigma(\langle \mathcal{S}^{zz}(\textbf{q})\rangle)",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
-    Colorbar(fig[2,3],hmFT,label = L"\langle \mathcal{S}^{zz}(\textbf{q})\rangle",height = Relative(0.8), width = Relative(0.8),vertical=false,ticks = SimpleTicks())
+    Colorbar(fig[2,1],hmMC,label = L" \mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
+    Colorbar(fig[2,2],hmerr,label = L"\sigma( \mathcal{S}^{zz}(\textbf{q}))",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
+    Colorbar(fig[2,3],hmFT,label = L" \mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8), width = Relative(0.8),vertical=false,ticks = SimpleTicks())
 
     rowsize!(fig.layout,2,Relative(0.1))
     fig
 end
 ##
-projection_orders = 150:-50:50
+projection_orders = [150,10]
 SqsGFMC_p = [ fetch.([Threads.@spawn getSq(res,p÷nBra) for res in results]) for p in projection_orders]
 ##
 # with_theme(merge(theme_PiTicks(),theme_dark())) do 
@@ -363,12 +358,18 @@ with_theme(theme_PiTicks()) do
     kx = 2pi .* LinRange(0,1,size(S,1).+1)
 
     for (p,Sqs) in zip(projection_orders,SqsGFMC_p)
-        Sq = mean(real(Sqs))[:,1] ./4
-        Sqerr = sqrt.(var(real(Sqs)))[:,1] ./4
+        Sq = mean(real(Sqs))[1,:] ./4
+        Sqerr = sqrt.(var(real(Sqs)))[1,:] ./4
         Sq ./= maximum(Sq)
         Sqerr ./= maximum(Sq)
-        lines!(ax,kx,Sq,color = p,colorrange = extrema(projection_orders),colormap = :viridis,linewidth = 3,label = L"$p=%$(p)$")
-        errorbars!(ax,kx,Sq,Sqerr,whiskerwidth = 3.5)
+        lines!(ax,kx,Sq,
+        # color = p,colorrange = extrema(projection_orders),colormap = :viridis,linewidth = 3,
+        label = L"$p=%$(p)$"
+        )
+        errorbars!(ax,kx,Sq,Sqerr,
+        whiskerwidth = 3.5,
+        # color = p,colorrange = extrema(projection_orders),colormap = :viridis
+        )
     end
 
     kx = 2pi .* LinRange(0,1,300)
@@ -377,4 +378,10 @@ with_theme(theme_PiTicks()) do
     lines!(ax,kx,SqFT,color = :black,linewidth = 2,linestyle = :dash,label = L"U(1)$$")
     axislegend(ax,merge=true)
     fig
+end
+##
+function dipoleMoment(conf)
+    imid,jmid = size(conf) .÷ 2
+    Lx,Ly = size(conf)
+    sum(SW.SVector(i-imid,j-jmid) * conf[i,j] for i in 1:size(conf,1), j in 1:size(conf,2)) .% (Lx,Ly)
 end

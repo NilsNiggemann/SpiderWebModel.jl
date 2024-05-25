@@ -41,7 +41,7 @@ function getConfsweights(InitialState::ConfType, N, Nwalkers; equilibration_step
 
     Walkers = Vector{SW.SpiderWebWalker{ConfType}}(undef,Nwalkers)
     Threads.@threads for α in eachindex(Walkers)
-        Walkers[α] = SW.SpiderWebWalker(InitialState,plaquettePositions)
+        Walkers[α] = SW.spiderWebWalker(InitialState,plaquettePositions)
     end
     Lx,Ly = size(InitialState)
     SaveConfigs = zeros(eltype(InitialState),Lx,Ly,N,Nwalkers)
