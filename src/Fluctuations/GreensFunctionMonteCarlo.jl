@@ -80,35 +80,41 @@ function guidingfunc_exponent(ψG::VariationalGuidingFunction,N□::AbstractArra
     return exponent
 end
 
-# function (ψG::VariationalGuidingFunction)(N□´::AbstractArray,N□::AbstractArray) 
+guidingfuncRatio(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes) = exp(guidingfuncRatio_exponent(ψG,n,n´,affectedPlaquettes))
+guidingfuncRatio(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) = exp(guidingfuncRatio_exponent(ψG,n,n´))
+# function guidingfuncRatio_exponent(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) 
 #     α = get_alpha_i(ψG)
 #     β = get_beta_ij(ψG)
-#     exponent = zero(eltype(α))
 
-#     for i in eachindex(N□´,N□)
-#         exponent += α[i]*(N□´[i] - N□[i])
-#         for j in eachindex(N□´,N□)  # can be optimized using j < i
-#             exponent += β[i,j]*(N□´[i]*N□´[j] - N□[i]*N□[j])
-#         end
-#     end
-#     return exp(exponent)
+#     exponent_α = sum(ai*(n´i - ni) for (ai,n´i,ni) in zip(α,n´,n))
+
+#     exponent_β = zero(eltype(α))
+#     exponent_β = dot(n´,β,n´) - dot(n,β,n)
+
+#     return (exponent_α + exponent_β)
 # end
 
-function guidingfuncRatio(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) 
-    return exp(guidingfuncRatio_exponent(ψG,n,n´))
-end
-
-function guidingfuncRatio_exponent(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) 
+function guidingfuncRatio_exponent(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes)
     α = get_alpha_i(ψG)
     β = get_beta_ij(ψG)
 
-    exponent_α = sum(ai*(n´i - ni) for (ai,n´i,ni) in zip(α,n´,n))
+    exponent = zero(eltype(α))
 
-    exponent_β = zero(eltype(α))
-    exponent_β = dot(n´,β,n´) - dot(n,β,n)
+    for i in affectedPlaquettes
+        Δn = n´[i] - n[i]
+        Δn == 0 && continue
+        
+        exp_i = α[i]
+        LoopVectorization.@turbo for j in eachindex(n,n´)
+            exp_i += β[j,i]*(n´[j] + n[j])
+        end
+        exponent += exp_i*Δn
+    end
 
-    return (exponent_α + exponent_β)
+    return exponent
 end
+
+guidingfuncRatio_exponent(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) = guidingfuncRatio_exponent(ψG,n,n´,eachindex(n,n´))
 
 function getMoves!(
     Walker::SpiderWebWalker
@@ -166,16 +172,17 @@ function findAffectedPlaquettes!(Plaq_indices,Config,i,j,::Stencils.Wrap,::Stenc
 end
 
 function precomputeAffectedPlaquettes(Config)
-    AffPlaqMatrix = Matrix{Vector{Int}}(undef,size(Config))
+    AffPlaqMatrix = Matrix{OrderedSet{Int}}(undef,size(Config))
 
     for I in plaquetteIterator(Config)
         i,j = I
-        AffPlaqs = Vector{Int}()
+        AffPlaqs = OrderedSet{Int}()
         findAffectedPlaquettes!(AffPlaqs,Config,i,j)
         AffPlaqMatrix[i,j] = AffPlaqs
     end
     return AffPlaqMatrix
 end
+
 # Assumes that length(n_plaq) == length(plaquetteIterator(Config))
 function getNPlaq!(Walker::SpiderWebWalker)
     (;n_x,Config) = Walker
@@ -271,7 +278,7 @@ function getWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc
          
         n_x´ = getNPlaqfilled!(Walker,indices)
         
-        weight = guidingfuncRatio(weightfunc,n_x,n_x´)
+        weight = guidingfuncRatio(weightfunc,n_x,n_x´,indices)
         # ndiff = sum(n_x´ .- n_x)
         # weight = weightfunc(ndiff)
         push!(weights,weight)

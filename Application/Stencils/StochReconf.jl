@@ -21,7 +21,7 @@ a = SW.reconf_obs(S,eachslice(res.SaveConfigs,dims=(3,4)),ψG,1)
 @profview SW.repeatStochReconf(S,100,ψG,5,5e-2;Nwalkers = 12,nbra = 10,error_threshold=1e-1,equilibration_steps=nThermal)
 ##
 SW.Random.seed!(1234)
-stochReconfRes = SW.repeatStochReconf(S,200,ψG,15,5e-2;Nwalkers = 24,nbra = 30,error_threshold=1e-1,equilibration_steps=nThermal)
+stochReconfRes = SW.repeatStochReconf(S,500,ψGnew,50,3e-2;Nwalkers = 36,nbra = 40,error_threshold=1e-1,equilibration_steps=nThermal)
 ##
 let 
     fig = Figure()
@@ -36,8 +36,11 @@ let
     fig
 end
 ##
-ψGnew = SW.VariationalGuidingFunction(stochReconfRes.params)
 ψGold = SW.PlaquetteNumberGuidingFunction(0.15)
+##
+using HDF5
+# ψGnew = SW.VariationalGuidingFunction(stochReconfRes.params)
+ψGnew = SW.VariationalGuidingFunction(h5read("../../stochReconfParams.h5","L=15/params"))
 ##
 nBra = 6
 @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,5,50_000÷nBra,nBra,ψGnew,1;equilibration_steps=nThermal) for _ in 1:24])
@@ -46,5 +49,5 @@ nBra = 6
 
 ##
 # plotEnergies(results,nBra,-20.35;Emin=-20.5,Emax=-19.8) # L=10
-plotEnergies(resultsOld,nBra,NaN)
+plotEnergies(results,nBra,-50;Emin=-50.1,Emax=-47) # L=15
 # plotEnergies(results,nBra,-49.7;Emin=-50.5,Emax=-46)

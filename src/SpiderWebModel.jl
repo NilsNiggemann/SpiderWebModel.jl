@@ -5,6 +5,7 @@ using HDF5, H5Zblosc
 using LinearAlgebra, SparseArrays, Arpack
 using BitIntegers
 
+import LoopVectorization
 import KrylovKit
 import ChunkSplitters
 import DataStructures
