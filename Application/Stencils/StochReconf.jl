@@ -14,14 +14,14 @@ S = SW.stencilConfig(zeros(15,15),1;
 # SW.get_beta_ij(ψG) .= 0.01
 nThermal = 100
 ##
-res = SW.startManyWalkerGFMC(S,6,100,3,ψG,1;equilibration_steps=nThermal)
+res = SW.startManyWalkerGFMC(S,24,100,12,ψG,1;equilibration_steps=nThermal)
 ##
 a = SW.reconf_obs(S,eachslice(res.SaveConfigs,dims=(3,4)),ψG,1)
 ##
-@profview SW.repeatStochReconf(S,100,ψG,5,5e-2;Nwalkers = 12,nbra = 10,error_threshold=1e-1,equilibration_steps=nThermal)
+SW.stochastic_reconfiguration(S,1000,ψG,5,5e-2;Nwalkers = 12,nbra = 10,rel_tolerance=1e-1,equilibration_steps=nThermal)
 ##
 SW.Random.seed!(1234)
-stochReconfRes = SW.repeatStochReconf(S,500,ψGnew,50,3e-2;Nwalkers = 36,nbra = 40,error_threshold=1e-1,equilibration_steps=nThermal)
+stochReconfRes = SW.stochastic_reconfiguration(S,300,ψGnew,5,3e-2;Nwalkers = 48,nbra = 50,rel_tolerance=1e-1,equilibration_steps=nThermal)
 ##
 let 
     fig = Figure()
@@ -42,6 +42,8 @@ using HDF5
 # ψGnew = SW.VariationalGuidingFunction(stochReconfRes.params)
 ψGnew = SW.VariationalGuidingFunction(h5read("../../stochReconfParams.h5","L=15/params"))
 ##
+SW.Random.seed!(1234)
+
 nBra = 6
 @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,5,50_000÷nBra,nBra,ψGnew,1;equilibration_steps=nThermal) for _ in 1:24])
 ##
