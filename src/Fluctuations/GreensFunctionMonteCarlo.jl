@@ -82,17 +82,6 @@ end
 
 guidingfuncRatio(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes) = exp(guidingfuncRatio_exponent(ψG,n,n´,affectedPlaquettes))
 guidingfuncRatio(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) = exp(guidingfuncRatio_exponent(ψG,n,n´))
-# function guidingfuncRatio_exponent(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) 
-#     α = get_alpha_i(ψG)
-#     β = get_beta_ij(ψG)
-
-#     exponent_α = sum(ai*(n´i - ni) for (ai,n´i,ni) in zip(α,n´,n))
-
-#     exponent_β = zero(eltype(α))
-#     exponent_β = dot(n´,β,n´) - dot(n,β,n)
-
-#     return (exponent_α + exponent_β)
-# end
 
 function guidingfuncRatio_exponent(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes)
     α = get_alpha_i(ψG)
@@ -529,11 +518,15 @@ function saveVariationalParameter(file::HDF5.File,weightfunc)
     end
 end
 
-function startManyWalkerGFMC(InitialState::ConfType,outfile,Nwalkers::Int,NSteps::Int,equilibration_steps::Int,nBranch::Int,weightfunc::Fun,Λ::Real,w_avg_estimate) where {T,ConfType <: StencilSpinConfig{T},Fun}
+function startManyWalkerGFMC(InitialState::ConfType,outfile,Nwalkers::Int,NSteps::Int,equilibration_steps::Int,pre_equilibration_steps::Int,nBranch::Int,weightfunc::Fun,Λ::Real,w_avg_estimate,) where {T,ConfType <: StencilSpinConfig{T},Fun}
     
     (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationTable) = setup_many_walker_GFMC(InitialState,Nwalkers,NSteps)
     (;energies,SaveConfigs) = setupObservables(InitialState,Nwalkers,NSteps,outfile)
     saveParameters(outfile,Λ,equilibration_steps,nBranch,weightfunc,w_avg_estimate)
+
+    if pre_equilibration_steps > 0 # pre_equilibration_steps do not use have any reconfigurations or guiding wavefunctions. The idea is to initialize the walkers with fully uncorrelated configurations at the beginning so that the Hilbert space can be explored more efficiently.
+        random_init_walkers!(Walkers,pre_equilibration_steps)
+    end
 
     for _ in 1:equilibration_steps
         propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc,Λ,nBranch,w_avg_estimate)
@@ -557,8 +550,8 @@ function startManyWalkerGFMC(InitialState::ConfType,outfile,Nwalkers::Int,NSteps
     return (;TotalWeights, energies, SaveConfigs, reconfigurationTable)
 end
 
-function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc,Λ;equilibration_steps = 0,outfile=nothing,w_avg_estimate=size(InitialState,1))
-    startManyWalkerGFMC(InitialState,outfile,Nwalkers,NSteps,equilibration_steps,nBranch,weightfunc,Λ,w_avg_estimate)
+function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,nBranch,weightfunc,Λ;equilibration_steps = 0,outfile=nothing,w_avg_estimate=size(InitialState,1),pre_equilibration_steps=5*equilibration_steps)
+    startManyWalkerGFMC(InitialState,outfile,Nwalkers,NSteps,equilibration_steps,pre_equilibration_steps,nBranch,weightfunc,Λ,w_avg_estimate)
 end
 
 
@@ -661,3 +654,46 @@ function swapIndices!(list,i,j)
     return list
 end
 
+function getRandConfs(InitialState::ConfType, N, Nwalkers; equilibration_steps = 1000,samplingRate=1e-6) where ConfType
+    plaquettePositions = collect(plaquetteIterator(InitialState))
+
+    Walkers = Vector{SpiderWebWalker{ConfType}}(undef,Nwalkers)
+    Threads.@threads for α in eachindex(Walkers)
+        Walkers[α] = spiderWebWalker(InitialState,plaquettePositions)
+    end
+    Lx,Ly = size(InitialState)
+    SaveConfigs = zeros(eltype(InitialState),Lx,Ly,N,Nwalkers)
+
+    random_init_walkers!(Walkers,equilibration_steps)
+    Threads.@threads for α in eachindex(Walkers)
+        Walker = Walkers[α]
+        
+        n = 1
+        while n<=N
+            movepos = Tuple(rand(plaquettePositions))
+            movesgn = rand(1:2)
+            P_applicable(Walker.Config, movepos)[movesgn] || continue
+            applyPlaquette!(Walker.Config, movepos[1], movepos[2], (1,-1)[movesgn])
+
+            if rand() < samplingRate
+                SaveConfigs[:,:,n,α] .= get_config(Walkers[α])
+                n +=1
+            end
+        end
+    end
+    return SaveConfigs
+end
+
+function random_init_walkers!(Walkers::AbstractVector{<:SpiderWebWalker},equilibration_steps)
+
+    Threads.@threads for α in eachindex(Walkers)
+        Walker = Walkers[α]
+        
+        for _ in 1:equilibration_steps
+            movepos = Tuple(rand(Walker.Plaquette_positions))
+            movesgn = rand(1:2)
+            P_applicable(Walker.Config, movepos)[movesgn] || continue
+            applyPlaquette!(Walker.Config, movepos[1], movepos[2], (1,-1)[movesgn])
+        end
+    end
+end
