@@ -1474,7 +1474,7 @@ weakdeps = ["ChainRulesCore"]
 
 [[deps.SpiderWebModel]]
 deps = ["Arpack", "BitIntegers", "CairoMakie", "ChunkSplitters", "CircularArrays", "DSP", "DataStructures", "Dictionaries", "Gurobi", "H5Zblosc", "HDF5", "JuMP", "KrylovKit", "LatticeFFTs", "LinearAlgebra", "MathOptInterface", "OrderedCollections", "ProgressMeter", "Random", "SparseArrays", "StaticArrays", "Statistics", "StatsBase", "Stencils", "Test"]
-git-tree-sha1 = "bb6fa4304625438e74cc254f624e21f0e2ce0c62"
+git-tree-sha1 = "a1cffff896488d22393168964cd6b586bc6fc951"
 repo-rev = "main"
 repo-url = "../.."
 uuid = "8e1b84da-b1d7-4311-a21b-52324f990117"
