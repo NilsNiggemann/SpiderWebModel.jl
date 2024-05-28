@@ -1,5 +1,12 @@
 using CairoMakie, MakieHelpers,Statistics, HDF5
 import SpiderWebModel as SW
+
+##
+filesRK = readdir("/p/scratch/pmfrg/niggemann1/Spiderweb/DataRK/",join=true)
+resRK = h5open(filesRK[1]) do f
+    read(f)
+end
+##
 res = h5open("../Data/Spin1GFMC_Eval.h5") do f
     read(f)
 end
