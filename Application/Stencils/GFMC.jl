@@ -19,6 +19,7 @@ v0 = ExSol.vectors[1]
 # v0 = getRKWavefunction(ExSol.vectors[1])
 HConfs = SW.spinConfig.(HStair.AllStates,Ref(SW.
 SpinConfig(S)),Ref(HStair.plaqMapping))
+##
 function constructExactGuidingFunc(v0,AllStates)
     AllSTDict = Dict(SW.stencilConfig(parent(s),1/2)=>i for (i,s) in enumerate(AllStates))
     function psiG(Conf)
@@ -40,35 +41,34 @@ function makeBlocks(arr;blocksize = nothing, numBlocks = 32)
     end
     return blockedArr
 end
-function plotEnergies(results,nBra,E0;Emin=E0-1e-2,Emax=E0+2e-2)
-    ens = [SW.getEnergies(res.TotalWeights,res.energies,1,250÷nBra) for res in results]
 
-    en = mean(ens)
-    # errs = getErrBlocking(results[1].energies[nThermal:end],results[1].TotalWeights[nThermal:end],2*10^4,20,E0) ./ ( (length(results[1].energies)-nThermal) ÷ 2*10^4)
-    ##
+function plotEnergies(results,nBra,E0=NaN;kwargs...)
     with_theme(theme_SimpleTicks()) do
         fig = Figure(fontsize = 22)
         ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
+        plotEnergies!(ax,results,nBra,E0;kwargs...)
         # ens = getfield.(obs,:E0)
-        en = mean(ens)
-        # M = length(results[1].energies)
-        # Mk = M ÷ length(ens)
-        # println(Mk)
-        err = sqrt.(var(ens))
-        # err = 0.004 .* ones(length(en))
-        proj = nBra .*eachindex(en)
-        scatter!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
-        errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black)
-        !isnan(E0)&& hlines!([E0],color = :red,label = L"exact $$")
-        axislegend(ax,merge=true)
-        xlims!(ax,0.5,last(proj))
-        !isnan(Emin)&& !isnan(Emax) && ylims!(ax,Emin,Emax)
-        # save("Application/exactFig/GFMCEnergy.png",fig)
-        fig
+        return fig
     end
 end
-magEx = SW.getMagnetization(HConfs, v0)
+
+function plotEnergies!(ax::Makie.Axis,results,nBra,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,kwargs...)
+    ens = [SW.getEnergies(res.TotalWeights,res.energies,1,p÷nBra) for res in results]
+
+    en = mean(ens)
+    err = sqrt.(var(ens))
+    proj = nBra .*eachindex(en)
+    scatterlines!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5;kwargs...)
+    errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black;kwargs...)
+    !isnan(E0)&& hlines!([E0],color = :red,label = L"exact $$")
+    axislegend(ax,merge=true)
+    xlims!(ax,0.5,last(proj))
+    !isnan(Emin)&& !isnan(Emax) && ylims!(ax,Emin,Emax)
+    return ax
+end
+plotEnergies!(results,nBra,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,kwargs...) = plotEnergies!(current_axis(),results,nBra,E0;Emin=Emin,Emax=Emax,kwargs...)
 ##
+magEx = SW.getMagnetization(HConfs, v0)
 @time SqEx = SW.getStructureFac(HConfs,v0)
 # @time SqEx = SW.getEqualWeightStructureFac(HConfs)
 # @time SqEx = SW.getStructureFac(HConfs,SW.normalize!(ones(length(v0))))
@@ -204,7 +204,7 @@ end
     end
     res = SW.getObs(Gnp,res.SaveConfigs,res.reconfigurationTable,m,p÷2)
 end
-magFull = fetch.([Threads.@spawn getFullMag(res,100÷nBra) for res in results])
+magFull = fetch.([Threads.@spawn getFullMag(res,20÷nBra) for res in results])
 
 ##
 with_theme(theme_SimpleTicks()) do 
@@ -214,6 +214,16 @@ with_theme(theme_SimpleTicks()) do
     heatmap!(ax2,magEx,colormap = :greys,colorrange = extrema(m))
     Colorbar(fig[1:2,2],hm,label = L"\langle S^z_i \rangle")
     fig
+end
+##
+function filterSpins!(Si,α)
+    for I in CartesianIndices(Si)
+        i,j = Tuple(I)
+        siteType = iseven(i+j)+1
+        siteType == α && continue
+        Si[i,j] *= 0
+    end
+    return Si
 end
 ##
 function getSq(res,p)
@@ -231,18 +241,22 @@ function getSq(res,p)
     function SqFunc(Conf)
         Si.= Conf
         SW.mul!(Sq, plan, Si)
+
         Sq .= abs2.(Sq)
     end
 
     @views resSq = SW.getObs(Gnp,res.SaveConfigs,res.reconfigurationTable,SqFunc,p÷2)
+    
     newRes = similar(resSq,Float64,size(resSq).+1)
     newRes[begin:end-1,begin:end-1] .= real.(resSq)
 
     @views newRes[end,begin:end] .= newRes[begin,:]
     @views newRes[begin:end,end] .= newRes[:,begin]
     newRes ./NSites
+    
     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
+
 ##
 SqsGFMC = fetch.([Threads.@spawn getSq(res,100÷nBra) for res in results])
 ##
@@ -298,20 +312,22 @@ with_theme(theme_SimpleTicks()) do
 end
 ##
 SW.Random.seed!(1234)
-S = SW.stencilConfig(zeros(12,12),1/2;
-# boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+S = SW.stencilConfig(zeros(16,16),1;
+boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
-nBra = 5
+nBra = 10
 nThermal = 3_000
-ψG = SW.PlaquetteNumberGuidingFunction(0.1975)
+ψG = SW.PlaquetteNumberGuidingFunction(0.15)
 ##
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,5,20_000÷nBra,nBra,ψG,1;equilibration_steps=nThermal) for _ in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,24,200_000÷nBra,nBra,ψG,20;equilibration_steps=nThermal) for _ in 1:6])
 
 ##
-plotEnergies(results,nBra,E0)
+plotEnergies(results,nBra)
 
 ##
-SqsGFMC = fetch.([Threads.@spawn getSq(res,150÷nBra) for res in results])
+# SqsGFMC = fetch.([Threads.@spawn (
+# getSq(res,150÷nBra,1,1) .+ getSq(res,150÷nBra,2,2) .+ getSq(res,150÷nBra,1,2) .+ getSq(res,150÷nBra,2,1)) for res in results])
+SqsGFMC = fetch.([Threads.@spawn getSq(res,350÷nBra) for res in results])
 ##
 function SqFieldTheory(x,y)
     num = cos(x) - cos(y) +2sin(x)sin(y) 
@@ -348,7 +364,7 @@ with_theme(theme_PiTicks()) do
     fig
 end
 ##
-projection_orders = [150,10]
+projection_orders = [500,10nBra]
 SqsGFMC_p = [ fetch.([Threads.@spawn getSq(res,p÷nBra) for res in results]) for p in projection_orders]
 ##
 # with_theme(merge(theme_PiTicks(),theme_dark())) do 
@@ -383,5 +399,27 @@ end
 function dipoleMoment(conf)
     imid,jmid = size(conf) .÷ 2
     Lx,Ly = size(conf)
-    sum(SW.SVector(i-imid,j-jmid) * conf[i,j] for i in 1:size(conf,1), j in 1:size(conf,2)) .% (Lx,Ly)
+    sum(SW.SVector(i-imid,j-jmid) * conf[i,j] for i in axes(conf,1), j in axes(conf,2)) .% (Lx,Ly)
 end
+
+##
+function exampleState(L)
+    mode(n,i) = sin(2pi/L * (2n+1) * i)
+    Conf = [sum(mode(n,i) + mode(n,j) for n in 0:1) for i in 1:L, j in 1:L]
+end
+
+##
+magFull = fetch.([Threads.@spawn getFullMag(res,20÷nBra) for res in results])
+##
+with_theme(theme_SimpleTicks()) do 
+    m = mean(magFull) ./2
+    magerr = sqrt.(var(magFull)) ./2
+    fig,ax,hm = heatmap(m,colormap = :balance,axis=(;aspect=1,title = L"GFMC$$"),figure = (;size = 0.8 .*(360,500)))
+    ax2 = Axis(fig[2,1],aspect=1,title = L"err $$")
+    heatmap!(ax2,magerr,colormap = :balance,colorrange = extrema(m))
+    Colorbar(fig[1:2,2],hm,label = L"\langle S^z_i \rangle")
+    fig
+end
+
+##
+files = readdir("Data/test_periodic/",join=true)

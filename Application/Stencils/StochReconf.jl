@@ -45,11 +45,12 @@ end
 stochReconfRes_2 = SW.stochastic_reconfiguration(S,3000,ψGnew,20,1e-3;Nwalkers = 50,nbra = 25,rel_tolerance=1e-3,equilibration_steps=nThermal)
 ##
 
+ψGnew = SW.VariationalGuidingFunction(stochReconfRes_2.params)
 SW.Random.seed!(1232)
 nThermal = 5000
 
-nBra = 10
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,30,120_000÷nBra,nBra,ψGnew,1;equilibration_steps=nThermal,pre_equilibration_steps=nBra*nThermal,w_avg_estimate = 8.) for _ in 1:12])
+nBra = 20
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,80,30_000÷nBra,nBra,ψGnew,1;equilibration_steps=nThermal,pre_equilibration_steps=nBra*nThermal,w_avg_estimate = 8.) for _ in 1:12])
 ##
 nBraOld = 10
 SW.Random.seed!(1232)
@@ -57,8 +58,8 @@ SW.Random.seed!(1232)
 
 ##
 # plotEnergies(results,nBra,-20.35;Emin=-20.5,Emax=-19.8) # L=10
-plotEnergies(resultsOld,nBraOld)
-plotEnergies!(results,nBra;color=:red) # L=15
+plotEnergies(resultsOld,nBraOld,p=500)
+plotEnergies!(results,nBra;p=500,color=:red) # L=15
 current_figure()
 # plotEnergies(results,nBra,-49.7;Emin=-50.5,Emax=-46)
 ##
