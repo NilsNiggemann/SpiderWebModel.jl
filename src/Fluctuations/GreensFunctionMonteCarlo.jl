@@ -518,7 +518,7 @@ function saveVariationalParameter(file::HDF5.File,weightfunc)
     end
 end
 
-function startManyWalkerGFMC(InitialState::ConfType,outfile,Nwalkers::Int,NSteps::Int,equilibration_steps::Int,pre_equilibration_steps::Int,nBranch::Int,weightfunc::Fun,Λ::Real,w_avg_estimate,) where {T,ConfType <: StencilSpinConfig{T},Fun}
+function startManyWalkerGFMC(InitialState::ConfType,outfile,Nwalkers::Int,NSteps::Int,equilibration_steps::Int,pre_equilibration_steps::Int,nBranch::Int,weightfunc::Fun,Λ::Real,w_avg_estimate) where {T,ConfType <: StencilSpinConfig{T},Fun}
     
     (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationTable) = setup_many_walker_GFMC(InitialState,Nwalkers,NSteps)
     (;energies,SaveConfigs) = setupObservables(InitialState,Nwalkers,NSteps,outfile)
@@ -527,7 +527,7 @@ function startManyWalkerGFMC(InitialState::ConfType,outfile,Nwalkers::Int,NSteps
     if pre_equilibration_steps > 0 # pre_equilibration_steps do not use have any reconfigurations or guiding wavefunctions. The idea is to initialize the walkers with fully uncorrelated configurations at the beginning so that the Hilbert space can be explored more efficiently.
         random_init_walkers!(Walkers,pre_equilibration_steps)
     end
-
+    
     for _ in 1:equilibration_steps
         propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc,Λ,nBranch,w_avg_estimate)
         reconfigurationList = @view reconfigurationTable[:,1]

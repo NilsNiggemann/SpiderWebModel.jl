@@ -15,21 +15,31 @@ function getOx_k(ψG::VariationalGuidingFunction,n::AbstractArray,k)
     return Ok
 end
 
+function nearbyInt(x1,x2,x_size)
+    x_rsize = 1.0 / x_size
+
+    dx = x1 - x2
+    dx -= x_size * round(Int,dx * x_rsize)
+end
+
 function getDistReduction(S,ψG)
 
     α = get_alpha_i(ψG)
     Allplaqs = collect(plaquetteIterator(S))
-    # AllDists = Dict{SVector{2,Int},Int}()
-    AllDists = Dict{Tuple{Int,Int},Int}()
+    AllDists = Dict{SVector{2,Int},Int}()
+    # AllDists = Dict{Tuple{Int,Int},Int}()
     
     betaIndex = lastindex(α)
     indicesMapping = ones(Int,betaIndex)
     uniqueInds = [1]
-    return AllDists,indicesMapping,uniqueInds
+    # indicesMapping = collect(eachindex(α))
+    # uniqueInds = collect(eachindex(α))
+    LxLy = size(S)
     for (i,ri) in enumerate(Allplaqs)
         for (j,rj) in enumerate(Allplaqs)
-            # Rij = SVector(ri .- rj) #.% (size(S) .÷2)
-            Rij = (i,j) #.% (size(S) .÷2)
+            Rij = abs.(SVector(nearbyInt.(ri, rj,LxLy)))
+            # Rij = SVector(0,0)
+            # Rij = (i,j)
             betaIndex += 1
             if Rij ∉ keys(AllDists)
                 uniqueInds = push!(uniqueInds,betaIndex)
@@ -49,6 +59,7 @@ function add_reconstructedFullParams!(ψG,indicesMapping,trimmedparams)
     end
     return ψG
 end
+
 import CovarianceEstimation
 
 function reconf_obs(InitialState::ConfType,configs,ψG,Λ,inequivParams=eachindex(ψG.params)) where {ConfType}
@@ -58,7 +69,7 @@ function reconf_obs(InitialState::ConfType,configs,ψG,Λ,inequivParams=eachinde
     NThreads = Threads.nthreads()
 
     Nparams = length(inequivParams)
-    Ok_i = zeros(length(configs),Nparams)
+    Ok_i = zeros(Float32,length(configs),Nparams)
     E_i = zeros(length(configs))
 
     WorkChunks = ChunkSplitters.chunks(eachindex(configs),n=NThreads)
@@ -88,8 +99,12 @@ function reconf_obs(InitialState::ConfType,configs,ψG,Λ,inequivParams=eachinde
 
     println("computing cov")
     # @time S = cov(Ok_i) #+ 1e-12I
-    method = CovarianceEstimation.LinearShrinkage(CovarianceEstimation.ConstantCorrelation())
-    @time S = cov(method,(Ok_i)) #+ 1e-12I
+    # target = CovarianceEstimation.PerfectPositiveCorrelation()
+    # shrinkage = :lw # Ledoit-Wolf optimal shrinkage
+    # method = CovarianceEstimation.LinearShrinkage(target,0.)
+
+
+    @time S = cov(Ok_i) #+ 1e-12I
     for i in axes(S,1)
         S[i,i] += 1e-5
     end
@@ -147,13 +162,15 @@ function stochastic_reconfiguration(InitialState,nSteps,ψG,n,dt=1e-3;equilibrat
 
         # params[eachindex(δα)] .+= dt*δα
         add_reconstructedFullParams!(ψG,indicesMapping,δα .*dt)
-        E0s[i] = EL_avg
-        ΔE[i] = EL_err
+        # E0s[i] = EL_avg
+        # ΔE[i] = EL_err
+        E0s[i] = mean(res.energies)
+        ΔE[i] = sqrt(var(res.energies))
         AllParams[:,:,i] .= ψG.params
         α = get_alpha_i(ψG) 
         # @views α .+= dt*δα[begin:length(α)]
         # @info "optimization step $i" δα params E0 = mean(res.energies) σ = sqrt(var(res.energies)) convergedSteps
-        @info "optimization step $i" "δα" = normDelta E0 = mean(res.energies) ΔE0 = sqrt(var(res.energies)) convergedSteps mean(α)
+        @info "optimization step $i" "|δα|" = normDelta E0 = mean(res.energies) ΔE0 = sqrt(var(res.energies)) convergedSteps mean(α) δα[1]
 
         # ψG = VariationalGuidingFunction(params) 
         if normDelta < rel_tolerance
