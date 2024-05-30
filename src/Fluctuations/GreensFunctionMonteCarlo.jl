@@ -544,36 +544,6 @@ function swapIndices!(list,i,j)
     return list
 end
 
-function getRandConfs(InitialState::ConfType, N, Nwalkers; equilibration_steps = 1000,samplingRate=1e-6) where ConfType
-    plaquettePositions = collect(plaquetteIterator(InitialState))
-
-    Walkers = Vector{SpiderWebWalker{ConfType}}(undef,Nwalkers)
-    Threads.@threads for α in eachindex(Walkers)
-        Walkers[α] = spiderWebWalker(InitialState,plaquettePositions)
-    end
-    Lx,Ly = size(InitialState)
-    SaveConfigs = zeros(eltype(InitialState),Lx,Ly,N,Nwalkers)
-
-    random_init_walkers!(Walkers,equilibration_steps)
-    Threads.@threads for α in eachindex(Walkers)
-        Walker = Walkers[α]
-        
-        n = 1
-        while n<=N
-            movepos = Tuple(rand(plaquettePositions))
-            movesgn = rand(1:2)
-            P_applicable(Walker.Config, movepos)[movesgn] || continue
-            applyPlaquette!(Walker.Config, movepos[1], movepos[2], (1,-1)[movesgn])
-
-            if rand() < samplingRate
-                SaveConfigs[:,:,n,α] .= get_config(Walkers[α])
-                n +=1
-            end
-        end
-    end
-    return SaveConfigs
-end
-
 function random_init_walkers!(Walkers::AbstractVector{<:SpiderWebWalker},equilibration_steps)
 
     Threads.@threads for α in eachindex(Walkers)
