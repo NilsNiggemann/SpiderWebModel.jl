@@ -77,7 +77,7 @@ magEx = SW.getMagnetization(HConfs, v0)
 S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 # ψG = SW.PlaquetteNumberGuidingFunction(0.197)
 # ψG = SW.PlaquetteNumberGuidingFunction(0.197)
-ψG = SW.constructVariationalFunction(S,0.197)
+ψG = SW.fullVariationalFunction(S,0.197)
 
 nThermal = 5_000
 # results = [SW.startManyWalkerGFMC(S,2,55_000,3,nThermal,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:35]

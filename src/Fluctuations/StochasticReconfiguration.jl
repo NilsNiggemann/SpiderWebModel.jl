@@ -1,4 +1,4 @@
-function getOx_k(ψG::VariationalGuidingFunction,n::AbstractArray,k)
+function getOx_k(ψG::FullVariationalGuidingFunction,n::AbstractArray,k)
     par = ψG.params
 
     α = get_alpha_i(ψG)
@@ -15,6 +15,8 @@ function getOx_k(ψG::VariationalGuidingFunction,n::AbstractArray,k)
     return Ok
 end
 
+getOx_k(::LocalPlaquetteGuidingFunction,n::AbstractArray,k) = n[k]
+
 function nearbyInt(x1,x2,x_size)
     x_rsize = 1.0 / x_size
 
@@ -22,7 +24,7 @@ function nearbyInt(x1,x2,x_size)
     dx -= x_size * round(Int,dx * x_rsize)
 end
 
-function getDistReduction(S,ψG)
+function getDistReduction(S,ψG::FullVariationalGuidingFunction)
 
     α = get_alpha_i(ψG)
     Allplaqs = collect(plaquetteIterator(S))
@@ -53,14 +55,43 @@ function getDistReduction(S,ψG)
 
 end
 
+function getDistReduction(S,ψG::LocalPlaquetteGuidingFunction)
+
+    α = get_alpha_i(ψG)
+    Allplaqs = collect(plaquetteIterator(S))
+    AllDists = Dict{SVector{2,Rational{Int}},Int}()
+
+    indicesMapping = Int[]
+    uniqueInds = Int[]
+    LxLy = size(S)
+    r_Central = (LxLy .+1) .//2 
+    for (i,ri) in enumerate(Allplaqs)
+        x,y = ri .- r_Central
+        if y < -x
+            x,y = -y,-x
+        end
+        if y>x
+            x,y = y,x
+        end
+
+        symMapped = SVector(x,y)
+        if symMapped ∉ keys(AllDists)
+            uniqueInds = push!(uniqueInds,i)
+            AllDists[symMapped] = length(uniqueInds)
+        end
+        push!(indicesMapping,AllDists[symMapped])
+    end
+    
+    return AllDists,indicesMapping,uniqueInds
+
+end
+
 function add_reconstructedFullParams!(ψG,indicesMapping,trimmedparams)
     for (i,k) in enumerate(indicesMapping)
         ψG.params[i] += trimmedparams[k]
     end
     return ψG
 end
-
-import CovarianceEstimation
 
 function reconf_obs(InitialState::ConfType,configs,ψG,Λ,inequivParams=eachindex(ψG.params)) where {ConfType}
     plaqs = collect(plaquetteIterator(InitialState))
@@ -115,7 +146,6 @@ end
 
 function stochastic_reconfiguration_step(InitialState,configs,ψG,Λ,inequivalentIndices=eachindex(ψG.params))
     (;EL_avg,EL_err,F,S) = reconf_obs(InitialState,configs,ψG,Λ,inequivalentIndices)
-    println("constructing cholesky")
     @time SChol = cholesky!(Symmetric(S),check = false)
     if !issuccess(SChol)
         @warn "Cholesky factorization failed"
@@ -130,7 +160,7 @@ function stochastic_reconfiguration_step(InitialState,configs,ψG,Λ,inequivalen
 end
 
 
-function stochastic_reconfiguration(InitialState,nSteps,ψG,n,dt=1e-3;equilibration_steps=1000,Λ=1,rel_tolerance=1e-2,Nwalkers = 6,nbra =10)
+function stochastic_reconfiguration(InitialState,nSteps,ψG,n,dt=1e-3;equilibration_steps=1000,Λ=1,rel_tolerance=1e-2,Nwalkers = 6,nbra =10,outfile=nothing)
     
     ψG = deepcopy(ψG)
     params = ψG.params
@@ -139,40 +169,28 @@ function stochastic_reconfiguration(InitialState,nSteps,ψG,n,dt=1e-3;equilibrat
 
     E0s = fill(NaN,n)
     ΔE = fill(NaN,n)
-    AllParams = zeros(size(params)...,n)
-    # αs = fill(NaN,n)
+    params_steps = [similar(params) for _ in 1:n]
     normDelta = Inf
 
-    AllDists,indicesMapping,uniqueInds = getDistReduction(InitialState,ψG)
-    # inequivalentIndices = unique(indicesMapping)
+    _,indicesMapping,uniqueInds = getDistReduction(InitialState,ψG)
 
-    for i in 1:n
+    for (i,ParamsSlice) in enumerate(params_steps)
         
         @time res = startManyWalkerGFMC(InitialState,Nwalkers,nSteps,nbra,ψG,Λ;equilibration_steps,pre_equilibration_steps=5equilibration_steps)
 
-        # αs[i] = params
-
-        # conf_dims = size(res.SaveConfigs)
-        # confs = reshape(res.SaveConfigs,conf_dims[1],conf_dims[2],conf_dims[3]*conf_dims[4])
         confs = eachslice(res.SaveConfigs,dims=(3,4))
 
-        @time (;δα,EL_avg,EL_err) = stochastic_reconfiguration_step(InitialState,confs,ψG,Λ,uniqueInds)
+        (;δα,EL_avg,EL_err) = stochastic_reconfiguration_step(InitialState,confs,ψG,Λ,uniqueInds)
         
         normDelta = norm(δα)/norm(params)
 
-        # params[eachindex(δα)] .+= dt*δα
         add_reconstructedFullParams!(ψG,indicesMapping,δα .*dt)
-        # E0s[i] = EL_avg
-        # ΔE[i] = EL_err
         E0s[i] = mean(res.energies)
         ΔE[i] = sqrt(var(res.energies))
-        AllParams[:,:,i] .= ψG.params
+        ParamsSlice[:] .= ψG.params
         α = get_alpha_i(ψG) 
-        # @views α .+= dt*δα[begin:length(α)]
-        # @info "optimization step $i" δα params E0 = mean(res.energies) σ = sqrt(var(res.energies)) convergedSteps
         @info "optimization step $i" "|δα|" = normDelta E0 = mean(res.energies) ΔE0 = sqrt(var(res.energies)) convergedSteps mean(α) δα[1]
 
-        # ψG = VariationalGuidingFunction(params) 
         if normDelta < rel_tolerance
             convergedSteps += 1
 
@@ -181,6 +199,13 @@ function stochastic_reconfiguration(InitialState,nSteps,ψG,n,dt=1e-3;equilibrat
             convergedSteps = 0
         end
     end
-    # return (;params = params, E0_i = E0s,ΔE_i = σs,α_i = αs)
-    return (;params = params,E0_i = E0s,ΔE_i = ΔE,AllParams = AllParams)
+    params_steps_arr = stack(params_steps)
+    if !isnothing(outfile)
+        h5write(outfile,"params",ψG.params)
+        h5write(outfile,"E0s",E0s)
+        h5write(outfile,"ΔE",ΔE)
+        h5write(outfile,"params_steps",params_steps_arr)
+    end
+
+    return (;params = params,E0_i = E0s,ΔE_i = ΔE,params_steps = params_steps_arr)
 end

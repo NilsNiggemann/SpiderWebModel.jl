@@ -1,40 +1,68 @@
+abstract type AbstractGuidingFunction end
 
-struct VariationalGuidingFunction{A<:AbstractArray} <: AbstractGuidingFunction
-    params::A
+struct PlaquetteNumberGuidingFunction <: AbstractGuidingFunction
+    α::Float64
+end
+(ψG::PlaquetteNumberGuidingFunction)(ΔNPlaq::Real) = exp(ψG.α*ΔNPlaq)
+
+guidingfunc_name(F::Function) = string(typeof(F))
+guidingfunc_name(F::AbstractGuidingFunction) = string(typeof(F))
+guidingfunc_name(F::PlaquetteNumberGuidingFunction) = "PlaquetteNumberGuidingFunction"
+
+variational_parameters(P::PlaquetteNumberGuidingFunction) = Dict([:alpha=>P.α])
+variational_parameters(P::AbstractGuidingFunction) = Dict([:params=>P.params])
+variational_parameters(P::Function) = Dict([x => getproperty(P,x) for x in propertynames(P)])
+
+function guidingfuncRatio_exponent(ψG::PlaquetteNumberGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes)
+    α = ψG.α
+    exponent = zero(α)
+
+    for ind in eachindex(affectedPlaquettes)
+        i = affectedPlaquettes[ind]
+        Δn = n´[i] - n[i]
+        exponent += Δn
+    end
+
+    return exponent * α
 end
 
-function constructVariationalFunction(State,α::Real=0.1)
+struct FullVariationalGuidingFunction{A<:AbstractArray} <: AbstractGuidingFunction
+    params::A
+end
+guidingfunc_name(F::FullVariationalGuidingFunction) = "FullVariationalGuidingFunction"
+
+function fullVariationalFunction(State,α::Real=0.1)
     plaqs = collect(plaquetteIterator(State))
     N = length(plaqs)
     params = zeros(N,N+1)
-    ψ = VariationalGuidingFunction(params)
+    ψ = FullVariationalGuidingFunction(params)
     get_alpha_i(ψ) .= α
     return ψ
 end
 
-function get_alpha_i(ψG::VariationalGuidingFunction)
+function get_alpha_i(ψG::FullVariationalGuidingFunction)
     return @view ψG.params[:,begin]
 end
 
-function get_beta_ij(ψG::VariationalGuidingFunction)
+function get_beta_ij(ψG::FullVariationalGuidingFunction)
     return @view ψG.params[:,begin+1:end]
 end
 
-function (ψG::VariationalGuidingFunction)(N□::AbstractArray) 
+function (ψG::FullVariationalGuidingFunction)(N□::AbstractArray) 
     return exp(guidingfunc_exponent(ψG,N□))
 end
 
-function guidingfunc_exponent(ψG::VariationalGuidingFunction,N□::AbstractArray) 
+function guidingfunc_exponent(ψG::FullVariationalGuidingFunction,N□::AbstractArray) 
     α = get_alpha_i(ψG)
     β = get_beta_ij(ψG)
     exponent = α' * N□ + dot(N□,β,N□)
     return exponent
 end
 
-guidingfuncRatio(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes) = exp(guidingfuncRatio_exponent(ψG,n,n´,affectedPlaquettes))
-guidingfuncRatio(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) = exp(guidingfuncRatio_exponent(ψG,n,n´))
+guidingfuncRatio(ψG::AbstractGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes) = exp(guidingfuncRatio_exponent(ψG,n,n´,affectedPlaquettes))
+guidingfuncRatio(ψG::FullVariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) = exp(guidingfuncRatio_exponent(ψG,n,n´))
 
-function guidingfuncRatio_exponent(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes)
+function guidingfuncRatio_exponent(ψG::FullVariationalGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes)
     α = get_alpha_i(ψG)
     β = get_beta_ij(ψG)
 
@@ -54,10 +82,9 @@ function guidingfuncRatio_exponent(ψG::VariationalGuidingFunction,n::AbstractAr
     return exponent
 end
 
-guidingfuncRatio_exponent(ψG::VariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) = guidingfuncRatio_exponent(ψG,n,n´,eachindex(n,n´))
+guidingfuncRatio_exponent(ψG::AbstractGuidingFunction,n::AbstractArray,n´::AbstractArray) = guidingfuncRatio_exponent(ψG,n,n´,eachindex(n,n´))
 
-
-function getWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc::VariationalGuidingFunction,Λ)
+function getWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc::AbstractGuidingFunction,Λ)
     (;Config,moves,weights) = Walker
     empty!(weights)
 
@@ -71,8 +98,6 @@ function getWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc
         n_x´ = getNPlaqfilled!(Walker,indices)
         
         weight = guidingfuncRatio(weightfunc,n_x,n_x´,indices)
-        # ndiff = sum(n_x´ .- n_x)
-        # weight = weightfunc(ndiff)
         push!(weights,weight)
         applyPlaquette!(Config, i, j, -opNum)
     end
@@ -81,4 +106,45 @@ function getWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc
         push!(weights,Λ)
     end
     return weights
+end
+
+struct LocalPlaquetteGuidingFunction{A<:AbstractVector} <: AbstractGuidingFunction
+    params::A
+end
+guidingfunc_name(F::LocalPlaquetteGuidingFunction) = "LocalPlaquetteGuidingFunction"
+
+function localPlaquetteGuidingFunction(State,α::Real=0.1)
+    plaqs = collect(plaquetteIterator(State))
+    N = length(plaqs)
+    params = zeros(Float32,N)
+    ψ = LocalPlaquetteGuidingFunction(params)
+
+    get_alpha_i(ψ) .= α
+    return ψ
+end
+
+function get_alpha_i(ψG::LocalPlaquetteGuidingFunction)
+    return ψG.params
+end
+
+(ψG::LocalPlaquetteGuidingFunction)(N□::AbstractArray) = exp(guidingfunc_exponent(ψG,N□))
+
+function guidingfunc_exponent(ψG::LocalPlaquetteGuidingFunction,N□::AbstractArray) 
+    α = get_alpha_i(ψG)
+    exponent = α' * N□
+    return exponent
+end
+
+function guidingfuncRatio_exponent(ψG::LocalPlaquetteGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes)
+    α = get_alpha_i(ψG)
+
+    exponent = zero(eltype(α))
+
+    for ind in eachindex(affectedPlaquettes)
+        i = affectedPlaquettes[ind]
+        Δn = n´[i] - n[i]
+        exponent += α[i]*Δn
+    end
+
+    return exponent
 end

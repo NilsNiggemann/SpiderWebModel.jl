@@ -1,8 +1,5 @@
 """Abstract supertype for a walker in a GFMC simulation. A walker needs to have a method `get_config` which returns the configuration (for example the spin configuration), and a method `get_weights` which returns a vector of weights for each possible move."""
 abstract type AbstractWalker end
-
-abstract type AbstractGuidingFunction end
-
 struct SpiderWebWalker{C} <: AbstractWalker
     Config::C
     moves::Vector{Tuple{Int,Int,Int}}
@@ -31,22 +28,6 @@ getOperatorRep(i,j,opNum) = i,j,opNum
 # function getOperatorFromNumber(Config, opNumber, operators)
 
 # end
-
-struct PlaquetteNumberGuidingFunction <: AbstractGuidingFunction
-    α::Float64
-end
-(ψG::PlaquetteNumberGuidingFunction)(ΔNPlaq::Real) = exp(ψG.α*ΔNPlaq)
-
-guidingfunc_name(F::Function) = string(typeof(F))
-guidingfunc_name(F::AbstractGuidingFunction) = string(typeof(F))
-guidingfunc_name(F::PlaquetteNumberGuidingFunction) = "PlaquetteNumberGuidingFunction"
-
-variational_parameters(P::PlaquetteNumberGuidingFunction) = Dict([:alpha=>P.α])
-variational_parameters(P::Function) = Dict([x => getproperty(P,x) for x in propertynames(P)])
-
-function varitationalFunc(α,NPlaq::Real,NPlaqEstimate)
-    return exp(α*(NPlaq-NPlaqEstimate))
-end
 
 function getMoves!(
     Walker::SpiderWebWalker
