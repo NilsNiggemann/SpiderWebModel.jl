@@ -14,16 +14,20 @@ function getRandConfs(InitialState::ConfType, N, Nwalkers; equilibration_steps =
         
         n = 1
         randPlaqs = rand(plaquettePositions,10N)
+        randmoves = rand(Bool,10N)
         iter = 1
         while n<=N
             # movepos = Tuple(rand(plaquettePositions))
+            iter +=1
             if iter > lastindex(randPlaqs)
                 iter = 1
                 rand!(plaquettePositions,randPlaqs)
+                rand!(randmoves)
             end
                 
             movepos = randPlaqs[iter]
             movesgn = rand(1:2)
+            # movesgn = randmoves[iter] + 1
             P_applicable(Walker.Config, movepos)[movesgn] || continue
             applyPlaquette!(Walker.Config, movepos[1], movepos[2], (1,-1)[movesgn])
 
