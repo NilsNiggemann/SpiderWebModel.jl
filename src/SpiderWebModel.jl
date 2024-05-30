@@ -16,6 +16,7 @@ import Gurobi
 import ProgressMeter
 import MathOptInterface as MOI
 import Stencils
+import StatsBase
 
 
 include("SpinConfig.jl")

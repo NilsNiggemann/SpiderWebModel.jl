@@ -51,7 +51,11 @@ function getMoves!(
 end
 # getMoves!(Walker::SpiderWebWalker) = getMoves!(Walker.moves,Walker)
 
-import StatsBase
+function plaquettesAreSeparated(P1, P2)
+    separation = P2 .- P1
+
+    return any(x -> abs(x) > 2, separation)
+end
 
 function findAffectedPlaquettes!(Plaq_indices,S,i,j) 
     A = parent(S)

@@ -101,7 +101,7 @@ function reconf_obs(InitialState::ConfType,configs,ψG,Λ,inequivParams=eachinde
 
     Nparams = length(inequivParams)
     Ok_i = zeros(Float32,length(configs),Nparams)
-    E_i = zeros(length(configs))
+    E_i = zeros(Float32,length(configs))
 
     WorkChunks = ChunkSplitters.chunks(eachindex(configs),n=NThreads)
     
@@ -136,6 +136,7 @@ function reconf_obs(InitialState::ConfType,configs,ψG,Λ,inequivParams=eachinde
 
 
     @time S = cov(Ok_i) #+ 1e-12I
+    GC.gc()
     for i in axes(S,1)
         S[i,i] += 1e-5
     end
