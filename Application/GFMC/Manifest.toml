@@ -1473,12 +1473,12 @@ weakdeps = ["ChainRulesCore"]
     SpecialFunctionsChainRulesCoreExt = "ChainRulesCore"
 
 [[deps.SpiderWebModel]]
-deps = ["Arpack", "BitIntegers", "CairoMakie", "ChunkSplitters", "CircularArrays", "DSP", "DataStructures", "Dictionaries", "Gurobi", "H5Zblosc", "HDF5", "JuMP", "KrylovKit", "LatticeFFTs", "LinearAlgebra", "MathOptInterface", "OrderedCollections", "ProgressMeter", "Random", "SparseArrays", "StaticArrays", "Statistics", "StatsBase", "Stencils", "Test"]
-git-tree-sha1 = "bb6fa4304625438e74cc254f624e21f0e2ce0c62"
+deps = ["Arpack", "BitIntegers", "CairoMakie", "ChunkSplitters", "CircularArrays", "DSP", "DataStructures", "Dictionaries", "Gurobi", "H5Zblosc", "HDF5", "JuMP", "KrylovKit", "LatticeFFTs", "LinearAlgebra", "LoopVectorization", "MathOptInterface", "OrderedCollections", "ProgressMeter", "Random", "SparseArrays", "StaticArrays", "Statistics", "StatsBase", "Stencils", "Test"]
+git-tree-sha1 = "b63030c55461534814788d4df9bf1e6dc653da63"
 repo-rev = "main"
 repo-url = "../.."
 uuid = "8e1b84da-b1d7-4311-a21b-52324f990117"
-version = "0.2.0"
+version = "0.3.0"
 
 [[deps.StackViews]]
 deps = ["OffsetArrays"]

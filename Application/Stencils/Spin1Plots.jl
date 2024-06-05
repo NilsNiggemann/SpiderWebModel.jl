@@ -1,13 +1,14 @@
 using CairoMakie, MakieHelpers,Statistics, HDF5
 import SpiderWebModel as SW
-
+using Optim
+cd(@__DIR__)
 ##
 filesRK = readdir("/p/scratch/pmfrg/niggemann1/Spiderweb/DataRK/",join=true)
-resRK = h5open(filesRK[1]) do f
+resRK = h5open(filesRK[end]) do f
     read(f)
 end
 ##
-res = h5open("../Data/Spin1GFMC_Eval.h5") do f
+res = h5open("../Data/Spin1GFMC_Eval_open.h5") do f
     read(f)
 end
 ##
@@ -19,7 +20,6 @@ with_theme(theme_SimpleTicks()) do
     ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0/L^2",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
 
     proj = res["nBra"] .*eachindex(e0s)
-
     scatter!(ax,proj,e0s/40^2,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
     errorbars!(ax,proj,e0s/40^2,e0s_err/40^2,whiskerwidth = 3.5,color = :black)
     axislegend(ax,merge=true)
@@ -28,7 +28,7 @@ with_theme(theme_SimpleTicks()) do
     fig
 end
 ##
-projectionSteps = 250
+projectionSteps = 750
 SqsGFMC = eachslice(res["SqsGFMC"][string(projectionSteps)],dims=3)
 
 SqMat = mean(real(SqsGFMC)) ./4
@@ -37,12 +37,67 @@ SqFunc = SW.getSqCont(SqMat)
 
 errFunc = SW.getSqCont(errMat)
 
-function SqFieldTheory(x,y)
-    num = cos(x) - cos(y) +2sin(x)sin(y) 
-    denom = (cos(x) - cos(y))^2 + (2sin(x)sin(y))^2
-    return num^2/(sqrt(denom)+1e-30)
+# function SqFieldTheory(x,y)
+#     num = cos(x) - cos(y) +2sin(x)sin(y) 
+#     denom = (cos(x) - cos(y))^2 + (2sin(x)sin(y))^2
+#     return num^2/(sqrt(denom)+1e-30)
+# end
+# SqFieldTheory(k) = SqFieldTheory(k[1],k[2])
+##
+# function SqFieldTheory2(x,y,v,w)
+#     a = (cos(x) - cos(y))^2 +(2sin(x)sin(y))^2
+#     b = -((-4 + 4cos(x)*cos(y)+cos(2x)*(1-2cos(2y)) +cos(2y))*(v+8w-2w*(4cos(x)*cos(y)+cos(2x)*(1-2cos(y)) + cos(2y))))
+#     c = (cos(x) - cos(y) + 2sin(x)sin(y))^2 
+#     return a*√2 * sqrt(b)*c
+# end
+# function SqFieldTheory2(x,y,v,w)
+#     kx =x 
+#     ky = y
+#     (sqrt(2)*sqrt(-((-4 + 4*cos(kx)*cos(ky) + cos(2*kx)*(1 - 2*cos(2*ky)) + cos(2*ky))*(v + 8*w - 2*w*(4*cos(kx)*cos(ky) + cos(2*kx)*(1 - 2*cos(2*ky)) + cos(2*ky)))))*(cos(kx) - cos(ky) + 2*sin(kx)*sin(ky))^2)/((cos(kx) - cos(ky))^2 + 4*sin(kx)^2*sin(ky)^2+1e-2)
+# end
+function SqFieldTheory2(kx,ky,v,w)
+    kx = kx -pi
+    ky = ky -pi
+    (sqrt(2)*sqrt(4 - 4*cos(kx)*cos(ky) - cos(2*ky) + cos(2*kx)*(-1 + 2*cos(2*ky)))*(-cos(kx) + cos(ky) + 2*sin(kx)*sin(ky))^2)/(sqrt(v + 8*w + 2*w*(-4*cos(kx)*cos(ky) - cos(2*ky) + cos(2*kx)*(-1 + 2*cos(2*ky))))*((cos(kx) - cos(ky))^2 + 4*sin(kx)^2*sin(ky)^2) +1e-20)
 end
-SqFieldTheory(k) = SqFieldTheory(k[1],k[2])
+SqFieldTheory2(k,v,w) = SqFieldTheory2(k[1],k[2],v,w)
+
+function optimizeCoeffs(SqMat)
+    k = 2pi .* LinRange(0,1,size(SqMat,1))
+
+    # SqFT = [SqFieldTheory2(x,y,0,0) for x in kx, y in ky]
+    function loss(v,w)
+        l = 0.
+        v = abs(v)
+        w = abs(w)
+        for (i,kx) in enumerate(k), (j,ky) in enumerate(k)
+            l += abs2(SqMat[i,j] - SqFieldTheory2(kx,ky,v,w))#/(SqMat[i,j]+1e-5)
+        end
+        # for (i,kx) in enumerate(kx)
+        #     l += abs2(SqMat[i,1] - SqFieldTheory2(kx,0,v,w))/(SqMat[i,1]+1e-5)
+        # end
+        return l
+    end
+    loss(v) = loss(v[1],v[2])
+
+    # inner_optimizer = GradientDescent()
+    # v0 = 0.08125
+    # w0 = 0.025
+    v0 = 63.
+    w0 = 0.00
+    println(loss(v0,w0))
+    x0 = [v0, w0]
+    # (;v,w) = optimize(loss, [1e-10,1e-10],[Inf,Inf],Fminbox(inner_optimizer))
+    res = optimize(loss, x0)
+    @info res
+    (v,w) = abs.(Optim.minimizer(res))
+    @info "" loss(v0,w0) loss(v,w)
+    return (;v,w)
+end
+fittingCoeffs::NamedTuple{(:v, :w), Tuple{Float64, Float64}} = optimizeCoeffs(SqMat)
+##
+SqFieldTheory(k) = SqFieldTheory2(k,fittingCoeffs...)
+SqFieldTheory(kx,ky) = SqFieldTheory2(kx,ky,fittingCoeffs...)
 ##
 
 
@@ -55,32 +110,31 @@ with_theme(theme_PiTicks()) do
 
     fig = Figure(fontsize = 20,size = (650,400))
     
-    ticks = PiTicks()
     ticks = PiTicks([0,pi,])
     # ticks = PiTicks([-pi,-pi/2,0])
     # ticks = ([pi/2,3pi/2,5pi/2],[L"\frac{π}{2}",L"\frac{3}{2}π",L"\frac{5}{2}π"])
     # ticks = ([-3pi/2,-pi/2,pi/2],[L"-3π/2",L"-π/2",L"π/2"])
     # ticks = ([1,-1],[L"\frac{1}{2}",L"2"])
-    axFT = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"k_y",title = L"U(1) theory$$",aspect = 1,xticks = ticks,yticks = ticks)
-    axMC = Axis(fig[1,2],xlabel = L"k_x",ylabel = L"k_y",title = L"GFMC $p=%$projectionSteps$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false,xticks = ticks,yticks = ticks)
-    axerr = Axis(fig[1,3],xlabel = L"k_x",ylabel = L"k_y",title = L"rel. error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false,xticks = ticks,yticks = ticks)
+    axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",title = L"U(1) theory$$",aspect = 1,xticks = ticks,yticks = ticks)
+    axMC = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",title = L"GFMC $p=%$projectionSteps$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false,xticks = ticks,yticks = ticks)
+    axerr = Axis(fig[1,3],xlabel = L"q_x",ylabel = L"q_y",title = L"rel. error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false,xticks = ticks,yticks = ticks)
 
 
-    # axDiff = Axis(fig[1,4],xlabel = L"k_x",ylabel = L"k_y",title = L"Difference$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
+    # axDiff = Axis(fig[1,4],xlabel = L"q_x",ylabel = L"q_y",title = L"Difference$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
 
     # err = abs.(Sq .- SqFieldTheory.(kx,kx'))
     hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
     SqFT = [SqFieldTheory(x,y) for x in kx, y in ky]
-    hmFT = heatmap!(axFT,kx,ky,SqFT ./maximum(SqFT),colormap = :viridis)
+    hmFT = heatmap!(axFT,kx,ky,SqFT,colormap = :viridis)
     # hmerr = heatmap!(axerr,kx,ky,err,colormap = :viridis,colorrange = extrema(Sq))
     hmerr = heatmap!(axerr,kx,ky,err ./Sq,colormap = :viridis)
 
     # heatmap!(axDiff,kx,ky,(Sq ./maximum(Sq)) .- (SqFT ./maximum(SqFT)),colormap = :viridis)
     
-    Colorbar(fig[2,1],hmFT,label = L"\mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8), width = Relative(0.9),vertical=false,ticks = SimpleTicks(),flipaxis=false)
-    Colorbar(fig[2,2],hmMC,label = L"\mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8),vertical=false,width = Relative(0.9),ticks = SimpleTicks(),flipaxis=false)
+    Colorbar(fig[2,1],hmFT,label = L"\mathcal{S}(\textbf{q})",height = Relative(0.8), width = Relative(0.9),vertical=false,ticks = SimpleTicks(),flipaxis=false)
+    Colorbar(fig[2,2],hmMC,label = L"\mathcal{S}(\textbf{q})",height = Relative(0.8),vertical=false,width = Relative(0.9),ticks = SimpleTicks(),flipaxis=false)
     
-    Colorbar(fig[2,3],hmerr,label = L"\sigma\mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks(),flipaxis=false)
+    Colorbar(fig[2,3],hmerr,label = L"\sigma\mathcal{S}(\textbf{q})",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks(),flipaxis=false)
     rowgap!(fig.layout,1,-1.1)    
     colgap!(fig.layout,2,0.2)
     # colgap!(fig.layout,2,0.05)
@@ -91,18 +145,32 @@ end
 ##
 with_theme(theme_SimpleTicks()) do 
     kx = 2pi .* LinRange(0,1,size(SqMat,1)) .- 0.5pi
-    SqFT = [SqFieldTheory(x,0) for x in kx]
-    Sqerr = [errFunc(x,0) for x in kx]
-    SqVec = [SqFunc(x,0) for x in kx]
-    # SqVec = SqMat[1,:]
-    # Sqerr = errMat[1,:]
-    SqFT ./= maximum(SqFT)
-    SqVec ./= maximum(SqVec)
-    Sqerr ./= maximum(SqVec)
     fig = Figure()
-    ax = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"\mathcal{S}(\mathbf{q})",xticks = PiTicks())
-    scatterlines!(kx,SqVec,color = :black)
-    errorbars!(kx,SqVec,Sqerr,color = :black,whiskerwidth = 8)
+    ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"\mathcal{S}(\mathbf{q})",xticks = PiTicks())
+    
+    colors = (:lightblue,:darkblue,:black)
+    for (color,p) in zip(colors,(500,750,1000))
+        SqsGFMC = eachslice(res["SqsGFMC"][string(p)],dims=3)
+
+        SqMat = mean(real(SqsGFMC)) ./4
+        errMat = sqrt.(var(real(SqsGFMC))) ./4
+        SqFunc = SW.getSqCont(SqMat)
+
+        errFunc = SW.getSqCont(errMat)
+
+        Sqerr = [errFunc(x,0) for x in kx]
+        SqVec = [SqFunc(x,0) for x in kx]
+        # SqVec = SqMat[1,:]
+        # Sqerr = errMat[1,:]
+        SqVec ./= maximum(SqVec)
+        Sqerr ./= maximum(SqVec)
+
+        scatterlines!(kx,SqVec;color)
+        errorbars!(kx,SqVec,Sqerr;color,whiskerwidth = 8)
+    end
+    SqFT = [SqFieldTheory(x,0) for x in kx]
+    SqFT ./= maximum(SqFT)
+
     lines!(kx,SqFT,color = :red)
     fig
 end
@@ -122,10 +190,10 @@ with_theme(theme_PiTicks()) do
     # smallticks = ([-pi/3,0,pi/3],[L"-π/3",L"0",L"π/3"])
     smallticks = ticks
 
-    axMC = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"k_y",title = L"GFMC $p=%$projectionSteps$",aspect = 1,xticks = ticks,yticks = ticks)
+    axMC = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",title = L"GFMC $p=%$projectionSteps$",aspect = 1,xticks = ticks,yticks = ticks)
     
     
-    axerr = Axis(fig[1,2],xlabel = L"k_x",ylabel = L"k_y",title = L"std. error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=true,xticks = smallticks,yticks = smallticks)
+    axerr = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",title = L"std. error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=true,xticks = smallticks,yticks = smallticks)
 
     hmMC = halfhalfheatmap!(axMC,kx,ky,SqFieldTheory,SqFunc,x->-x-pi,normalize = true)
     # SqFT = [SqFieldTheory(x,y) for x in kx, y in ky]
@@ -133,8 +201,8 @@ with_theme(theme_PiTicks()) do
     hmerr = heatmap!(axerr,kxSmall,kySmall,err,colormap = :viridis)
     # heatmap!(axDiff,kx,ky,(Sq ./maximum(Sq)) .- (SqFT ./maximum(SqFT)),colormap = :viridis)
 
-    Colorbar(fig[2,1],hmMC,label = L"\mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
-    Colorbar(fig[2,2],hmerr,label = L"\sigma\mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
+    Colorbar(fig[2,1],hmMC,label = L"\mathcal{S}(\textbf{q})",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
+    Colorbar(fig[2,2],hmerr,label = L"\sigma\mathcal{S}(\textbf{q})",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
     
     # colsize!(fig.layout,1,Relative(0.6))
     rowsize!(fig.layout,2,Relative(0.1))
@@ -168,11 +236,11 @@ with_theme(theme_PiTicks()) do
     
     ticks = PiTicks([0,pi,])
 
-    axFT = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"k_y",title = L"U(1) theory$$",aspect = 1,xticks = ticks,yticks = ticks,yminorticksvisible = true,xminorticksvisible = true)
-    axMC = Axis(fig[1,2],xlabel = L"k_x",ylabel = L"k_y",title = L"GFMC $p=%$projectionSteps$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false,xticks = ticks,yticks = ticks,yminorticksvisible = true,xminorticksvisible = true)
-    # axerr = Axis(fig[1,3],xlabel = L"k_x",ylabel = L"k_y",title = L"std. error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false,xticks = ticks,yticks = ticks,yminorticksvisible = true,xminorticksvisible = true)
+    axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",title = L"U(1) theory$$",aspect = 1,xticks = ticks,yticks = ticks,yminorticksvisible = true,xminorticksvisible = true)
+    axMC = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",title = L"GFMC $p=%$projectionSteps$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false,xticks = ticks,yticks = ticks,yminorticksvisible = true,xminorticksvisible = true)
+    # axerr = Axis(fig[1,3],xlabel = L"q_x",ylabel = L"q_y",title = L"std. error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false,xticks = ticks,yticks = ticks,yminorticksvisible = true,xminorticksvisible = true)
     
-    axpath = Axis(fig[2,1:3],xlabel = L"t",ylabel = L"\tilde{\mathcal{S}}^{zz}(\mathbf{q})",yticks = SimpleTicks(),yminorticksvisible = true,xminorticksvisible = true)
+    axpath = Axis(fig[2,1:3],xlabel = L"t",ylabel = L"\tilde{\mathcal{S}}(\mathbf{q})",yticks = SimpleTicks(),yminorticksvisible = true,xminorticksvisible = true)
 
     hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
     SqFT = [SqFieldTheory(x,y) for x in kx, y in ky]
@@ -181,9 +249,9 @@ with_theme(theme_PiTicks()) do
     # hmerr = heatmap!(axerr,kx,ky,err,colormap = :viridis,colorrange = extrema(Sq))
 
     tRange = LinRange(0,2pi,100)
-    path(r,t) = (r*cos(t)+pi,r*sin(t)+pi)
+    path(r,t) = (r*cos(t),r*sin(t))
 
-    p1 = [path(0.65,t) for t in tRange]
+    p1 = [path(0.5,t) for t in tRange]
     xygrid = [(x,y) for x in kx, y in ky]
 
     tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
@@ -199,10 +267,10 @@ with_theme(theme_PiTicks()) do
     # SqFTp = SqFieldTheory.(p1)
     SqFTp = SqFT[p1_discrete]
     SqFTp ./= maximum(SqFTp)
-    scatterlines!(axpath,tRange,SqFTp,color = :red,linwidth = 1,linestyle = :solid)
+    scatterlines!(axpath,tRange,SqFTp,color = :red,linewidth = 1,linestyle = :solid)
     scatter!(axpath,tRange,Sqp,color = :black,markersize = 8)
     errorbars!(axpath,tRange,Sqp,Sqerr,color = :black,whiskerwidth = 8)
-    Colorbar(fig[1,3],hmMC,label = L"\mathcal{S}^{zz}(\textbf{q})",height = Relative(1),ticks = SimpleTicks())
+    Colorbar(fig[1,3],hmMC,label = L"\mathcal{S}(\textbf{q})",height = Relative(1),ticks = SimpleTicks())
     rowgap!(fig.layout,1,Relative(-0.))
     rowsize!(fig.layout,2,Relative(0.5))
     xlims!(axpath,0,2pi)
@@ -217,70 +285,122 @@ with_theme(theme_PiTicks()) do
     Sq = [SqFunc(x,y) for x in kx, y in ky]
     err = [errFunc(x,y) for x in kx, y in ky]
 
-    fig = Figure(fontsize = 20,size = (480,450))
+    fig = Figure(fontsize = 20,size = 1.1 .*(480,450))
     
     ticks = PiTicks([0,pi,])
 
-    axMC = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"k_y",title = L"QMC$$",aspect = 1,xticks = ticks,yticks = ticks,yminorticksvisible = true,xminorticksvisible = true)
-    axFT = Axis(fig[1,2],xlabel = L"k_x",ylabel = L"k_y",title = L"U(1) theory$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false,xticks = ticks,yticks = ticks,yminorticksvisible = true,xminorticksvisible = true)
-    
-    axpath1 = Axis(fig[2,1:3],xlabel = L"t²",ylabel = L"\tilde{\mathcal{S}}^{zz}(\mathbf{q})",yticks = SimpleTicks(),xticks = SimpleTicks(),yminorticksvisible = true,xminorticksvisible = true,xminorgridvisible =true,yminorgridvisible=true,yaxisposition=:left)
-    
-    axpath2 = Axis(fig[2,1:3],xlabel = L"t²",yticks = SimpleTicks(),xticks = SimpleTicks(),
-    yaxisposition=:right,yticklabelcolor=:red,
-    xlabelvisible = false,
-    ygridvisible=false,
-    xgridvisible=false,
-    xticklabelsvisible= false,
-    xticksvisible= false,
-    # xminorticksvisible=false
-    ylabelvisible=false,
+    axMC = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",title = L"spin model$$",aspect = 1,xticks = ticks,yticks = ticks,yminorticksvisible = true,xminorticksvisible = true,
+    xlabelpadding = -10,
+    ylabelvisible = false,yticklabelsvisible=false,
     )
+    axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",title = L"U(1) theory$$",aspect = 1,
+    xticks = ticks,yticks = ticks,yminorticksvisible = true,xminorticksvisible = true,
+    xlabelpadding = -10,
+    )
+    
+    axpath1 = Axis(fig[2,1:3],xlabel = L"[hh]",ylabel = L"\mathcal{S}(\mathbf{q})",yticks = SimpleTicks(),xticks = PiTicks(),yminorticksvisible = true,xminorticksvisible = true,xminorgridvisible =true,yminorgridvisible=true,yaxisposition=:left,
 
+    )
+    # axpath2 = Axis(fig[2,1:3],
+    # yaxisposition=:right,yticklabelcolor=:red,
+    # yticks = SimpleTicks(),
+    # xlabelvisible = false,
+    # ygridvisible=false,
+    # xgridvisible=false,
+    # xticklabelsvisible= false,
+    # xticksvisible= false,
+    # # xminorticksvisible=false
+    # ylabelvisible=false,
+    # )
     hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
     SqFT = [SqFieldTheory(x,y) for x in kx, y in ky]
 
-    hmFT = heatmap!(axFT,kx,ky,SqFT ./maximum(SqFT),colormap = :viridis)
+    hmFT = heatmap!(axFT,kx,ky,SqFT ,colorrange = extrema(Sq),colormap = :viridis)
     # hmerr = heatmap!(axerr,kx,ky,err,colormap = :viridis,colorrange = extrema(Sq))
     path(t,angle) = t .*(cos(angle),sin(angle)) #.+ (pi,pi)
     
     
-    colors = (:black, :red)
-    for (color,angle,axpath) in zip(colors, (pi/3,0.6pi),(axpath1,axpath2))
-        
-        tRange = LinRange(0.,0.5pi,500)
-        p1 = [path(t,angle) for t in tRange]
-        xygrid = [(x+0.5pi,y+0.5pi) for x in kx, y in ky]
-        tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
-        tRange² = (tRange).^2
-        # filter!(x -> x[1] in kx && x[2] in ky,p1)
-        lines!(axFT,Point.(xygrid[p1_discrete]);color,linewidth = 2)
-        lines!(axMC,Point.(xygrid[p1_discrete]);color,linewidth = 2)
-        Sqp_all = [S[p1_discrete] for S in real(SqsGFMC)]
-        for S in Sqp_all
-            S ./= maximum(S)
-        end
-        
-        Sqp = mean(Sqp_all)
-        @info "" first(p1_discrete) first(Sqp)
-        
-        # Sqp ./= maximum(Sq)
-        # SqFT_coarse = SW.getSqCont(SqFT)
-        Sqerr = sqrt.(var(Sqp_all))
-        # SqFTp = SqFieldTheory.(p1)
-        # SqFTp = SqFT[p1_discrete]
-        SqFTp = SqFieldTheory.(xygrid[p1_discrete])
-        SqFTp ./= maximum(SqFTp)
+    tRange = LinRange(0,.8pi,500)
+    # angle = deg2rad(45)
+    angle = pi/4
+    p1 = [path(t,angle) for t in tRange]
+    xygrid = [(x+0.5pi,y+0.5pi) for x in kx, y in ky]
+    tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
+    tRange² = (tRange) #.^2
+    # filter!(x -> x[1] in kx && x[2] in ky,p1)
+    lines!(axFT,Point.(xygrid[p1_discrete]);color=:red,linewidth = 2,linestyle = :dash)
+    lines!(axMC,Point.(xygrid[p1_discrete]);color=:black,linewidth = 2)
+    colors = (:black,:lightblue,:darkblue)
+    for (color,p) in zip(colors,(750,500))
+        SqsGFMC = eachslice(res["SqsGFMC"][string(p)],dims=3)./4
 
-        lines!(axpath,tRange²,SqFTp;color,linwidth = 1,linestyle = :dash)
-        scatter!(axpath,tRange²,Sqp;color,markersize = 8)
-        errorbars!(axpath,tRange²,Sqp,Sqerr;color,whiskerwidth = 8)
-        xlims!(axpath,-0.1,0.85pi)
+        Sqp_all = [S[p1_discrete] for S in real(SqsGFMC)]
+    
+        Sqp = mean(Sqp_all)
+        Sqerr = sqrt.(var(Sqp_all))
+
+        scatter!(axpath1,tRange²,Sqp;color,markersize = 8,label = "p = $p")
+        errorbars!(axpath1,tRange²,Sqp,Sqerr;color,whiskerwidth = 8)
+        # xlims!(axpath1,-0.1,0.85pi)
     end
-    Colorbar(fig[1,3],hmMC,label = L"\mathcal{S}^{zz}(\textbf{q})",height = Relative(1),ticks = SimpleTicks())
-    rowgap!(fig.layout,1,Relative(-0.))
-    rowsize!(fig.layout,2,Relative(0.45))
-    # save("Application/exactFig/Spin1/Sq_L40.pdf",fig)
+    axislegend(axpath1,merge=true,position=:rb)
+    SqFTp = SqFieldTheory.(xygrid[p1_discrete])
+
+    lines!(axpath1,tRange²,SqFTp;color=:red,linewidth = 2,linestyle = :dash)
+    
+    Colorbar(fig[1,3],hmMC,label = L"\mathcal{S}(\textbf{q})",height = Relative(1),ticks = SimpleTicks())
+    Label(fig[1,1, TopLeft()],L"a)$$",padding =(-45,0,0,0))
+    Label(fig[1,2, TopLeft()],L"b)$$",padding =(-20,0,0,0))
+    Label(fig[2,1, TopLeft()],L"c)$$",padding =(-45,10,10,0))
+    # rowgap!(fig.layout,1,Relative(-0.))
+    rowgap!(fig.layout,1,Relative(-0.1))
+    rowsize!(fig.layout,2,Relative(0.5))
+
+    save("../exactFig/Spin1/Sq_L40_comp.pdf",fig)
     fig
 end
+
 ##
+
+
+with_theme(theme_PiTicks()) do 
+    # Sq = sqrt.(var(real(SqsGFMC))) ./4
+    kx = ky = 2pi .* LinRange(0,1,500) .- 0.5pi
+    
+    fig = Figure(fontsize = 20,size = (450,400))
+    
+    ticks = PiTicks([0,pi,])
+    axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",title = L"U(1) theory$$",aspect = 1,xticks = ticks,yticks = ticks)
+
+    SqFT = [SqFieldTheory2(x,y,5,1) for x in kx, y in ky]
+    hmFT = heatmap!(axFT,kx,ky,SqFT ./maximum(SqFT),colormap = :viridis)
+    
+    Colorbar(fig[1,2],hmFT,label = L"\mathcal{S}(\textbf{q})",height = Relative(0.95),vertical=true,ticks = SimpleTicks(),flipaxis=true)
+    # save("../Application/exactFig/Sq_fieldTheory.png",fig)
+    fig
+end
+
+##
+function omegaFT(x,y)
+    a = (cos(x) - cos(y))^2 + (2sin(x)sin(y))^2
+    return sqrt(a)
+end
+omegaFT(k) = omegaFT(k[1],k[2])
+
+
+with_theme(theme_PiTicks()) do 
+    # Sq = sqrt.(var(real(SqsGFMC))) ./4
+    kx = ky = 2pi .* LinRange(0,1,500) .- 0.5pi
+    
+    fig = Figure(fontsize = 20,size = (450,400))
+    
+    ticks = PiTicks([0,pi,])
+    axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",title = L"U(1) theory$$",aspect = 1,xticks = ticks,yticks = ticks)
+
+    SqFT = [omegaFT(x,y) for x in kx, y in ky]
+    hmFT = heatmap!(axFT,kx,ky,SqFT ./maximum(SqFT),colormap = :viridis)
+    
+    Colorbar(fig[1,2],hmFT,label = L"\omega(\textbf{q})",height = Relative(0.95),vertical=true,ticks = SimpleTicks(),flipaxis=true)
+    save("Application/exactFig/omegaq_fieldTheory.png",fig)
+    fig
+end

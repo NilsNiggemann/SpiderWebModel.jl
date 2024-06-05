@@ -33,15 +33,13 @@ cd(@__DIR__)
 
 i_arg = parse(Int, ARGS[1])
 L = 40
-nBra = 12
-NSteps = 700_000
-equilibration_steps = 260_000
-NWalkers = 48*20
-w_avg_estimate = L^2/4 #estimated average weight for each iteration, to reduce floating point errors
-α = 0.15
+nBra = 8
+NSteps = 120_000
+equilibration_steps = 50_000
+NWalkers = 48*100
+w_avg_estimate = 9*L #estimated average weight for each iteration, to reduce floating point errors
 λ = 1
-
-outfile = "/p/scratch/pmfrg/niggemann1/Spiderweb/Data2/Spin1GFMC_L=$(L)_nBra=$(nBra)_NSteps=$(NSteps)_NW=$(NWalkers)_alpha=$(α)_Lam=$(λ)_$(i_arg).h5"
+outfile = "/p/scratch/pmfrg/niggemann1/Spiderweb/Data3/Spin1GFMC_L=$(L)_nBra=$(nBra)_NSteps=$(NSteps)_NW=$(NWalkers)_Lam=$(λ)_$(i_arg).h5"
 mkpath(dirname(outfile))
 @assert !isfile(outfile) "file already exists!"
 
@@ -52,9 +50,13 @@ import SpiderWebModel as SW
 using HDF5
 #___________Spin-1_______________________
 ##
-parentState = SW.stencilConfig(zeros(L,L),1;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
 
-ψG = SW.PlaquetteNumberGuidingFunction(α)
+parentState = SW.stencilConfig(zeros(L,L),1;
+# boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+)
+
+gfuncparams = h5read("/p/scratch/pmfrg/niggemann1/Spiderweb/DataStochRec_open/StochRec_L=40_nBra=8_NW=4800_Lam=1.h5","2/params")
+ψG = SW.LocalPlaquetteGuidingFunction(gfuncparams)
 ##
 @info "starting run"  
-@time results = SW.startManyWalkerGFMC(parentState,NWalkers,NSteps,nBra,ψG,λ;outfile,equilibration_steps,w_avg_estimate)
+@time results = SW.startManyWalkerGFMC(parentState,NWalkers,NSteps,nBra,ψG,λ;outfile,equilibration_steps,w_avg_estimate,pre_equilibration_steps=60*equilibration_steps)

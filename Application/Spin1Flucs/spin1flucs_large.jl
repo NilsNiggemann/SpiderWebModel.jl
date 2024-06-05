@@ -41,9 +41,9 @@ using HDF5
 # equilibration_steps = 0
 # samplingRate=1e-3
 ##
-L = 120
-equilibration_steps = 50_000_000
-samplingRate=1e-8
+L = 80
+equilibration_steps = 600_000_000
+samplingRate=1e-9
 ##
 outfile = "/p/scratch/pmfrg/niggemann1/Spiderweb/DataRK/Spin1RK_L=$(L)_equilibration_steps=$(equilibration_steps)_samplingRate=$(samplingRate)_$(i_arg).h5"
 mkpath(dirname(outfile))
@@ -51,12 +51,10 @@ mkpath(dirname(outfile))
 ##
 S = SW.stencilConfig(zeros(L,L),1,;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
 ##
-@time confs = SW.getRandConfs(S, 150,Threads.nthreads(); equilibration_steps,samplingRate)
+@time confs = SW.getRandConfs(S, 100,Threads.nthreads(); equilibration_steps,samplingRate)
 confArr = reshape(confs,L,L,size(confs,3)*size(confs,4))
 ##
-wArr = weights[:]
 h5write(outfile,"confs",confArr)
-h5write(outfile,"weights",wArr)
 h5write(outfile,"equilibration_steps",equilibration_steps)
 h5write(outfile,"samplingRate",samplingRate)
 
