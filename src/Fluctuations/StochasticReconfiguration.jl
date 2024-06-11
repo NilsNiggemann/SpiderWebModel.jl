@@ -188,7 +188,7 @@ function stochastic_reconfiguration(InitialState,nSteps,ψG,n,dt=1e-3;equilibrat
         add_reconstructedFullParams!(ψG,indicesMapping,δα .*dt)
         E0s[i] = mean(res.energies)
         ΔE[i] = sqrt(var(res.energies))
-        ParamsSlice[:] .= ψG.params
+        ParamsSlice .= ψG.params
         α = get_alpha_i(ψG) 
         @info "optimization step $i" "|δα|" = normDelta E0 = mean(res.energies) ΔE0 = sqrt(var(res.energies)) convergedSteps mean(α) δα[1]
 

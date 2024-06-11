@@ -46,6 +46,7 @@ include("Observables/Observables.jl")
 include("explicitStates/PeriodicStates.jl")
 
 include("IO/saveHilbertSpace.jl")
+include("IO/readGFMCResults.jl")
 
 const GRB_ENV_REF = Ref{Gurobi.Env}()
 

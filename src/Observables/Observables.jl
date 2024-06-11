@@ -168,3 +168,41 @@ function getBij_square(AllStates,plaqMapping,ψ0::AbstractVector,I,J)
     end
     return res
 end
+
+@views function getSqGFMC(res,p)
+    Gnp = precomputeNormalizedAccWeight(res.TotalWeights,1,p)    # Gnp = ones(length(res.TotalWeights[nThermal:end]),p)
+
+    Conf = res.SaveConfigs[:,:,begin,begin]
+    NSites = length(Conf)
+    Sq = similar(Conf, ComplexF64)
+    
+    Si = similar(Conf, ComplexF64)
+    plan = LatticeFFTs.FFTW.plan_fft(Conf)
+
+    function SqFunc(Conf)
+        Si .= Conf
+        mul!(Sq, plan, Si)
+        Sq .= abs2.(Sq)
+    end
+    SaveConfs = res.SaveConfigs
+    reconfTable = res.reconfTable
+    res = getObs(Gnp,SaveConfs,reconfTable,SqFunc,p÷2)
+    newRes = similar(res,size(res).+1)
+    newRes[begin:end-1,begin:end-1] .= res
+
+    @views newRes[end,begin:end] .= newRes[begin,:]
+    @views newRes[begin:end,end] .= newRes[:,begin]
+    newRes ./NSites
+    # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
+end
+
+function getSqsGFMC(Results,p)
+    Sqs = Vector{Matrix{Float64}}(undef,length(Results))
+    Threads.@threads for i in eachindex(Results,Sqs)
+        res = Results[i]
+        nBra = res.nBra
+        Sq = getSqGFMC(res,p÷nBra)
+        Sqs[i] = Sq
+    end
+    return Sqs
+end

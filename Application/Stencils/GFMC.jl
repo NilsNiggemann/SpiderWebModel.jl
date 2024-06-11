@@ -315,14 +315,17 @@ SW.Random.seed!(1234)
 S = SW.stencilConfig(zeros(16,16),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
-nBra = 10
-nThermal = 3_000
-ψG = SW.PlaquetteNumberGuidingFunction(0.15)
+nBra = 6
+nThermal = 10_000
 ##
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,24,200_000÷nBra,nBra,ψG,20;equilibration_steps=nThermal) for _ in 1:6])
+ψGstart = SW.fullVariationalFunction(S,0.15)
+reconfRes = SW.stochastic_reconfiguration(S,10_000,ψGstart,3,1e-2;Nwalkers = 60,nbra = 3,equilibration_steps = nThermal)
+ψG = SW.FullVariationalGuidingFunction(reconfRes.params)
+##
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,80,10_000,nBra,ψG,1;equilibration_steps=nThermal) for _ in 1:24])
 
 ##
-plotEnergies(results,nBra)
+plotEnergies(results,nBra,p = 500)
 
 ##
 # SqsGFMC = fetch.([Threads.@spawn (
@@ -364,7 +367,7 @@ with_theme(theme_PiTicks()) do
     fig
 end
 ##
-projection_orders = [500,10nBra]
+projection_orders = [800,10nBra]
 SqsGFMC_p = [ fetch.([Threads.@spawn getSq(res,p÷nBra) for res in results]) for p in projection_orders]
 ##
 # with_theme(merge(theme_PiTicks(),theme_dark())) do 
@@ -374,10 +377,10 @@ with_theme(theme_PiTicks()) do
     kx = 2pi .* LinRange(0,1,size(S,1).+1)
 
     for (p,Sqs) in zip(projection_orders,SqsGFMC_p)
-        Sq = mean(real(Sqs))[1,:] ./4
-        Sqerr = sqrt.(var(real(Sqs)))[1,:] ./4
-        Sq ./= maximum(Sq)
-        Sqerr ./= maximum(Sq)
+        Sq = mean(Sqs)[1,:] #./4
+        Sqerr = sqrt.(var(Sqs))[1,:] #./4
+        Sq ./= maximum(mean(Sqs))
+        Sqerr ./= maximum(mean(Sqs))
         lines!(ax,kx,Sq,
         # color = p,colorrange = extrema(projection_orders),colormap = :viridis,linewidth = 3,
         label = L"$p=%$(p)$"
@@ -390,7 +393,8 @@ with_theme(theme_PiTicks()) do
 
     kx = 2pi .* LinRange(0,1,300)
     SqFT = SqFieldTheory.(kx,0)
-    SqFT ./= maximum(SqFT)
+    SqFTFull = [SqFieldTheory(x,y) for x in kx, y in kx]
+    SqFT ./= maximum(SqFTFull)
     lines!(ax,kx,SqFT,color = :black,linewidth = 2,linestyle = :dash,label = L"U(1)$$")
     axislegend(ax,merge=true)
     fig
