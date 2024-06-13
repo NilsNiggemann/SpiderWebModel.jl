@@ -161,7 +161,7 @@ function stochastic_reconfiguration_step(InitialState,configs,ψG,Λ,inequivalen
 end
 
 
-function stochastic_reconfiguration(InitialState,nSteps,ψG,n,dt=1e-3;equilibration_steps=1000,Λ=1,rel_tolerance=1e-2,Nwalkers = 6,nbra =10,outfile=nothing)
+function stochastic_reconfiguration(InitialState,NSteps,ψG,n,dt=1e-3;equilibration_steps=1000,Λ=1,rel_tolerance=1e-2,Nwalkers = 6,NBra =10,outfile=nothing,pre_equilibration_steps=5*equilibration_steps)
     
     ψG = deepcopy(ψG)
     params = ψG.params
@@ -175,9 +175,12 @@ function stochastic_reconfiguration(InitialState,nSteps,ψG,n,dt=1e-3;equilibrat
 
     _,indicesMapping,uniqueInds = getDistReduction(InitialState,ψG)
 
+    prob = setup_GFMC_problem(InitialState,Nwalkers,NBra,NSteps,Λ,ψG) 
+    initializeGFMC!(prob,equilibration_steps,pre_equilibration_steps)
+
     for (i,ParamsSlice) in enumerate(params_steps)
         
-        @time res = startManyWalkerGFMC(InitialState,Nwalkers,nSteps,nbra,ψG,Λ;equilibration_steps,pre_equilibration_steps=5equilibration_steps)
+        @time res = runGFMC!(prob)
 
         confs = eachslice(res.SaveConfigs,dims=(3,4))
 

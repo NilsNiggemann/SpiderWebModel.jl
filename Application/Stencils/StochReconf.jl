@@ -23,10 +23,11 @@ function plotVarEn(stochReconfRes)
     ax2 = Axis(fig[2,1], xlabel = "Iteration", ylabel = "α")
 
     x = eachindex(stochReconfRes.E0_i)
-    errorbars!(ax,x,stochReconfRes.E0_i,stochReconfRes.ΔE_i,linestyle = :solid,whiskerwidth=5)
+    errorbars!(ax,x,stochReconfRes.E0_i,stochReconfRes.ΔE_i,whiskerwidth=5)
     lines!(ax,x,stochReconfRes.E0_i)
 
-    # lines!(ax2,x,stochReconfRes.α_i)
+    lines!(ax2,x,SW.mean(stochReconfRes.params_steps,dims=1)[1,1,:])
+    # lines!(ax2,x,SW.mean(stochReconfRes.params_steps,dims=1)[1,end,:])
     fig
 end
 plotVarEn(stochReconfRes)
