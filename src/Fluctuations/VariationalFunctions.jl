@@ -84,10 +84,10 @@ end
 
 guidingfuncRatio_exponent(ψG::AbstractGuidingFunction,n::AbstractArray,n´::AbstractArray) = guidingfuncRatio_exponent(ψG,n,n´,eachindex(n,n´))
 
-function getWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc::AbstractGuidingFunction,Λ)
-    (;Config,moves,weights) = Walker
+function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc::AbstractGuidingFunction,Λ)
+    (;Config,weights) = Walker
     empty!(weights)
-
+    moves = getMoves!(Walker)
     n_x = getNPlaq!(Walker)
     
     for operator in moves

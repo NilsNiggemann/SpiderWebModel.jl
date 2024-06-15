@@ -215,10 +215,11 @@ end
 
 const DIAGONAL_MOVE_ID = (0,0,0)
 
-function getWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::T,Λ=0) where T
-    (;Config,moves,weights,n_x,n_x´) = Walker
-    empty!(weights)
-
+function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::T,Λ=0) where T
+    (;Config,weights,moves,n_x,n_x´) = Walker
+    isempty(weights) && isempty(moves) || return weights #return if weights are already computed
+    
+    getMoves!(Walker)
     getNPlaq!(Walker)
     
     for operator in moves
@@ -241,22 +242,16 @@ function getWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::T,Λ=
     return weights
 end
 
-function performMarkovStep!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::T,Λ=0) where T
-    moves = getMoves!(Walker)
-    for (i,j,opNum) in moves
-        @assert i != 0 && j != 0 "err"
-    end
-    weights = getWeightList!(Walker,AffectedPlaquetteList,ψG,Λ)
-
-    if isempty(weights)
-        @info "No moves available" 
-    end
+function performMarkovStep!(Walker::SpiderWebWalker)
+    (;moves,weights) = Walker
     moveidx = StatsBase.sample(StatsBase.Weights(weights))
     move = Walker.moves[moveidx]
     if move != DIAGONAL_MOVE_ID
         applyPlaquette!(Walker.Config, move[1], move[2], move[3]) 
     end
-    return move,weights
+    empty!(weights)
+    empty!(moves)
+    return move
 end
 
 function getLocalEnergy(weights,Λ=0)
@@ -498,7 +493,7 @@ function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0, pre_eq
     if pre_equilibration_steps > 0 # pre_equilibration_steps do not use have any reconfigurations or guiding wavefunctions. The idea is to initialize the walkers with fully uncorrelated configurations at the beginning so that the Hilbert space can be explored more efficiently.
         random_init_walkers!(Walkers,pre_equilibration_steps)
     end
-    
+    #fill buffers for available steps and weights
     for _ in 1:equilibration_steps
         propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method)
         reconfigurationList = @view reconfigurationTable[:,1]
@@ -526,6 +521,7 @@ end
 function runGFMC!(prob::AbstractGFMCProblem)
     (;Walkers,weights,TotalWeights,AffectedPlaquetteList,reconfiguration_buffer,reconfigurationTable,Observables,ψG,method) = prob
     (;energies,SaveConfigs,outfile) = Observables
+    
     for i in eachindex(energies,TotalWeights)
         # for (α,Config) in enumerate(Walkers)
         propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method)
@@ -550,13 +546,13 @@ function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::Dis
         Walker = Walkers[α]
         w = 1.
         for step in 1:nBranch
-            move,weightList = performMarkovStep!(Walker,AffectedPlaquetteList,ψG,Λ)
+            weightList = updateWeightList!(Walker,AffectedPlaquetteList,ψG,Λ)
             bx = sum(weightList)*w_avg_estimate⁻¹
             w *= bx
+            performMarkovStep!(Walker)
         end
         weights[α] = w
-        getMoves!(Walker)
-        getWeightList!(Walker,AffectedPlaquetteList,ψG,Λ)
+        updateWeightList!(Walker,AffectedPlaquetteList,ψG,Λ)
     end
 end
 
@@ -567,16 +563,12 @@ function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::Con
         Walker = Walkers[α]
         log_w = 0.
         τTot = 0.
-
-        moves = getMoves!(Walker)
-        weights_α = getWeightList!(Walker,AffectedPlaquetteList,ψG)
-        
+        weightList = updateWeightList!(Walker,AffectedPlaquetteList,ψG)
         H_xx = Hxx(Walker.Config)
-        el_x = H_xx + getLocalEnergy(weights_α)
+        el_x = H_xx + getLocalEnergy(weightList)
         if el_x >= 0
             error("el_x >= 0")
         end
-
         while τTot < τBranch
             βleft = τ
             while βleft > 0
@@ -586,10 +578,10 @@ function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::Con
                 βleft -= dτ
                 log_w += -dτ*el_x
                 if βleft > 0 
-                    move,weightList = performMarkovStep!(Walker,AffectedPlaquetteList,ψG)
+                    performMarkovStep!(Walker)
+                    updateWeightList!(Walker,AffectedPlaquetteList,ψG)
+
                     H_xx = Hxx(Walker.Config)
-                    getMoves!(Walker)
-                    getWeightList!(Walker,AffectedPlaquetteList,ψG)            
                     el_x = H_xx + getLocalEnergy(weightList)
                 end
             end
@@ -597,11 +589,6 @@ function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::Con
         end
         w = exp(log_w - τBranch*w_avg_estimate)
         weights[α] = w
-        # getMoves!(Walker)
-        # getWeightList!(Walker,AffectedPlaquetteList,ψG)
-        
-        # H_xx = Hxx(Walker.Config)
-        # push!(weights_α,H_xx)
     end
 end
 
@@ -620,6 +607,8 @@ function reconfiguration!(Walkers::AbstractVector{<:AbstractWalker},reconfigurat
         zα = (α + ξα - 1)/Nw
         α´ = searchsortedfirst(reconfiguration_buffer,zα)
         reconfigurationList[α] = α´
+        empty!(Walkers[α].weights)
+        empty!(Walkers[α].moves)
     end
     minimizeReconfiguration!(reconfigurationList)
     for (α,α´) in enumerate(reconfigurationList)

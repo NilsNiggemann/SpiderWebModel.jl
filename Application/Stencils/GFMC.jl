@@ -6,7 +6,7 @@ using Statistics
 using MakieHelpers
 using SpiderWebModel
 ##
-S = SW.stencilConfig(parent(SW.getStairCase(10)),1/2)
+S = SW.stencilConfig(parent(SW.getStairCase(14)),1/2)
 # S = SW.stencilConfig(SW.constructConfigPath(15,15,SW.ALLGS_S12),1/2)
 HStair = SW.generateHilbertSpace(SW.SpinConfig(S))
 ##
@@ -74,7 +74,7 @@ magEx = SW.getMagnetization(HConfs, v0)
 # @time SqEx = SW.getStructureFac(HConfs,SW.normalize!(ones(length(v0))))
 #___________ManyWalkers_______________________
 ##
-S = SW.stencilConfig(parent(SW.getStairCase(10)),1/2)
+S = SW.stencilConfig(parent(SW.getStairCase(14)),1/2)
 # ψG = SW.PlaquetteNumberGuidingFunction(0.197)
 ψG = SW.PlaquetteNumberGuidingFunction(0.197)
 # ψG = SW.fullVariationalFunction(S,0.197)
@@ -84,21 +84,21 @@ nThermal = 5000
 nBra = 1
 ##
 SW.Random.seed!(1234)
-DT = SW.DiscreteTimeMethod(1.,4,10.)
-@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,8000,ψG,equilibration_steps=nThermal) for i in 1:12])
+DT = SW.DiscreteTimeMethod(1.,3,1.)
+@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,1000,ψG,equilibration_steps=nThermal) for i in 1:12])
 ##
 SW.Random.seed!(1234)
-CT = SW.ContinuousTimeMethod(0.1,4*0.1,8.353966711014905,SW.Hxx_zero())
+CT = SW.ContinuousTimeMethod(0.05,3*0.05,8.353966711014905,SW.Hxx_zero())
 
-@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,20,8000,ψG,equilibration_steps=nThermal) for i in 1:12])
+@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,20,1000,ψG,equilibration_steps=nThermal) for i in 1:12])
 # @time SW.startManyWalkerGFMC(S,2,3000,nBra,ψG,1;method = SW.ContinuousTimeMethod(),equilibration_steps=nThermal) 
 
 ##
 # plotEnergies(resultsCT,nBra,E0,p=200,Emin = 1.05*E0,Emax = 0.9*E0)
 # plotEnergies(resultsCT,1)
 
-plotEnergies(resultsCT,round(Int,CT.τBranch/CT.τ),E0,Emin=NaN,Emax=NaN,p=500,label = L"Continuous time$$")
-plotEnergies!(resultsDT,DT.nBranch,color =:blue,E0,Emin=NaN,Emax=NaN,p=500)
+plotEnergies(resultsCT,round(Int,CT.τBranch/CT.τ),E0,Emin=NaN,Emax=NaN,p=250,label = L"Continuous time$$")
+plotEnergies!(resultsDT,DT.nBranch,color =:blue,E0,Emin=NaN,Emax=NaN,p=250)
 current_figure()
 
 ##

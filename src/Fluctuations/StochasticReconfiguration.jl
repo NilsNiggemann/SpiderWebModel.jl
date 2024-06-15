@@ -113,7 +113,7 @@ function reconf_obs(InitialState::ConfType,configs,ψG,Λ,inequivParams=eachinde
         for (i,iconf) in enumerate(chunkinds)
             get_config(Walker) .= configs[iconf]
             moves = getMoves!(Walker)
-            weights = getWeightList!(Walker,AffectedPlaquetteList,ψG,Λ)
+            weights = updateWeightList!(Walker,AffectedPlaquetteList,ψG,Λ)
             elocal = getLocalEnergy(weights,Λ)
             @inbounds for (ik,k) in enumerate(inequivParams)
                 O_xk = getOx_k(ψG,Walker.n_x,k)
