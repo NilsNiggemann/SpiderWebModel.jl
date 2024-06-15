@@ -43,8 +43,17 @@ struct ContinuousTimeMethod{F2} <: AbstractGFMCMethod
 end
 ContinuousTimeMethod(;τ,τBranch,w_avg_estimate=1.,Hxx) = ContinuousTimeMethod(τ,τBranch,w_avg_estimate,Hxx)
 
-struct Hxx_zero end
-(Hxx::Hxx_zero)(x::AbstractArray) = 0.
+abstract type AbstractDiagonalOperator end
+(Hxx::AbstractDiagonalOperator)(x::SpiderWebWalker) = Hxx(get_config(x))
+
+struct Hxx_zero <: AbstractDiagonalOperator end
+(Hxx::Hxx_zero)(x::StencilSpinConfig) = 0.
+
+struct Hxx_RK <: AbstractDiagonalOperator
+    μ::Float64
+end
+(Hxx::Hxx_RK)(Walker::SpiderWebWalker) = Hxx.μ * length(Walker.moves)
+
 
 abstract type AbstractGFMCProblem end
 struct SpiderwebGFMCProblem{MethodType<:AbstractGFMCMethod,T<:AbstractFloat,C,F,W,O} <: AbstractGFMCProblem
@@ -73,8 +82,6 @@ function _setup_GFMC_problem(InitialState::StencilSpinConfig,method::AbstractGFM
     (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationTable) = setup
     ObsSetup = setupObservables(InitialState,Nwalkers,NSteps,outfile)
     (;energies,SaveConfigs) = ObsSetup
-
-    # G = construct_propagator(InitialState,method,Λ,H_xx,nBranch,ψG,w_avg_estimate)
 
     Observables = GFMCObservables(energies,SaveConfigs,outfile)
     return SpiderwebGFMCProblem(method,InitialState,ψG,Walkers,weights,TotalWeights,AffectedPlaquetteList,reconfiguration_buffer,reconfigurationTable,Observables)
@@ -564,11 +571,11 @@ function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::Con
         log_w = 0.
         τTot = 0.
         weightList = updateWeightList!(Walker,AffectedPlaquetteList,ψG)
-        H_xx = Hxx(Walker.Config)
+        H_xx = Hxx(Walker)
         el_x = H_xx + getLocalEnergy(weightList)
-        if el_x >= 0
-            error("el_x >= 0")
-        end
+        # if el_x >= 0
+        #     error("el_x >= 0")
+        # end
         while τTot < τBranch
             βleft = τ
             while βleft > 0
@@ -581,7 +588,7 @@ function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::Con
                     performMarkovStep!(Walker)
                     updateWeightList!(Walker,AffectedPlaquetteList,ψG)
 
-                    H_xx = Hxx(Walker.Config)
+                    H_xx = Hxx(Walker)
                     el_x = H_xx + getLocalEnergy(weightList)
                 end
             end
@@ -640,7 +647,7 @@ function getLocalEnergyWalkers_before(weights,Walkers::AbstractVector{<:Abstract
     Hxx = method.Hxx
     for α in eachindex(weights,Walkers)
         bx = sum(get_weights(Walkers[α]))
-        eloc = - bx + Hxx(get_config(Walkers[α]))
+        eloc = - bx + Hxx(Walkers[α])
         num += weights[α]*eloc
         denom += weights[α]
     end
