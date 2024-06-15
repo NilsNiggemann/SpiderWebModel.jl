@@ -6,19 +6,19 @@ using Statistics
 using MakieHelpers
 using SpiderWebModel
 ##
-S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
+S = SW.stencilConfig(parent(SW.getStairCase(10)),1/2)
 # S = SW.stencilConfig(SW.constructConfigPath(15,15,SW.ALLGS_S12),1/2)
 HStair = SW.generateHilbertSpace(SW.SpinConfig(S))
-HTest = Array(HStair.H)
-ExSol = SW.SolveHKrylov(HTest)
+##
+# HTest = Array(HStair.H)
+ExSol = SW.SolveHKrylov(HStair.H)
 E0 = ExSol.values[1]
 
 getRKWavefunction(ψ) = SW.normalize!(one.(ψ))
 
 v0 = ExSol.vectors[1]
 # v0 = getRKWavefunction(ExSol.vectors[1])
-HConfs = SW.spinConfig.(HStair.AllStates,Ref(SW.
-SpinConfig(S)),Ref(HStair.plaqMapping))
+# HConfs = SW.spinConfig.(HStair.AllStates,Ref(SW.SpinConfig(S)),Ref(HStair.plaqMapping))
 ##
 function constructExactGuidingFunc(v0,AllStates)
     AllSTDict = Dict(SW.stencilConfig(parent(s),1/2)=>i for (i,s) in enumerate(AllStates))
@@ -52,8 +52,8 @@ function plotEnergies(results,nBra,E0=NaN;kwargs...)
     end
 end
 
-function plotEnergies!(ax::Makie.Axis,results,nBra,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,kwargs...)
-    ens = [SW.getEnergies(res.TotalWeights,res.energies,1,p÷nBra) for res in results]
+function plotEnergies!(ax::Makie.Axis,results,nBra,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,nThermal=1,kwargs...)
+    ens = [SW.getEnergies(res.TotalWeights,res.energies,nThermal,p÷nBra) for res in results]
 
     en = mean(ens)
     err = sqrt.(var(ens))
@@ -74,26 +74,95 @@ magEx = SW.getMagnetization(HConfs, v0)
 # @time SqEx = SW.getStructureFac(HConfs,SW.normalize!(ones(length(v0))))
 #___________ManyWalkers_______________________
 ##
-S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
+S = SW.stencilConfig(parent(SW.getStairCase(10)),1/2)
 # ψG = SW.PlaquetteNumberGuidingFunction(0.197)
-# ψG = SW.PlaquetteNumberGuidingFunction(0.197)
-ψG = SW.fullVariationalFunction(S,0.197)
+ψG = SW.PlaquetteNumberGuidingFunction(0.197)
+# ψG = SW.fullVariationalFunction(S,0.197)
 
-nThermal = 5_000
+nThermal = 5000
 # results = [SW.startManyWalkerGFMC(S,2,55_000,3,nThermal,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:35]
-nBra = 3
+nBra = 1
 ##
 SW.Random.seed!(1234)
+DT = SW.DiscreteTimeMethod(1.,4,10.)
+@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,8000,ψG,equilibration_steps=nThermal) for i in 1:12])
+##
+SW.Random.seed!(1234)
+CT = SW.ContinuousTimeMethod(0.1,4*0.1,8.353966711014905,SW.Hxx_zero())
+
+@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,20,8000,ψG,equilibration_steps=nThermal) for i in 1:12])
+# @time SW.startManyWalkerGFMC(S,2,3000,nBra,ψG,1;method = SW.ContinuousTimeMethod(),equilibration_steps=nThermal) 
+
+##
+# plotEnergies(resultsCT,nBra,E0,p=200,Emin = 1.05*E0,Emax = 0.9*E0)
+# plotEnergies(resultsCT,1)
+
+plotEnergies(resultsCT,round(Int,CT.τBranch/CT.τ),E0,Emin=NaN,Emax=NaN,p=500,label = L"Continuous time$$")
+plotEnergies!(resultsDT,DT.nBranch,color =:blue,E0,Emin=NaN,Emax=NaN,p=500)
+current_figure()
+
+##
+
+let 
+    Λ = 120.
+    p = round(Int,Λ)
+    Es = zeros(p)
+
+    ψ = SW.normalize!(ones(length(v0)))
+    ψpr = copy(ψ)
+    for i in 1:p
+        ψpr .= Λ.* ψ .- (HStair.H * ψ)
+        SW.normalize!(ψpr)
+        Es[i] = ψ' * HStair.H* ψpr/(ψ' * ψpr)
+        ψ .= ψpr
+    end
+
+    Es2 = zeros(p)
+    β = 1/Λ
+    expBetaH = exp(-β * Matrix(HStair.H))
+    ψ = SW.normalize!(ones(length(v0)))
+    ψpr = copy(ψ)
+    for i in 1:p
+        ψpr .= expBetaH * ψ 
+        SW.normalize!(ψpr)
+        Es2[i] = ψ' * HStair.H* ψpr/(ψ' * ψpr)
+        ψ .= ψpr
+    end
+
+    with_theme(theme_SimpleTicks()) do
+        fig = Figure(fontsize = 22)
+        ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
+        lines!(1:p,Es,label = L"discrete steps $\Lambda=%$Λ$",color = :black)
+        lines!(1:p,Es2,label = L"continuous time $\beta=p/\Lambda$",color = :blue)
+
+        hlines!([E0],color = :red,label = L"exact$$")
+        axislegend()
+        fig
+    end
+end
+##
 # outfile = "Data/temp/S12/"
 # rm(outfile;recursive=true,force=true)
 # mkpath(outfile)
 # @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,16,50000÷nBra,nBra,ψG,1;equilibration_steps=nThermal,outfile =string(outfile,i,".h5")) for i in 1:8])
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,6,20000÷nBra,nBra,ψG,1;equilibration_steps=nThermal) for i in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,1,100000,nBra,x->1,1;equilibration_steps=nThermal) for i in 1:42])
 # @time SW.startManyWalkerGFMC(S,16,nThermal+500_00÷nBra,nBra,ψG,1;outfile = string(outfile,1,".h5"))
 ##
+plotEnergies(results,nBra,E0,p=50,Emin = 1.02*E0,Emax = 0.93*E0)
+##
+@time results2 = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,1,100000,nBra,ψG,1;equilibration_steps=nThermal) for i in 1:42])
+##
+plotEnergies!(results2,nBra,E0,p=50,Emin = 1.02*E0,Emax = 0.93*E0,color = :blue)
+current_figure()
+##
+plotEnergies(results2,1,E0,p=200,Emin = 1.002*E0,Emax = 0.99*E0,color = :blue)
+##
+nBra = 3
+@time results3 = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,30,100000÷30÷nBra,nBra,ψG,1;equilibration_steps=nThermal) for i in 1:42])
+##
+plotEnergies!(results3,nBra,E0,p=200,Emin = 1.002*E0,Emax = 0.99*E0,color = :darkred)
+current_figure()
 
-plotEnergies(results,nBra,E0)
-# plotEnergies(results,nBra,E0)
 ##
 #___________Observables_______________________
 ##
@@ -315,22 +384,27 @@ SW.Random.seed!(1234)
 S = SW.stencilConfig(zeros(16,16),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
-nBra = 6
-nThermal = 10_000
+nBra = 3
+nThermal = 500
+ψG = SW.PlaquetteNumberGuidingFunction(0.12)
 ##
-ψGstart = SW.fullVariationalFunction(S,0.15)
-reconfRes = SW.stochastic_reconfiguration(S,10_000,ψGstart,3,1e-2;Nwalkers = 60,nbra = 3,equilibration_steps = nThermal)
+ψGstart = SW.fullVariationalFunction(S,0.09)
+reconfRes = SW.stochastic_reconfiguration(S,2000,ψGstart,10,1e-4;Nwalkers = 60,NBra=4,equilibration_steps = 3nThermal,pre_equilibration_steps = 0)
 ψG = SW.FullVariationalGuidingFunction(reconfRes.params)
 ##
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,80,10_000,nBra,ψG,1;equilibration_steps=nThermal) for _ in 1:24])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,10,10_000,nBra,ψG,1;equilibration_steps=3000,pre_equilibration_steps= 0) for _ in 1:12])
+##
+@time results2 = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,10,60_000,nBra,ψG,1;equilibration_steps=60_000,pre_equilibration_steps= 500) for _ in 1:6])
 
 ##
-plotEnergies(results,nBra,p = 500)
+plotEnergies(results,nBra,p = 200)
+plotEnergies!(results2,nBra,p = 200,color = :red)
+current_figure()
 
 ##
 # SqsGFMC = fetch.([Threads.@spawn (
 # getSq(res,150÷nBra,1,1) .+ getSq(res,150÷nBra,2,2) .+ getSq(res,150÷nBra,1,2) .+ getSq(res,150÷nBra,2,1)) for res in results])
-SqsGFMC = fetch.([Threads.@spawn getSq(res,350÷nBra) for res in results])
+SqsGFMC = fetch.([Threads.@spawn getSq(res,200÷nBra) for res in results2])
 ##
 function SqFieldTheory(x,y)
     num = cos(x) - cos(y) +2sin(x)sin(y) 
