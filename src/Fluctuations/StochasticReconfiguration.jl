@@ -93,7 +93,7 @@ function add_reconstructedFullParams!(ψG,indicesMapping,trimmedparams)
     return ψG
 end
 
-function reconf_obs(InitialState::ConfType,configs,ψG,Λ,inequivParams=eachindex(ψG.params)) where {ConfType}
+function reconf_obs(InitialState::ConfType,method::AbstractGFMCMethod,configs,ψG,inequivParams=eachindex(ψG.params)) where {ConfType}
     plaqs = collect(plaquetteIterator(InitialState))
     AffectedPlaquetteList = precomputeAffectedPlaquettes(InitialState)
     
@@ -112,9 +112,8 @@ function reconf_obs(InitialState::ConfType,configs,ψG,Λ,inequivParams=eachinde
 
         for (i,iconf) in enumerate(chunkinds)
             get_config(Walker) .= configs[iconf]
-            moves = getMoves!(Walker)
-            weights = updateWeightList!(Walker,AffectedPlaquetteList,ψG,Λ)
-            elocal = getLocalEnergy(weights,Λ)
+            updateWeightList!(Walker,AffectedPlaquetteList,ψG)
+            elocal = getLocalEnergy(Walker,method)
             @inbounds for (ik,k) in enumerate(inequivParams)
                 O_xk = getOx_k(ψG,Walker.n_x,k)
                 Ok_i[iconf,ik] = O_xk
@@ -145,8 +144,8 @@ function reconf_obs(InitialState::ConfType,configs,ψG,Λ,inequivParams=eachinde
     return (;EL_avg,EL_err,S,F,Ok_i)
 end
 
-function stochastic_reconfiguration_step(InitialState,configs,ψG,Λ,inequivalentIndices=eachindex(ψG.params))
-    (;EL_avg,EL_err,F,S) = reconf_obs(InitialState,configs,ψG,Λ,inequivalentIndices)
+function stochastic_reconfiguration_step(InitialState,method::AbstractGFMCMethod,configs,ψG,inequivalentIndices=eachindex(ψG.params))
+    (;EL_avg,EL_err,F,S) = reconf_obs(InitialState,method,configs,ψG,inequivalentIndices)
     @time SChol = cholesky!(Symmetric(S),check = false)
     if !issuccess(SChol)
         @warn "Cholesky factorization failed"
@@ -161,7 +160,7 @@ function stochastic_reconfiguration_step(InitialState,configs,ψG,Λ,inequivalen
 end
 
 
-function stochastic_reconfiguration(InitialState,NSteps,ψG,n,dt=1e-3;equilibration_steps=1000,Λ=1,rel_tolerance=1e-2,Nwalkers = 6,NBra =10,outfile=nothing,pre_equilibration_steps=5*equilibration_steps)
+function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSteps,ψG,n,dt=1e-3;equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps)
     
     ψG = deepcopy(ψG)
     params = ψG.params
@@ -175,7 +174,7 @@ function stochastic_reconfiguration(InitialState,NSteps,ψG,n,dt=1e-3;equilibrat
 
     _,indicesMapping,uniqueInds = getDistReduction(InitialState,ψG)
 
-    prob = setup_GFMC_problem(InitialState,Nwalkers,NBra,NSteps,Λ,ψG) 
+    prob = setup_GFMC_problem(InitialState,method,Nwalkers,NSteps,ψG) 
     initializeGFMC!(prob,equilibration_steps,pre_equilibration_steps)
 
     for (i,ParamsSlice) in enumerate(params_steps)
@@ -184,7 +183,7 @@ function stochastic_reconfiguration(InitialState,NSteps,ψG,n,dt=1e-3;equilibrat
 
         confs = eachslice(res.SaveConfigs,dims=(3,4))
 
-        (;δα,EL_avg,EL_err) = stochastic_reconfiguration_step(InitialState,confs,ψG,Λ,uniqueInds)
+        (;δα,EL_avg,EL_err) = stochastic_reconfiguration_step(InitialState,method,confs,ψG,uniqueInds)
         
         normDelta = norm(δα)/norm(params)
 

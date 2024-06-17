@@ -55,6 +55,12 @@ end
 (Hxx::Hxx_RK)(Walker::SpiderWebWalker) = Hxx.μ * length(Walker.moves)
 
 
+struct Hxx_SIA <: AbstractDiagonalOperator
+    U::Float64
+end
+(Hxx::Hxx_SIA)(Walker::SpiderWebWalker) = Hxx.U * sum(abs2, get_config(Walker))
+
+
 abstract type AbstractGFMCProblem end
 struct SpiderwebGFMCProblem{MethodType<:AbstractGFMCMethod,T<:AbstractFloat,C,F,W,O} <: AbstractGFMCProblem
     method::MethodType
@@ -263,6 +269,14 @@ end
 
 function getLocalEnergy(weights,Λ=0)
     return -sum(weights) + Λ
+end
+
+function getLocalEnergy(Walker::SpiderWebWalker,method::DiscreteTimeMethod)
+    return -sum(Walker.weights) + method.Λ
+end
+
+function getLocalEnergy(Walker::SpiderWebWalker,method::ContinuousTimeMethod)
+    return -sum(Walker.weights) + method.Hxx(Walker)
 end
 
 function NPlaquettes(Conf)
@@ -625,29 +639,12 @@ function reconfiguration!(Walkers::AbstractVector{<:AbstractWalker},reconfigurat
     end
 end
 
-function getLocalEnergyWalkers_before(weights,Walkers::AbstractVector{<:AbstractWalker},method::DiscreteTimeMethod)
+function getLocalEnergyWalkers_before(weights,Walkers::AbstractVector{<:AbstractWalker},method::AbstractGFMCMethod)
     Nw = length(weights)
     num = 0.
     denom = 0.
-    Λ = method.Λ
     for α in eachindex(weights,Walkers)
-        bx = sum(get_weights(Walkers[α]))
-        eloc = Λ - bx
-        num += weights[α]*eloc
-        denom += weights[α]
-    end
-
-    return num/denom
-end
-
-function getLocalEnergyWalkers_before(weights,Walkers::AbstractVector{<:AbstractWalker},method::ContinuousTimeMethod)
-    Nw = length(weights)
-    num = 0.
-    denom = 0.
-    Hxx = method.Hxx
-    for α in eachindex(weights,Walkers)
-        bx = sum(get_weights(Walkers[α]))
-        eloc = - bx + Hxx(Walkers[α])
+        eloc = getLocalEnergy(Walkers[α],method)
         num += weights[α]*eloc
         denom += weights[α]
     end
