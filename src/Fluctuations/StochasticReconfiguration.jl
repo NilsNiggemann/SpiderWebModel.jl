@@ -1,3 +1,51 @@
+import LinearMaps, IterativeSolvers
+struct QuantumMetric{T} <: LinearMaps.LinearMap{T}
+    O_km::Matrix{T}
+    size::Dims{2}
+end
+Base.size(S::QuantumMetric) = S.size
+LinearAlgebra.issymmetric(S::QuantumMetric) = true
+LinearAlgebra.ishermitian(S::QuantumMetric) = true
+LinearAlgebra.isposdef(S::QuantumMetric) = true
+Base.:(==)(S1::QuantumMetric, S2::QuantumMetric) = S1.O_km == S2.O_km
+
+function QuantumMetric(O_km)
+    O_k_avg = reshape(mean(O_km,dims=1),size(O_km,2))
+    for i in eachindex(O_k_avg)
+        O_km[:,i] .-= O_k_avg[i]
+    end
+    Nparams = size(O_km,2)
+    return QuantumMetric(O_km,Dims((Nparams,Nparams)))
+end
+
+function LinearMaps._unsafe_mul!(y, S::QuantumMetric, v::AbstractVector)
+    N_MC = size(S.O_km,2)
+    O = S.O_km
+    # for k in axes(S,1)
+    #     z_k1 = zero(eltype(v))
+    #     z_k2 = zero(eltype(v))
+    #     for m in axes(S,1)
+    #         z_k2 +=  S.O_k_avg[m] * v[m]
+    #     end
+    #     z_k2 *= S.O_k_avg[k]
+
+    #     for μ in axes(S,2)
+    #         z_k1_m = zero(eltype(v))
+    #         for m in axes(S,1)
+    #             z_k1_m += O[m,μ] * v[m]
+    #         end
+    #         z_k1 += O[k,μ] * z_k1_m / N_MC
+    #     end
+    # end
+
+    zk1 = O' * (O * v) / N_MC
+    
+    # zk2 = (Ō' * v) .* Ō
+    
+    y .= zk1# .- zk2
+
+end
+
 function getOx_k(ψG::FullVariationalGuidingFunction,n::AbstractArray,k)
     par = ψG.params
 
@@ -24,11 +72,21 @@ function nearbyInt(x1,x2,x_size)
     dx -= x_size * round(Int,dx * x_rsize)
 end
 
+isperiodic(S::Stencils.StencilArray) = Stencils.boundary(S) == Stencils.Wrap()
+isperiodic(S::StencilSpinConfig) = isperiodic(parent(S))
+
 function getDistReduction(S,ψG::FullVariationalGuidingFunction)
+    
+    AllDists = Dict{SVector{2,Int},Int}()
+    if !isperiodic(S)
+        indicesMapping = collect(eachindex(ψG.params))
+        uniqueInds = collect(indicesMapping)
+        return AllDists,indicesMapping,uniqueInds
+    end
 
     α = get_alpha_i(ψG)
     Allplaqs = collect(plaquetteIterator(S))
-    AllDists = Dict{SVector{2,Int},Int}()
+
     # AllDists = Dict{Tuple{Int,Int},Int}()
     
     betaIndex = lastindex(α)
@@ -37,6 +95,7 @@ function getDistReduction(S,ψG::FullVariationalGuidingFunction)
     # indicesMapping = collect(eachindex(α))
     # uniqueInds = collect(eachindex(α))
     LxLy = size(S)
+
     for (i,ri) in enumerate(Allplaqs)
         for (j,rj) in enumerate(Allplaqs)
             Rij = abs.(SVector(nearbyInt.(ri, rj,LxLy)))
@@ -50,16 +109,21 @@ function getDistReduction(S,ψG::FullVariationalGuidingFunction)
             push!(indicesMapping,AllDists[Rij])
         end
     end
-    
+
     return AllDists,indicesMapping,uniqueInds
 
 end
 
 function getDistReduction(S,ψG::LocalPlaquetteGuidingFunction)
-
+    AllDists = Dict{SVector{2,Rational{Int}},Int}()
+    # if !isperiodic(S)
+    #     indicesMapping = collect(eachindex(ψG.params))
+    #     uniqueInds = collect(indicesMapping)
+    #     return AllDists,indicesMapping,uniqueInds
+    # end
+    
     α = get_alpha_i(ψG)
     Allplaqs = collect(plaquetteIterator(S))
-    AllDists = Dict{SVector{2,Rational{Int}},Int}()
 
     indicesMapping = Int[]
     uniqueInds = Int[]
@@ -127,72 +191,87 @@ function reconf_obs(InitialState::ConfType,method::AbstractGFMCMethod,configs,ψ
     EL_avg = mean(E_i)
     EL_err = sqrt(var(E_i))
 
-    println("computing cov")
-    # @time S = cov(Ok_i) #+ 1e-12I
-    # target = CovarianceEstimation.PerfectPositiveCorrelation()
-    # shrinkage = :lw # Ledoit-Wolf optimal shrinkage
-    # method = CovarianceEstimation.LinearShrinkage(target,0.)
-
-
-    @time S = cov(Ok_i) #+ 1e-12I
-    GC.gc()
-    for i in axes(S,1)
-        S[i,i] += 1e-5
-    end
-    @time F = StatsBase.cov(Ok_i,E_i)
-    
-    return (;EL_avg,EL_err,S,F,Ok_i)
+    return (;EL_avg,EL_err,E_i,Ok_i)
 end
 
-function stochastic_reconfiguration_step(InitialState,method::AbstractGFMCMethod,configs,ψG,inequivalentIndices=eachindex(ψG.params))
-    (;EL_avg,EL_err,F,S) = reconf_obs(InitialState,method,configs,ψG,inequivalentIndices)
+
+getSOperator(O_ki,::Type{QuantumMetric}) = QuantumMetric(O_ki)
+
+abstract type AbstractSRSolver end
+
+struct ExplicitSRSolver <: AbstractSRSolver end
+struct IterativeSRSolver <: AbstractSRSolver end
+
+function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatrix,solver::ExplicitSRSolver = ExplicitSRSolver())
+    println("computing cov")
+
+    @time S = cov(Ok_i)
+    S += 1e-6I
+    GC.gc()
+
+    @time F = StatsBase.cov(Ok_i,E_i)
+    
     @time SChol = cholesky!(Symmetric(S),check = false)
     if !issuccess(SChol)
         @warn "Cholesky factorization failed"
         SChol = cholesky!(Symmetric(S+1e-3I),check = false)
-        !issuccess(SChol) && return (;δα = zeros(length(ψG.params)),EL_avg,EL_err)
+        !issuccess(SChol) && return zeros(length(ψG.params))
     end
     @time δα = SChol \ F
     for i in axes(δα,1)
         δα[i] = -δα[i]
     end
-    return (;δα,EL_avg,EL_err)
+    return δα
 end
+function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatrix,solver::IterativeSRSolver;kwargs...)
+    S = QuantumMetric(Ok_i)
+    F = StatsBase.cov(Ok_i,E_i)[:]
+    res = -IterativeSolvers.cg(S,F;kwargs...)
+    return res
+end
+stochastic_reconfiguration_step(E_i,Ok_i,::AbstractSRSolver) = error("solver not implemented")
 
-
-function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSteps,ψG,n,dt=1e-3;equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps)
+function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,ψG,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps)
     
     ψG = deepcopy(ψG)
     params = ψG.params
     
     convergedSteps = 0
 
-    E0s = fill(NaN,n)
-    ΔE = fill(NaN,n)
-    params_steps = [similar(params) for _ in 1:n]
+    E0s = Vector{Float64}()
+    ΔE = Vector{Float64}()
+    params_steps = Vector{typeof(params)}()
     normDelta = Inf
 
     _,indicesMapping,uniqueInds = getDistReduction(InitialState,ψG)
-
-    prob = setup_GFMC_problem(InitialState,method,Nwalkers,NSteps,ψG) 
+    maxNSteps = maximum(NSteps)
+    prob = setup_GFMC_problem(InitialState,method,Nwalkers,maxNSteps,ψG) 
     initializeGFMC!(prob,equilibration_steps,pre_equilibration_steps)
-
-    for (i,ParamsSlice) in enumerate(params_steps)
+    for i in 1:n
         
-        @time res = runGFMC!(prob)
+        range = eachindex(prob.TotalWeights)[1:NSteps[i]]
+        @time res = runGFMC!(prob,range)
 
-        confs = eachslice(res.SaveConfigs,dims=(3,4))
-
-        (;δα,EL_avg,EL_err) = stochastic_reconfiguration_step(InitialState,method,confs,ψG,uniqueInds)
+        resSlice = @view res.SaveConfigs[:,:,:,range]
+        confs = eachslice( resSlice,dims=(3,4))
         
+        observables = reconf_obs(InitialState,method,confs,ψG,uniqueInds)
+        # (;EL_avg,EL_err ) = observables
+        # return observables
+        δα = stochastic_reconfiguration_step(observables.E_i,observables.Ok_i,solver)
         normDelta = norm(δα)/norm(params)
 
-        add_reconstructedFullParams!(ψG,indicesMapping,δα .*dt)
-        E0s[i] = mean(res.energies)
-        ΔE[i] = sqrt(var(res.energies))
-        ParamsSlice .= ψG.params
-        α = get_alpha_i(ψG) 
-        @info "optimization step $i" "|δα|" = normDelta E0 = mean(res.energies) ΔE0 = sqrt(var(res.energies)) convergedSteps mean(α) δα[1]
+        add_reconstructedFullParams!(ψG,indicesMapping,δα .*dt[i])
+        
+        E0 = mean(res.energies[range])
+        push!(E0s, E0)
+        ΔE0i = sqrt(var(res.energies[range]))
+        push!(ΔE,ΔE0i)
+
+        push!(params_steps, copy(params))
+
+        α = get_alpha_i(ψG)
+        @info "optimization step $i" dt[i] NSteps[i] "|δα|" = normDelta δα[1] E0 ΔE0 = ΔE0i convergedSteps mean(α) 
 
         if normDelta < rel_tolerance
             convergedSteps += 1
@@ -212,3 +291,15 @@ function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSte
 
     return (;params = params,E0_i = E0s,ΔE_i = ΔE,params_steps = params_steps_arr)
 end
+
+function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSteps,ψG,n,dt,solver::AbstractSRSolver = IterativeSRSolver();equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps)
+    
+    NStepsVec = makeVec(NSteps,n)
+    dtVec = makeVec(dt,n)
+
+    return _stochastic_reconfiguration(InitialState,method,solver,NStepsVec,ψG,n,dtVec,equilibration_steps,rel_tolerance,Nwalkers,outfile,pre_equilibration_steps)
+end
+
+makeVec(x::AbstractVector,len) = x
+makeVec(x::Number,len) = fill(x,len)
+makeVec(f::Function,len) = f.(1:len)

@@ -509,7 +509,7 @@ function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0, pre_eq
     (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationTable,Observables,method,ψG) = prob
     (;energies,SaveConfigs,outfile) = Observables
 
-    saveParameters(outfile,equilibration_steps,method)
+    saveParameters(outfile,equilibration_steps,method,ψG)
 
     if pre_equilibration_steps > 0 # pre_equilibration_steps do not use have any reconfigurations or guiding wavefunctions. The idea is to initialize the walkers with fully uncorrelated configurations at the beginning so that the Hilbert space can be explored more efficiently.
         random_init_walkers!(Walkers,pre_equilibration_steps)
@@ -539,11 +539,11 @@ function startManyWalkerGFMC(InitialState::StencilSpinConfig,method::AbstractGFM
     startManyWalkerGFMC(prob,equilibration_steps,pre_equilibration_steps)
 end
 
-function runGFMC!(prob::AbstractGFMCProblem)
+function runGFMC!(prob::AbstractGFMCProblem,range)
     (;Walkers,weights,TotalWeights,AffectedPlaquetteList,reconfiguration_buffer,reconfigurationTable,Observables,ψG,method) = prob
     (;energies,SaveConfigs,outfile) = Observables
     
-    for i in eachindex(energies,TotalWeights)
+    for i in range
         # for (α,Config) in enumerate(Walkers)
         propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method)
 
@@ -558,6 +558,8 @@ function runGFMC!(prob::AbstractGFMCProblem)
     saveObservables(outfile,TotalWeights,energies,reconfigurationTable)
     return (;TotalWeights, energies, SaveConfigs, reconfigurationTable)
 end
+runGFMC!(prob::AbstractGFMCProblem) = runGFMC!(prob,eachindex(prob.TotalWeights))
+runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int) = runGFMC!(prob,eachindex(prob.TotalWeights)[1:Nsteps])
 
 function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::DiscreteTimeMethod)
     (;Λ,nBranch,w_avg_estimate) = method

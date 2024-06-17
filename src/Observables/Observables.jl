@@ -185,7 +185,7 @@ end
         Sq .= abs2.(Sq)
     end
     SaveConfs = res.SaveConfigs
-    reconfTable = res.reconfTable
+    reconfTable = res.reconfigurationTable
     res = getObs(Gnp,SaveConfs,reconfTable,SqFunc,p÷2)
     newRes = similar(res,size(res).+1)
     newRes[begin:end-1,begin:end-1] .= res
@@ -196,12 +196,14 @@ end
     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
 
-function getSqsGFMC(Results,p)
+function getSqsGFMC(Results,p,nBra=nothing)
+    getNbra(res,::Nothing) = res.nBra
+    getNbra(res,nBra) = nBra
     Sqs = Vector{Matrix{Float64}}(undef,length(Results))
     Threads.@threads for i in eachindex(Results,Sqs)
         res = Results[i]
-        nBra = res.nBra
-        Sq = getSqGFMC(res,p÷nBra)
+        _nBra = getNbra(res,nBra)
+        Sq = getSqGFMC(res,p÷_nBra)
         Sqs[i] = Sq
     end
     return Sqs
