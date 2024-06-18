@@ -1,12 +1,12 @@
 import Pkg
-Pkg.activate("Application/")
+Pkg.activate(joinpath(@__DIR__ ,"../"))
 import SpiderWebModel as SW
 using CairoMakie
 using Statistics
 using MakieHelpers
 using SpiderWebModel
 ##
-S = SW.stencilConfig(parent(SW.getStairCase(14)),1/2)
+S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 # S = SW.stencilConfig(SW.constructConfigPath(15,15,SW.ALLGS_S12),1/2)
 HStair = SW.generateHilbertSpace(SW.SpinConfig(S))
 ##
@@ -18,7 +18,7 @@ getRKWavefunction(ψ) = SW.normalize!(one.(ψ))
 
 v0 = ExSol.vectors[1]
 # v0 = getRKWavefunction(ExSol.vectors[1])
-# HConfs = SW.spinConfig.(HStair.AllStates,Ref(SW.SpinConfig(S)),Ref(HStair.plaqMapping))
+HConfs = SW.spinConfig.(HStair.AllStates,Ref(SW.SpinConfig(S)),Ref(HStair.plaqMapping))
 ##
 function constructExactGuidingFunc(v0,AllStates)
     AllSTDict = Dict(SW.stencilConfig(parent(s),1/2)=>i for (i,s) in enumerate(AllStates))
@@ -74,7 +74,7 @@ magEx = SW.getMagnetization(HConfs, v0)
 # @time SqEx = SW.getStructureFac(HConfs,SW.normalize!(ones(length(v0))))
 #___________ManyWalkers_______________________
 ##
-S = SW.stencilConfig(parent(SW.getStairCase(14)),1/2)
+S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 # ψG = SW.PlaquetteNumberGuidingFunction(0.197)
 ψG = SW.PlaquetteNumberGuidingFunction(0.197)
 # ψG = SW.fullVariationalFunction(S,0.197)
@@ -85,62 +85,24 @@ nBra = 1
 ##
 SW.Random.seed!(1234)
 DT = SW.DiscreteTimeMethod(1.,3,1.)
-@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,1000,ψG,equilibration_steps=nThermal) for i in 1:12])
+@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,5000,ψG,equilibration_steps=nThermal) for i in 1:12])
 ##
 SW.Random.seed!(1234)
-CT = SW.ContinuousTimeMethod(0.05,3*0.05,8.353966711014905,SW.Hxx_zero())
+CT = SW.ContinuousTimeMethod(0.05,3,14.,SW.Hxx_zero())
 
-@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,20,1000,ψG,equilibration_steps=nThermal) for i in 1:12])
+@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,80,8000,ψG,equilibration_steps=nThermal) for i in 1:12])
 # @time SW.startManyWalkerGFMC(S,2,3000,nBra,ψG,1;method = SW.ContinuousTimeMethod(),equilibration_steps=nThermal) 
 
 ##
 # plotEnergies(resultsCT,nBra,E0,p=200,Emin = 1.05*E0,Emax = 0.9*E0)
 # plotEnergies(resultsCT,1)
 
-plotEnergies(resultsCT,round(Int,CT.τBranch/CT.τ),E0,Emin=NaN,Emax=NaN,p=250,label = L"Continuous time$$")
+plotEnergies(resultsCT,CT.nBranch,E0,Emin=NaN,Emax=NaN,p=250,label = L"Continuous time$$")
 plotEnergies!(resultsDT,DT.nBranch,color =:blue,E0,Emin=NaN,Emax=NaN,p=250)
 current_figure()
 
 ##
 
-let 
-    Λ = 120.
-    p = round(Int,Λ)
-    Es = zeros(p)
-
-    ψ = SW.normalize!(ones(length(v0)))
-    ψpr = copy(ψ)
-    for i in 1:p
-        ψpr .= Λ.* ψ .- (HStair.H * ψ)
-        SW.normalize!(ψpr)
-        Es[i] = ψ' * HStair.H* ψpr/(ψ' * ψpr)
-        ψ .= ψpr
-    end
-
-    Es2 = zeros(p)
-    β = 1/Λ
-    expBetaH = exp(-β * Matrix(HStair.H))
-    ψ = SW.normalize!(ones(length(v0)))
-    ψpr = copy(ψ)
-    for i in 1:p
-        ψpr .= expBetaH * ψ 
-        SW.normalize!(ψpr)
-        Es2[i] = ψ' * HStair.H* ψpr/(ψ' * ψpr)
-        ψ .= ψpr
-    end
-
-    with_theme(theme_SimpleTicks()) do
-        fig = Figure(fontsize = 22)
-        ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
-        lines!(1:p,Es,label = L"discrete steps $\Lambda=%$Λ$",color = :black)
-        lines!(1:p,Es2,label = L"continuous time $\beta=p/\Lambda$",color = :blue)
-
-        hlines!([E0],color = :red,label = L"exact$$")
-        axislegend()
-        fig
-    end
-end
-##
 # outfile = "Data/temp/S12/"
 # rm(outfile;recursive=true,force=true)
 # mkpath(outfile)
@@ -170,9 +132,9 @@ current_figure()
 function getMag(results,pmax,I)
     # I = CartesianIndex(I)
     Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,pmax) for res in results]
-    getMag(Conf) = Conf[I] /2
+    mz_func(Conf) = Conf[I] /2
 
-    @views getObs(p) = [SW.getObs(Gnp[:,1:p],res.SaveConfigs,res.reconfigurationTable,getMag,p÷2) for (res,Gnp) in zip(results,Gnps)]
+    @views getObs(p) = [SW.getObs(Gnp[:,1:p],res.SaveConfigs,res.reconfigurationTable,mz_func,p÷2) for (res,Gnp) in zip(results,Gnps)]
     obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
 
@@ -198,9 +160,11 @@ function getSiSj(results,pmax,I,J)
     obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
 ##
-mags1 = getMagRK(results,100÷nBra,CartesianIndex(3,3)) 
-mags2 = getMagRK(results,100÷nBra,CartesianIndex(4,1)) 
-mags3 = getMagRK(results,100÷nBra,CartesianIndex(2,3)) 
+results = resultsCT
+nBra = CT.nBranch
+mags1 = getMag(results,100÷nBra,CartesianIndex(3,3)) 
+mags2 = getMag(results,100÷nBra,CartesianIndex(4,1)) 
+mags3 = getMag(results,100÷nBra,CartesianIndex(2,3)) 
 ##
 IJ_SS = (CartesianIndex(3,4),CartesianIndex(4,2))
 SiSj = getSiSj(results,100÷nBra,IJ_SS[1],IJ_SS[2]) 
@@ -224,7 +188,6 @@ with_theme(theme_SimpleTicks()) do
     fig = Figure(fontsize = 22)
     ax = Axis(fig[1,1],xlabel = L"projection order $$",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
     proj = nBra .*eachindex(mags1)
-    
     Cols = (:blue,:green,:orange)
     Is = ((3,3),(4,1),(2,3))
     for (i,mags) in enumerate((mags1,mags2,mags3))
@@ -238,18 +201,20 @@ with_theme(theme_SimpleTicks()) do
         
         hlines!([sgn * mExact],color = Cols[i],label = L"exact $$")
         sgstring = sgn > 0 ? "" : "-"
-        text!(ax,(proj[end÷2],mExact-0.015),color = Cols[i],text = L"%$sgstring \langle S^z_{%$(Is[i])}\rangle")
+        text!(ax,Point2(proj[end÷2],mExact-0.015),color = Cols[i],text = L"%$sgstring \langle S^z_{%$(Is[i])}\rangle")
     end
     chi = mean.(SiSj)
 
-    chiScale = -3
-    # scatter!(ax,proj,chiScale .*chi,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
-    # err =sqrt.(var.(SiSj))
-    # errorbars!(ax,proj,chiScale .*chi,chiScale .*err,whiskerwidth = 3.5,color =  :black)
-    # hlines!([chiScale*SiSjex],color = :black,label = L"exact $$")
-    i,j = Tuple.(IJ_SS)
-    text!(ax,(proj[end÷2],chiScale*SiSjex-0.015),color = :black,text = L"%$chiScale\times \langle S^z_{%$i} S^z_{%$j}\rangle",align = (:center,:center))
+    chiScale = -4
+    scatter!(ax,proj,chiScale .*chi,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
+    err =sqrt.(var.(SiSj))
+    errorbars!(ax,proj,chiScale .*chi,chiScale .*err,whiskerwidth = 3.5,color =  :black)
+    hlines!([chiScale*SiSjex],color = :black,label = L"exact $$")
 
+    i,j = Tuple.(IJ_SS)
+    text!(ax,Point2(proj[end÷2],chiScale*SiSjex-0.015),color = :black,text = L"%$chiScale \times \langle S^z_{%$i} S^z_{%$j}\rangle",align = (:center,:center))
+
+    return fig
 
     Legend(fig[1, 1], [[
         errorBarLegend(0.6)
@@ -285,16 +250,7 @@ with_theme(theme_SimpleTicks()) do
     fig
 end
 ##
-function filterSpins!(Si,α)
-    for I in CartesianIndices(Si)
-        i,j = Tuple(I)
-        siteType = iseven(i+j)+1
-        siteType == α && continue
-        Si[i,j] *= 0
-    end
-    return Si
-end
-##
+
 function getSq(res,p)
     @views Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights,1,p)
     # @views Gnp = ones(length(res.TotalWeights[nThermal:end]),p)
@@ -331,7 +287,7 @@ SqsGFMC = fetch.([Threads.@spawn getSq(res,100÷nBra) for res in results])
 ##
 with_theme(theme_PiTicks()) do 
     Sq = mean(real(SqsGFMC)) ./4
-    (;kx,ky) = Sq
+    kx = ky = 2pi .* LinRange(0,1,size(Sq,1))
     fig,ax,hm = heatmap(kx,ky,Sq,colormap = :viridis,axis=(;aspect=1,title = L"GFMC$$"),figure = (;size = (360,500)))
     ax2 = Axis(fig[2,1],aspect=1,title = L"exact $$")
     heatmap!(ax2,kx,ky,real(SqEx.Sq),colormap = :viridis,colorrange = extrema(Sq))
@@ -340,71 +296,25 @@ with_theme(theme_PiTicks()) do
 end
 ##
 #___________Spin-1_______________________
-SW.Random.seed!(1234)
-S = SW.stencilConfig(zeros(15,15),1)
-nBra = 5
-nThermal = 0
-##
-function variationalEnergy(res)
-    Es = mean(res.energies for res in res)
-    
-    E = mean(Es)
-    err = sqrt(var(Es))
-    return E,err
-end
-# @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,8,nThermal+3_000÷nBra,nBra,ψG,1) for _ in 1:8])
-function getVarEnergies(alphaRange;nBra,nSteps,nWalkers,nRuns = 6)
-    Es = zeros(size(alphaRange))
-    errs = zeros(size(alphaRange))
 
-    for (i,α) in enumerate(alphaRange)
-        ψG = SW.PlaquetteNumberGuidingFunction(α)
-        @time results = [SW.startManyWalkerGFMC(S,nWalkers,nSteps÷nBra,nBra,ψG,1) for _ in 1:nRuns]
-        E,err = variationalEnergy(results)
-        println("α = $α, E = $E, err = $err")
-        Es[i] = E
-        errs[i] = err
-    end
-    return Es,errs
-end
-alpharange = LinRange(0.1,0.16,20)
-E,err = getVarEnergies(alpharange;nBra = 2,nSteps = 12_000,nWalkers = 4,nRuns = 24)
-##
-with_theme(theme_SimpleTicks()) do
-    fig = Figure(fontsize = 22)
-    ax = Axis(fig[1,1],xlabel = L"\alpha",ylabel = L"E^\textrm{var}_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
-    scatter!(ax,alpharange,E,label = L"$$",color = :black, marker = '●',markersize = 5)
-    errorbars!(ax,alpharange,E,err,whiskerwidth = 3.5,color = :black)
-    fig
-
-    
-end
-##
+ψG = SW.PlaquetteNumberGuidingFunction(0.13)
+nThermal = 1
 SW.Random.seed!(1234)
-S = SW.stencilConfig(zeros(16,16),1;
+S = SW.stencilConfig(zeros(20,20),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
-nBra = 3
-nThermal = 500
-ψG = SW.PlaquetteNumberGuidingFunction(0.12)
+# CT = SW.ContinuousTimeMethod(0.003,4,10.,SW.Hxx_SIA(0.0))
+DT = SW.DiscreteTimeMethod(0.,4,67)
+@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,2_000,ψG,equilibration_steps=0,pre_equilibration_steps=10_000,scatter_fraction=0.8) for i in 1:6])
 ##
-ψGstart = SW.fullVariationalFunction(S,0.09)
-reconfRes = SW.stochastic_reconfiguration(S,2000,ψGstart,10,1e-4;Nwalkers = 60,NBra=4,equilibration_steps = 3nThermal,pre_equilibration_steps = 0)
-ψG = SW.FullVariationalGuidingFunction(reconfRes.params)
-##
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,10,10_000,nBra,ψG,1;equilibration_steps=3000,pre_equilibration_steps= 0) for _ in 1:12])
-##
-@time results2 = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,10,60_000,nBra,ψG,1;equilibration_steps=60_000,pre_equilibration_steps= 500) for _ in 1:6])
-
-##
-plotEnergies(results,nBra,p = 200)
-plotEnergies!(results2,nBra,p = 200,color = :red)
-current_figure()
+results = resultsDT
+nBra = DT.nBranch
+plotEnergies(resultsDT,round(Int,DT.nBranch),p=200,nThermal=1000,label = L"Continuous time$$")
 
 ##
 # SqsGFMC = fetch.([Threads.@spawn (
 # getSq(res,150÷nBra,1,1) .+ getSq(res,150÷nBra,2,2) .+ getSq(res,150÷nBra,1,2) .+ getSq(res,150÷nBra,2,1)) for res in results])
-SqsGFMC = fetch.([Threads.@spawn getSq(res,200÷nBra) for res in results2])
+SqsGFMC = fetch.([Threads.@spawn getSq(res,500÷nBra) for res in results[[2,3,5]]])
 ##
 function SqFieldTheory(x,y)
     num = cos(x) - cos(y) +2sin(x)sin(y) 
@@ -441,7 +351,8 @@ with_theme(theme_PiTicks()) do
     fig
 end
 ##
-projection_orders = [800,10nBra]
+
+projection_orders = [800,500]
 SqsGFMC_p = [ fetch.([Threads.@spawn getSq(res,p÷nBra) for res in results]) for p in projection_orders]
 ##
 # with_theme(merge(theme_PiTicks(),theme_dark())) do 
@@ -474,30 +385,108 @@ with_theme(theme_PiTicks()) do
     fig
 end
 ##
-function dipoleMoment(conf)
-    imid,jmid = size(conf) .÷ 2
-    Lx,Ly = size(conf)
-    sum(SW.SVector(i-imid,j-jmid) * conf[i,j] for i in axes(conf,1), j in axes(conf,2)) .% (Lx,Ly)
-end
 
 ##
-function exampleState(L)
-    mode(n,i) = sin(2pi/L * (2n+1) * i)
-    Conf = [sum(mode(n,i) + mode(n,j) for n in 0:1) for i in 1:L, j in 1:L]
-end
+SW.Random.seed!(1234)
+S = SW.stencilConfig(zeros(16,16),1;
+boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+)
+DT = SW.DiscreteTimeMethod(0.,5,67)
+scatter_fraction = 0.98
+@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,8000,ψG;equilibration_steps=0,pre_equilibration_steps=50_000,scatter_fraction) for i in 1:6])
+##
+results = resultsDT
+nBra = DT.nBranch
+plotEnergies(resultsDT,round(Int,DT.nBranch),p=200,nThermal=400,label = L"Continuous time$$")
 
 ##
-magFull = fetch.([Threads.@spawn getFullMag(res,20÷nBra) for res in results])
-##
-with_theme(theme_SimpleTicks()) do 
-    m = mean(magFull) ./2
-    magerr = sqrt.(var(magFull)) ./2
-    fig,ax,hm = heatmap(m,colormap = :balance,axis=(;aspect=1,title = L"GFMC$$"),figure = (;size = 0.8 .*(360,500)))
-    ax2 = Axis(fig[2,1],aspect=1,title = L"err $$")
-    heatmap!(ax2,magerr,colormap = :balance,colorrange = extrema(m))
-    Colorbar(fig[1:2,2],hm,label = L"\langle S^z_i \rangle")
+function movingaverage(X::Vector,numofele::Int)
+    BackDelta = div(numofele,2) 
+    ForwardDelta = isodd(numofele) ? div(numofele,2) : div(numofele,2) - 1
+    len = length(X)
+    Y = similar(X)
+    for n = 1:len
+        lo = max(1,n - BackDelta)
+        hi = min(len,n + ForwardDelta)
+        Y[n] = mean(X[lo:hi])
+    end
+    return Y
+end
+function trackWalkerPath(reconfigTable,InitialWalkers,NSteps)
+    walkerPopulation = zeros(Bool,size(reconfigTable,1),NSteps)
+    currentWalkers = Set(InitialWalkers)
+    nextWalkers = empty(currentWalkers)
+    for step in 1:NSteps
+        for walker in axes(reconfigTable,1)
+            if reconfigTable[walker,step] in currentWalkers
+                walkerPopulation[walker,step] = true
+                push!(nextWalkers,walker)
+            end
+        end
+        currentWalkers = copy(nextWalkers)
+        empty!(nextWalkers)
+    end
+    return walkerPopulation
+end
+
+function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p = 50)
+    fig = Figure(size = 0.8 .*(1000, 1200),theme = theme_SimpleTicks())
+    initWalkers = collect(round(Int,scatter_fraction*size(results[1].reconfigurationTable,1)):size(results[1].reconfigurationTable,1))
+    function getkw(i,title)
+        if i == firstindex(results)
+            return (;title,xlabelvisible = false,xticklabelsvisible = false)
+        elseif i != lastindex(results)
+            return (;xlabelvisible = false,xticklabelsvisible = false)
+        end
+        return (;)
+    end
+
+    axen = [Axis(fig[i,1],xlabel = "Iteration";getkw(i,"Energy")...) for i in eachindex(results)]
+    axws = [Axis(fig[i,2],xlabel = "Iteration";getkw(i,"weight")...) for i in eachindex(results)]
+    axreconf = [Axis(fig[i,3],xlabel = "Iteration";getkw(i,"walker heritage")...) for i in eachindex(results)]
+    axSq = [Axis(fig[i,4],xlabel = L"q_x",aspect = 1,ylabel = L"q_y";xticks = PiTicks(),yticks = PiTicks(),getkw(i,L"\mathcal{S}(\mathbf{q})")...) for i in eachindex(results)]
+
+    minweight,maxweight = (Inf,-Inf)
+    en_min,en_max = (Inf,-Inf)
+    
+    markenergy = Inf
+    markweight = -Inf
+    confex = results[1].SaveConfigs[:,:,begin,begin]
+    kx = 2pi .* LinRange(0,1,size(confex,1).+1)
+    ky = 2pi .* LinRange(0,1,size(confex,2).+1)
+
+    for (i,res) in enumerate(results)
+        ws = movingaverage(res.TotalWeights,averageSteps)
+        minweight = min(minimum(ws),minweight)
+        maxweight = max(maximum(ws),maxweight)
+        en = movingaverage(res.energies,averageSteps)
+
+        enAvg = mean(en[end÷2:end])
+        markenergy = min(markenergy,enAvg)
+
+        weightAvg = mean(ws[end÷2:end])
+        markweight = max(markweight,weightAvg)
+
+        en_min = min(minimum(en),en_min)
+        en_max = max(maximum(en),en_max)
+        lines!(axen[i],eachindex(en),en)
+        lines!(axws[i],eachindex(ws),ws)
+        WP = trackWalkerPath(res.reconfigurationTable,initWalkers,Ntrack)'
+        heatmap!(axreconf[i],WP)
+        hlines!(axreconf[i],minimum(initWalkers)-0.5,color = :red,linewidth = 1,linestyle = :dash)
+        Sq = SW.getSqGFMC(res,p÷nBra)
+        heatmap!(axSq[i],kx,ky,Sq)
+    end
+
+    for (i,res) in enumerate(results)
+        ylims!(axws[i],minweight,maxweight)
+        ylims!(axen[i],en_min,en_max)
+        hlines!(axen[i],markenergy,color = :red,linewidth = 1,linestyle = :dash)
+        hlines!(axws[i],markweight,color = :red,linewidth = 1,linestyle = :dash)
+    end
+
     fig
 end
 
+equilib_plots(resultsDT;scatter_fraction,averageSteps=10,Ntrack=20,p = 150)
 ##
-files = readdir("Data/test_periodic/",join=true)

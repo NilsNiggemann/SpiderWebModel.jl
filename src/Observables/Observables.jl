@@ -168,21 +168,26 @@ function getBij_square(AllStates,plaqMapping,ψ0::AbstractVector,I,J)
     end
     return res
 end
-
+copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
 @views function getSqGFMC(res,p)
     Gnp = precomputeNormalizedAccWeight(res.TotalWeights,1,p)    # Gnp = ones(length(res.TotalWeights[nThermal:end]),p)
 
     Conf = res.SaveConfigs[:,:,begin,begin]
     NSites = length(Conf)
-    Sq = similar(Conf, ComplexF64)
+    Sq = similar(Conf, ComplexF32)
     
-    Si = similar(Conf, ComplexF64)
-    plan = LatticeFFTs.FFTW.plan_fft(Conf)
+    Si = similar(Conf, ComplexF32)
+    plan = LatticeFFTs.FFTW.plan_fft(Si)
 
     function SqFunc(Conf)
-        Si .= Conf
+        # Si .= Conf
+        copytont!(Si,Conf)
         mul!(Sq, plan, Si)
-        Sq .= abs2.(Sq)
+        for i in eachindex(Sq)
+            Sq[i] = abs2(Sq[i])
+        end
+        Sq
+        # Sq .= abs2.(Sq)
     end
     SaveConfs = res.SaveConfigs
     reconfTable = res.reconfigurationTable
@@ -192,7 +197,7 @@ end
 
     @views newRes[end,begin:end] .= newRes[begin,:]
     @views newRes[begin:end,end] .= newRes[:,begin]
-    newRes ./NSites
+    return real(newRes ./NSites)
     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
 

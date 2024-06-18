@@ -37,7 +37,7 @@ DiscreteTimeMethod(;Λ=1.,nBranch,w_avg_estimate=1.) = DiscreteTimeMethod(Λ,nBr
 
 struct ContinuousTimeMethod{F2} <: AbstractGFMCMethod 
     τ::Float64
-    nBranch::Float64
+    nBranch::Int
     w_avg_estimate::Float64
     Hxx::F2
 end
@@ -60,7 +60,6 @@ struct Hxx_SIA <: AbstractDiagonalOperator
 end
 (Hxx::Hxx_SIA)(Walker::SpiderWebWalker) = Hxx.U * sum(abs2, get_config(Walker))
 
-
 abstract type AbstractGFMCProblem end
 struct SpiderwebGFMCProblem{MethodType<:AbstractGFMCMethod,T<:AbstractFloat,C,F,W,O} <: AbstractGFMCProblem
     method::MethodType
@@ -68,29 +67,29 @@ struct SpiderwebGFMCProblem{MethodType<:AbstractGFMCMethod,T<:AbstractFloat,C,F,
     ψG::F
     Walkers::Vector{W}
     weights::Vector{T}
-    TotalWeights::Vector{T}
     AffectedPlaquetteList::Matrix{OrderedSet{Int}}
     reconfiguration_buffer::Vector{T}
-    reconfigurationTable::Matrix{Int}
     Observables::O
 end
 
 abstract type AbstractGFMCObservables end
-struct GFMCObservables{T,T2} <: AbstractGFMCObservables
-    energies::Vector{Float64}
+struct GFMCObservables{DT<:AbstractFloat,T,T2} <: AbstractGFMCObservables
+    energies::Vector{DT}
     SaveConfigs::T
+    TotalWeights::Vector{DT}
+    reconfigurationTable::Matrix{Int}
     outfile::T2
 end
 
-
 function _setup_GFMC_problem(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,NSteps::Integer,ψG,outfile)
     setup = setup_many_walker_GFMC(InitialState,Nwalkers,NSteps)
-    (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationTable) = setup
+    (;AffectedPlaquetteList,Walkers,weights,reconfiguration_buffer) = setup
     ObsSetup = setupObservables(InitialState,Nwalkers,NSteps,outfile)
-    (;energies,SaveConfigs) = ObsSetup
+    (;energies,SaveConfigs,TotalWeights,reconfigurationTable) = ObsSetup
 
-    Observables = GFMCObservables(energies,SaveConfigs,outfile)
-    return SpiderwebGFMCProblem(method,InitialState,ψG,Walkers,weights,TotalWeights,AffectedPlaquetteList,reconfiguration_buffer,reconfigurationTable,Observables)
+    Observables = GFMCObservables(energies,SaveConfigs,TotalWeights,    reconfigurationTable,outfile)
+
+    return SpiderwebGFMCProblem(method,InitialState,ψG,Walkers,weights,AffectedPlaquetteList,reconfiguration_buffer,Observables)
 end
 
 function setup_GFMC_problem(InitialState::ConfType, method::AbstractGFMCMethod, Nwalkers::Integer, NSteps::Integer, ψG;
@@ -366,7 +365,13 @@ add_elementwise!(x::AbstractArray,y) = (x .+= y)
 add_elementwise!(x::Number,y::Number) = x + y
 
 mult_elementwise!(x::Number,y::Number) = x * y
-mult_elementwise!(x::AbstractArray,y::Number) = (x .*= y)
+function mult_elementwise!(x::AbstractArray,y::Number)
+    
+    for i in eachindex(x)
+        x[i] *= y
+    end
+    return x
+end
 
 divide_elementwise!(x::Number,y::Number) = x / y
 divide_elementwise!(x::AbstractArray,y::AbstractArray) = (x ./= y)
@@ -382,23 +387,30 @@ function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m=size(Gnp,2)÷2)
     Nw = size(reconfigurationTable,1)
     p = size(Gnp,2)
     # surviving_walker_mapping_list = zeros(Int,Nw)
-
+    WalkerMultiplicities = zeros(Int,Nw)
     for n in m+1:N
         Gn = Gnp[n,p]
         # denom += Gn*Nw
         denom = add_elementwise!(denom,Gn*Nw)
         # reconfigList = @view reconfigurationTable[:,n-m]
         # surviving_walker_mapping!(surviving_walker_mapping_list,reconfigList)
+        WalkerMultiplicities .= 0
         for α in 1:Nw
             α´ = α
             for i_m in 1:m
                 α´ = reconfigurationTable[α´,n-i_m]
             end
-            conf = @view AllConfigs[:,:,α´,n-m]
+            WalkerMultiplicities[α´] += 1
+        end
+
+        for α in 1:Nw
+            mult = WalkerMultiplicities[α]
+            mult == 0 && continue
+            conf = @view AllConfigs[:,:,α,n-m]
             O = ObsFunc(conf)
             # surviving_index = surviving_walker_mapping_list[α´]
             # O = ObsFunc(AllConfigs[n-m][surviving_index])
-            GnO = mult_elementwise!(O,Gn)
+            GnO = mult_elementwise!(O,Gn*mult)
             # @. num += Gn*O
             num = add_elementwise!(num,GnO)
         end
@@ -439,18 +451,20 @@ function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers::Integer,NSteps:
         Walkers[α] = spiderWebWalker(InitialState,plaquettePositions)
     end
     weights = ones(Nwalkers)
-    TotalWeights = zeros(NSteps)
     reconfiguration_buffer = zeros(Nwalkers)
-    reconfigurationTable = zeros(Int,Nwalkers,NSteps)
     
-    return (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationTable)
+    return (;AffectedPlaquetteList,Walkers,weights,reconfiguration_buffer)
 end
 
 function setupObservables(InitConfig,NWalkers,NSteps,outfile::Nothing)
     energies = zeros(NSteps)
     Lx,Ly = size(InitConfig)
     SaveConfigs = zeros(eltype(InitConfig),Lx,Ly,NWalkers,NSteps)
-    return (;energies,SaveConfigs)
+
+    TotalWeights = zeros(NSteps)
+    reconfigurationTable = zeros(Int,NWalkers,NSteps)
+
+    return (;energies,SaveConfigs,TotalWeights,reconfigurationTable)
 end
 
 function createMMapArray(file::HDF5.File,datasetname::String,type,dims)
@@ -468,12 +482,14 @@ function readMMapArray(filename::AbstractString,datasetname::String)
 end
 
 function setupObservables(InitConfig,NWalkers,NSteps,filename::String)
-    energies = zeros(NSteps)
     Lx,Ly = size(InitConfig)
-    SaveConfigs = h5open(filename,"cw") do file
-        createMMapArray(file,"SaveConfigs",eltype(InitConfig),(Lx,Ly,NWalkers,NSteps))
+    h5open(filename,"cw") do file
+        energies = createMMapArray(file,"energies",Float64,(NSteps))
+        SaveConfigs = createMMapArray(file,"SaveConfigs",eltype(InitConfig),(Lx,Ly,NWalkers,NSteps))
+        TotalWeights = createMMapArray(file,"TotalWeights",Float64,(NSteps))
+        reconfigurationTable = createMMapArray(file,"reconfigurationTable",Int,(NWalkers,NSteps))
+        return (;energies,SaveConfigs,TotalWeights,reconfigurationTable)
     end
-    return (;energies,SaveConfigs)
 end
 
 function saveParameters(filename::String,Λ,equilibration_steps,nBranch,ψG,w_avg_estimate)
@@ -504,15 +520,15 @@ function saveVariationalParameter(file::HDF5.File,ψG)
     end
 end
 
-function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0, pre_equilibration_steps=equilibration_steps ÷ 5)
+function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0, pre_equilibration_steps=equilibration_steps ÷ 5,scatter_fraction=0.8)
     
-    (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationTable,Observables,method,ψG) = prob
-    (;energies,SaveConfigs,outfile) = Observables
+    (;AffectedPlaquetteList,Walkers,weights,reconfiguration_buffer,Observables,method,ψG) = prob
+    (;energies,SaveConfigs,outfile,TotalWeights,reconfigurationTable) = Observables
 
     saveParameters(outfile,equilibration_steps,method,ψG)
 
     if pre_equilibration_steps > 0 # pre_equilibration_steps do not use have any reconfigurations or guiding wavefunctions. The idea is to initialize the walkers with fully uncorrelated configurations at the beginning so that the Hilbert space can be explored more efficiently.
-        random_init_walkers!(Walkers,pre_equilibration_steps)
+        random_init_walkers!(Walkers,pre_equilibration_steps,scatter_fraction)
     end
     #fill buffers for available steps and weights
     for _ in 1:equilibration_steps
@@ -524,8 +540,8 @@ function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0, pre_eq
     return prob,Observables
 end
 
-function startManyWalkerGFMC(prob::AbstractGFMCProblem,equilibration_steps::Int,pre_equilibration_steps::Int)
-    setup,ObsSetup = initializeGFMC!(prob,equilibration_steps,pre_equilibration_steps)
+function startManyWalkerGFMC(prob::AbstractGFMCProblem,equilibration_steps::Int,pre_equilibration_steps::Int,scatter_fraction::Real)
+    initializeGFMC!(prob,equilibration_steps,pre_equilibration_steps,scatter_fraction)
     runGFMC!(prob)
 end
 
@@ -533,15 +549,14 @@ end
 #     startManyWalkerGFMC(InitialState,outfile,Nwalkers,NSteps,equilibration_steps,pre_equilibration_steps,G)
 # end
 
-function startManyWalkerGFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,ψG; equilibration_steps = 0,pre_equilibration_steps = 0,
-    kwargs...)
+function startManyWalkerGFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,ψG; equilibration_steps = 0,pre_equilibration_steps = 0,scatter_fraction=0.8,kwargs...)
     prob = setup_GFMC_problem(InitialState,method,Nwalkers,nSteps,ψG;kwargs...)
-    startManyWalkerGFMC(prob,equilibration_steps,pre_equilibration_steps)
+    startManyWalkerGFMC(prob,equilibration_steps,pre_equilibration_steps,scatter_fraction)
 end
 
 function runGFMC!(prob::AbstractGFMCProblem,range)
-    (;Walkers,weights,TotalWeights,AffectedPlaquetteList,reconfiguration_buffer,reconfigurationTable,Observables,ψG,method) = prob
-    (;energies,SaveConfigs,outfile) = Observables
+    (;Walkers,weights,AffectedPlaquetteList,reconfiguration_buffer,Observables,ψG,method) = prob
+    (;energies,SaveConfigs,outfile,TotalWeights, reconfigurationTable) = Observables
     
     for i in range
         # for (α,Config) in enumerate(Walkers)
@@ -555,11 +570,10 @@ function runGFMC!(prob::AbstractGFMCProblem,range)
 
         saveConfigs!(SaveConfigs,i,Walkers)            
     end
-    saveObservables(outfile,TotalWeights,energies,reconfigurationTable)
-    return (;TotalWeights, energies, SaveConfigs, reconfigurationTable)
+    return Observables
 end
-runGFMC!(prob::AbstractGFMCProblem) = runGFMC!(prob,eachindex(prob.TotalWeights))
-runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int) = runGFMC!(prob,eachindex(prob.TotalWeights)[1:Nsteps])
+runGFMC!(prob::AbstractGFMCProblem) = runGFMC!(prob,eachindex(prob.Observables.TotalWeights))
+runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int) = runGFMC!(prob,eachindex(prob.Observables.TotalWeights)[1:Nsteps])
 
 function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::DiscreteTimeMethod)
     (;Λ,nBranch,w_avg_estimate) = method
@@ -649,16 +663,6 @@ function getLocalEnergyWalkers_before(weights,Walkers::AbstractVector{<:Abstract
     return num/denom
 end
 
-function saveObservables(outfile,TotalWeights,energies,reconfigurationTable)
-    h5open(outfile,"cw") do file
-        file["energies"] = energies
-        file["TotalWeights"] = TotalWeights
-        file["reconfigurationTable"] = reconfigurationTable
-    end
-end
-
-saveObservables(::Nothing,args...;kwargs...) = nothing
-
 function saveConfigs!(SaveConfigs,i,Walkers::AbstractVector{<:AbstractWalker})
     for (α,Config) in enumerate(Walkers)
         SaveConfigs[:,:,α,i] .= get_config(Config)
@@ -683,9 +687,10 @@ function swapIndices!(list,i,j)
     return list
 end
 
-function random_init_walkers!(Walkers::AbstractVector{<:SpiderWebWalker},equilibration_steps)
+function random_init_walkers!(Walkers::AbstractVector{<:SpiderWebWalker},equilibration_steps,fraction=1.0)
+    Nw = length(Walkers)
 
-    Threads.@threads for α in eachindex(Walkers)
+    Threads.@threads for α in eachindex(Walkers)[1:round(Int,fraction*Nw)]
         Walker = Walkers[α]
         
         for _ in 1:equilibration_steps
