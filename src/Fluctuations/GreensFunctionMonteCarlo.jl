@@ -37,11 +37,11 @@ DiscreteTimeMethod(;Λ=1.,nBranch,w_avg_estimate=1.) = DiscreteTimeMethod(Λ,nBr
 
 struct ContinuousTimeMethod{F2} <: AbstractGFMCMethod 
     τ::Float64
-    τBranch::Float64
+    nBranch::Float64
     w_avg_estimate::Float64
     Hxx::F2
 end
-ContinuousTimeMethod(;τ,τBranch,w_avg_estimate=1.,Hxx) = ContinuousTimeMethod(τ,τBranch,w_avg_estimate,Hxx)
+ContinuousTimeMethod(;τ,nBranch,w_avg_estimate=1.,Hxx) = ContinuousTimeMethod(τ,nBranch,w_avg_estimate,Hxx)
 
 abstract type AbstractDiagonalOperator end
 (Hxx::AbstractDiagonalOperator)(x::SpiderWebWalker) = Hxx(get_config(x))
@@ -490,8 +490,8 @@ function saveParameters(filename::String,equilibration_steps,method::DiscreteTim
     saveParameters(filename,Λ,equilibration_steps,nBranch,ψG,w_avg_estimate)
 end
 function saveParameters(filename::String,equilibration_steps,method::ContinuousTimeMethod,ψG)
-    (;τ,τBranch,w_avg_estimate) = method
-    saveParameters(filename,τ,equilibration_steps,τBranch,ψG,w_avg_estimate)
+    (;τ,nBranch,w_avg_estimate) = method
+    saveParameters(filename,τ,equilibration_steps,nBranch,ψG,w_avg_estimate)
 end
 
 saveParameters(::Nothing,args...) = nothing
@@ -580,19 +580,15 @@ function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::Dis
 end
 
 function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::ContinuousTimeMethod)
-    (;Hxx,τBranch,τ,w_avg_estimate) = method
+    (;Hxx,nBranch,τ,w_avg_estimate) = method
     
     Threads.@threads for α in eachindex(Walkers)
         Walker = Walkers[α]
         log_w = 0.
-        τTot = 0.
         weightList = updateWeightList!(Walker,AffectedPlaquetteList,ψG)
         H_xx = Hxx(Walker)
         el_x = H_xx + getLocalEnergy(weightList)
-        # if el_x >= 0
-        #     error("el_x >= 0")
-        # end
-        while τTot < τBranch
+        for _ in 1:nBranch
             βleft = τ
             while βleft > 0
                 ξ = rand()
@@ -608,9 +604,8 @@ function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::Con
                     el_x = H_xx + getLocalEnergy(weightList)
                 end
             end
-            τTot += τ
         end
-        w = exp(log_w - τBranch*w_avg_estimate)
+        w = exp(log_w - nBranch*τ* w_avg_estimate)
         weights[α] = w
     end
 end
