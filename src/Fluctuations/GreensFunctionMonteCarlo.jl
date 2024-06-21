@@ -95,7 +95,7 @@ function _setup_GFMC_problem(InitialState::StencilSpinConfig,method::AbstractGFM
     ObsSetup = setupObservables(InitialState,Nwalkers,NSteps,outfile)
     (;energies,SaveConfigs,TotalWeights,reconfigurationTable) = ObsSetup
 
-    Observables = GFMCObservables(energies,SaveConfigs,TotalWeights,    reconfigurationTable,outfile)
+    Observables = GFMCObservables(energies,SaveConfigs,TotalWeights,reconfigurationTable,outfile)
 
     return SpiderwebGFMCProblem(method,InitialState,ψG,Walkers,weights,AffectedPlaquetteList,reconfiguration_buffer,Observables)
 end
@@ -474,6 +474,16 @@ function setupObservables(InitConfig,NWalkers,NSteps,outfile::Nothing)
 
     return (;energies,SaveConfigs,TotalWeights,reconfigurationTable)
 end
+function setupObservables(InitConfig,NWalkers,NSteps,filename::String)
+    Lx,Ly = size(InitConfig)
+    h5open(filename,"cw") do file
+        energies = createMMapArray(file,"energies",Float64,(NSteps,))
+        SaveConfigs = createMMapArray(file,"SaveConfigs",eltype(InitConfig),(Lx,Ly,NWalkers,NSteps))
+        TotalWeights = createMMapArray(file,"TotalWeights",Float64,(NSteps,))
+        reconfigurationTable = createMMapArray(file,"reconfigurationTable",Int,(NWalkers,NSteps))
+        return (;energies,SaveConfigs,TotalWeights,reconfigurationTable)
+    end
+end
 
 function createMMapArray(file::HDF5.File,datasetname::String,type,dims)
     SaveConfigs_dset = create_dataset(file,datasetname,datatype(type),dataspace(dims);alloc_time = HDF5.H5D_ALLOC_TIME_EARLY)
@@ -484,19 +494,7 @@ end
 function readMMapArray(filename::AbstractString,datasetname::String)
     h5open(filename,"r") do file
         SaveConfigs_dset = file[datasetname]
-        @assert HDF5.ismmappable(SaveConfigs_dset) "Dataset is not mappable for given type $(eltype(InitConfig))"
         return HDF5.readmmap(SaveConfigs_dset)
-    end
-end
-
-function setupObservables(InitConfig,NWalkers,NSteps,filename::String)
-    Lx,Ly = size(InitConfig)
-    h5open(filename,"cw") do file
-        energies = createMMapArray(file,"energies",Float64,(NSteps))
-        SaveConfigs = createMMapArray(file,"SaveConfigs",eltype(InitConfig),(Lx,Ly,NWalkers,NSteps))
-        TotalWeights = createMMapArray(file,"TotalWeights",Float64,(NSteps))
-        reconfigurationTable = createMMapArray(file,"reconfigurationTable",Int,(NWalkers,NSteps))
-        return (;energies,SaveConfigs,TotalWeights,reconfigurationTable)
     end
 end
 
