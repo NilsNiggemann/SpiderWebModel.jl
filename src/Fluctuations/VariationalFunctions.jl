@@ -1,5 +1,7 @@
 abstract type AbstractGuidingFunction end
 
+struct RKFunction <: AbstractGuidingFunction end
+
 struct PlaquetteNumberGuidingFunction <: AbstractGuidingFunction
     α::Float64
 end
@@ -7,11 +9,15 @@ end
 
 guidingfunc_name(F::Function) = string(typeof(F))
 guidingfunc_name(F::AbstractGuidingFunction) = string(typeof(F))
+guidingfunc_name(F::RKFunction) = "RKFunction"
 guidingfunc_name(F::PlaquetteNumberGuidingFunction) = "PlaquetteNumberGuidingFunction"
 
 variational_parameters(P::PlaquetteNumberGuidingFunction) = Dict([:alpha=>P.α])
+variational_parameters(::RKFunction) = Dict{Symbol,Float64}()
 variational_parameters(P::AbstractGuidingFunction) = Dict([:params=>P.params])
 variational_parameters(P::Function) = Dict([x => getproperty(P,x) for x in propertynames(P)])
+
+guidingfuncRatio_exponent(ψG::RKFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes) = 0.
 
 function guidingfuncRatio_exponent(ψG::PlaquetteNumberGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes)
     α = ψG.α
@@ -84,7 +90,7 @@ end
 
 guidingfuncRatio_exponent(ψG::AbstractGuidingFunction,n::AbstractArray,n´::AbstractArray) = guidingfuncRatio_exponent(ψG,n,n´,eachindex(n,n´))
 
-function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc::AbstractGuidingFunction,Λ)
+function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc::AbstractGuidingFunction,Λ=0)
     (;Config,weights) = Walker
     empty!(weights)
     moves = getMoves!(Walker)
@@ -147,4 +153,27 @@ function guidingfuncRatio_exponent(ψG::LocalPlaquetteGuidingFunction,n::Abstrac
     end
 
     return exponent
+end
+
+function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::RKFunction,Λ=0)
+    (;Config,weights,moves,n_x,n_x´) = Walker
+    isempty(weights) && isempty(moves) || return weights #return if weights are already computed
+    
+    getMoves!(Walker)
+    
+    for operator in moves
+        i,j,opNum = operator
+        indices = AffectedPlaquetteList[i,j]
+        applyPlaquette!(Config, i, j, opNum)
+        
+        weight = length(moves)
+
+        push!(weights,weight)
+        applyPlaquette!(Config, i, j, -opNum)
+    end
+    if Λ != 0
+        push!(moves, DIAGONAL_MOVE_ID)
+        push!(weights,Λ)
+    end
+    return weights
 end

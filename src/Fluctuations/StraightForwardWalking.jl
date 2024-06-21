@@ -1,7 +1,7 @@
 abstract type AbstractOperator end
 operatorname(X::T) where T <: AbstractOperator = string(T)
 struct PlaquetteFlipOperator <: AbstractOperator 
-    AffectedPlaquettes::Matrix{Vector{Int}}
+    AffectedPlaquettes::Matrix{OrderedCollections.OrderedSet{Int}}
 end
 operatorname(X::PlaquetteFlipOperator) = "PlaquetteFlipOperator"
 

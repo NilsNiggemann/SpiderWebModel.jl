@@ -231,7 +231,7 @@ function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatri
 end
 stochastic_reconfiguration_step(E_i,Ok_i,::AbstractSRSolver) = error("solver not implemented")
 
-function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,ψG,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps)
+function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,ψG,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps,scatter_fraction = 0.8)
     
     ψG = deepcopy(ψG)
     params = ψG.params
@@ -246,10 +246,10 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
     _,indicesMapping,uniqueInds = getDistReduction(InitialState,ψG)
     maxNSteps = maximum(NSteps)
     prob = setup_GFMC_problem(InitialState,method,Nwalkers,maxNSteps,ψG) 
-    initializeGFMC!(prob,equilibration_steps,pre_equilibration_steps)
+    initializeGFMC!(prob,equilibration_steps,pre_equilibration_steps,scatter_fraction)
     for i in 1:n
         
-        range = eachindex(prob.TotalWeights)[1:NSteps[i]]
+        range = eachindex(prob.Observables.TotalWeights)[1:NSteps[i]]
         @time res = runGFMC!(prob,range)
 
         resSlice = @view res.SaveConfigs[:,:,:,range]
@@ -271,7 +271,8 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
         push!(params_steps, copy(params))
 
         α = get_alpha_i(ψG)
-        @info "optimization step $i" dt[i] NSteps[i] "|δα|" = normDelta δα[1] E0 ΔE0 = ΔE0i convergedSteps mean(α) 
+        w_avg = mean(res.TotalWeights[range])
+        @info "optimization step $i" dt[i] NSteps[i] "|δα|" = normDelta δα[1] E0 ΔE0 = ΔE0i convergedSteps mean(α) w_avg
 
         if normDelta < rel_tolerance
             convergedSteps += 1
@@ -292,12 +293,12 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
     return (;params = params,E0_i = E0s,ΔE_i = ΔE,params_steps = params_steps_arr)
 end
 
-function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSteps,ψG,n,dt,solver::AbstractSRSolver = IterativeSRSolver();equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps)
+function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSteps,ψG,n,dt,solver::AbstractSRSolver = IterativeSRSolver();equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps,scatter_fraction=0.8)
     
     NStepsVec = makeVec(NSteps,n)
     dtVec = makeVec(dt,n)
 
-    return _stochastic_reconfiguration(InitialState,method,solver,NStepsVec,ψG,n,dtVec,equilibration_steps,rel_tolerance,Nwalkers,outfile,pre_equilibration_steps)
+    return _stochastic_reconfiguration(InitialState,method,solver,NStepsVec,ψG,n,dtVec,equilibration_steps,rel_tolerance,Nwalkers,outfile,pre_equilibration_steps,scatter_fraction)
 end
 
 makeVec(x::AbstractVector,len) = x

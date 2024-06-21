@@ -42,31 +42,7 @@ function makeBlocks(arr;blocksize = nothing, numBlocks = 32)
     return blockedArr
 end
 
-function plotEnergies(results,nBra,E0=NaN;kwargs...)
-    with_theme(theme_SimpleTicks()) do
-        fig = Figure(fontsize = 22)
-        ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
-        plotEnergies!(ax,results,nBra,E0;kwargs...)
-        # ens = getfield.(obs,:E0)
-        return fig
-    end
-end
 
-function plotEnergies!(ax::Makie.Axis,results,nBra,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,nThermal=1,kwargs...)
-    ens = [SW.getEnergies(res.TotalWeights,res.energies,nThermal,p÷nBra) for res in results]
-
-    en = mean(ens)
-    err = sqrt.(var(ens))
-    proj = nBra .*eachindex(en)
-    scatterlines!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5;kwargs...)
-    errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black;kwargs...)
-    !isnan(E0)&& hlines!([E0],color = :red,label = L"exact $$")
-    axislegend(ax,merge=true)
-    xlims!(ax,0.5,last(proj))
-    !isnan(Emin)&& !isnan(Emax) && ylims!(ax,Emin,Emax)
-    return ax
-end
-plotEnergies!(results,nBra,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,kwargs...) = plotEnergies!(current_axis(),results,nBra,E0;Emin=Emin,Emax=Emax,kwargs...)
 ##
 magEx = SW.getMagnetization(HConfs, v0)
 @time SqEx = SW.getStructureFac(HConfs,v0)
@@ -88,7 +64,7 @@ DT = SW.DiscreteTimeMethod(1.,3,1.)
 @time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,5000,ψG,equilibration_steps=nThermal) for i in 1:12])
 ##
 SW.Random.seed!(1234)
-CT = SW.ContinuousTimeMethod(0.05,3,14.,SW.Hxx_zero())
+CT = SW.ContinuousTimeMethod(0.01,10,14.,SW.Hxx_zero())
 
 @time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,80,8000,ψG,equilibration_steps=nThermal) for i in 1:12])
 # @time SW.startManyWalkerGFMC(S,2,3000,nBra,ψG,1;method = SW.ContinuousTimeMethod(),equilibration_steps=nThermal) 
@@ -97,8 +73,8 @@ CT = SW.ContinuousTimeMethod(0.05,3,14.,SW.Hxx_zero())
 # plotEnergies(resultsCT,nBra,E0,p=200,Emin = 1.05*E0,Emax = 0.9*E0)
 # plotEnergies(resultsCT,1)
 
-plotEnergies(resultsCT,CT.nBranch,E0,Emin=NaN,Emax=NaN,p=250,label = L"Continuous time$$")
-plotEnergies!(resultsDT,DT.nBranch,color =:blue,E0,Emin=NaN,Emax=NaN,p=250)
+plotEnergies(resultsDT,DT.nBranch,color =:blue,E0,Emin=NaN,Emax=NaN,p=150,normalize=true)
+plotEnergies!(resultsCT,CT.nBranch,E0,Emin=NaN,Emax=NaN,p=150,)
 current_figure()
 
 ##
@@ -305,16 +281,16 @@ boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 # CT = SW.ContinuousTimeMethod(0.003,4,10.,SW.Hxx_SIA(0.0))
 DT = SW.DiscreteTimeMethod(0.,4,67)
-@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,2_000,ψG,equilibration_steps=0,pre_equilibration_steps=10_000,scatter_fraction=0.8) for i in 1:6])
+@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,2_000,ψG,equilibration_steps=0,pre_equilibration_steps=10_000,scatter_fraction=0.92) for i in 1:6])
 ##
 results = resultsDT
 nBra = DT.nBranch
-plotEnergies(resultsDT,round(Int,DT.nBranch),p=200,nThermal=1000,label = L"Continuous time$$")
+plotEnergies(resultsDT,round(Int,DT.nBranch),p=200,nThermal=1000,label = L"discrete time$$")
 
 ##
 # SqsGFMC = fetch.([Threads.@spawn (
 # getSq(res,150÷nBra,1,1) .+ getSq(res,150÷nBra,2,2) .+ getSq(res,150÷nBra,1,2) .+ getSq(res,150÷nBra,2,1)) for res in results])
-SqsGFMC = fetch.([Threads.@spawn getSq(res,500÷nBra) for res in results[[2,3,5]]])
+SqsGFMC = fetch.([Threads.@spawn getSq(res,500÷nBra) for res in results])
 ##
 function SqFieldTheory(x,y)
     num = cos(x) - cos(y) +2sin(x)sin(y) 
@@ -322,171 +298,145 @@ function SqFieldTheory(x,y)
     return num^2/(sqrt(denom)+1e-30)
 end
 
-with_theme(theme_PiTicks()) do 
-    # Sq = sqrt.(var(real(SqsGFMC))) ./4
-    Sq = mean(SqsGFMC) ./4
-    kx = ky = 2pi .* LinRange(0,1,size(Sq,1))
-    fig = Figure(fontsize = 22,size = (800,400))
-    axMC = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"k_y",title = L"GFMC$$",aspect = 1)
-    axerr = Axis(fig[1,2],xlabel = L"k_x",ylabel = L"k_y",title = L"std error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
-
-    axFT = Axis(fig[1,3],xlabel = L"k_x",ylabel = L"k_y",title = L"U(1) theory$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
-
-    # axDiff = Axis(fig[1,4],xlabel = L"k_x",ylabel = L"k_y",title = L"Difference$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
-
-    # err = abs.(Sq .- SqFieldTheory.(kx,kx'))
-    err = sqrt.(var(SqsGFMC)) ./4
-    hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
-    SqFT = [SqFieldTheory(x,y) for x in kx, y in ky]
-    hmFT = heatmap!(axFT,kx,ky,SqFT,colormap = :viridis)
-    # heatmap!(axerr,kx,ky,err,colormap = :viridis,colorrange = extrema(!isnan,Sq))
-    hmerr = heatmap!(axerr,kx,ky,err,colormap = :viridis)
-    # heatmap!(axDiff,kx,ky,(Sq ./maximum(Sq)) .- (SqFT ./maximum(SqFT)),colormap = :viridis)
-
-    Colorbar(fig[2,1],hmMC,label = L" \mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
-    Colorbar(fig[2,2],hmerr,label = L"\sigma( \mathcal{S}^{zz}(\textbf{q}))",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
-    Colorbar(fig[2,3],hmFT,label = L" \mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8), width = Relative(0.8),vertical=false,ticks = SimpleTicks())
-
-    rowsize!(fig.layout,2,Relative(0.1))
-    fig
+function SqFieldTheory2(kx,ky,k,b2)
+    (sqrt(2)*sqrt(-((-4 + 4*cos(kx)*cos(ky) + cos(2*kx)*(1 - 2*cos(2*ky)) + cos(2*ky))*(40*b2 + k + 8*b2*(cos(2*kx) + 2*cos(kx)*(-4*cos(ky) + cos(kx)*cos(2*ky))))))*   (cos(kx) - cos(ky) + 2*sin(kx)*sin(ky))^2)/((cos(kx) - cos(ky))^2 + 4*sin(kx)^2*sin(ky)^2+1e-30)
 end
+
+function makeSqFTPlots(SqsGFMC,k=1,b2=0)
+    SqFT_func(x,y)  = SqFieldTheory2(x,y,k,b2)
+    with_theme(theme_PiTicks()) do 
+        # Sq = sqrt.(var(real(SqsGFMC))) ./4
+        Sq = mean(SqsGFMC) ./4
+        kx = ky = 2pi .* LinRange(0,1,size(Sq,1))
+        fig = Figure(fontsize = 22,size = (800,400))
+        axMC = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"k_y",title = L"GFMC$$",aspect = 1)
+        axerr = Axis(fig[1,2],xlabel = L"k_x",ylabel = L"k_y",title = L"std error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
+
+        axFT = Axis(fig[1,3],xlabel = L"k_x",ylabel = L"k_y",title = L"U(1) theory$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
+
+        # axDiff = Axis(fig[1,4],xlabel = L"k_x",ylabel = L"k_y",title = L"Difference$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
+
+        # err = abs.(Sq .- SqFieldTheory.(kx,kx'))
+        err = sqrt.(var(SqsGFMC)) ./4
+        hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
+        SqFT = [SqFT_func(x,y) for x in kx, y in ky]
+        hmFT = heatmap!(axFT,kx,ky,SqFT,colormap = :viridis)
+        # heatmap!(axerr,kx,ky,err,colormap = :viridis,colorrange = extrema(!isnan,Sq))
+        hmerr = heatmap!(axerr,kx,ky,err,colormap = :viridis)
+        # heatmap!(axDiff,kx,ky,(Sq ./maximum(Sq)) .- (SqFT ./maximum(SqFT)),colormap = :viridis)
+
+        Colorbar(fig[2,1],hmMC,label = L" \mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
+        Colorbar(fig[2,2],hmerr,label = L"\sigma( \mathcal{S}^{zz}(\textbf{q}))",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
+        Colorbar(fig[2,3],hmFT,label = L" \mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8), width = Relative(0.8),vertical=false,ticks = SimpleTicks())
+
+        rowsize!(fig.layout,2,Relative(0.1))
+        fig
+    end
+end
+makeSqFTPlots(SqsGFMC,1,0.1)
 ##
 
 projection_orders = [800,500]
 SqsGFMC_p = [ fetch.([Threads.@spawn getSq(res,p÷nBra) for res in results]) for p in projection_orders]
 ##
 # with_theme(merge(theme_PiTicks(),theme_dark())) do 
-with_theme(theme_PiTicks()) do 
-    fig = Figure(fontsize = 18,size = (500,400))
-    ax = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"\mathcal{S}(\mathbf{q})",title = L"GFMC$$",yticks = SimpleTicks())
-    kx = 2pi .* LinRange(0,1,size(S,1).+1)
+function plotCut(SqsGFMC_p,k=1,b2=0)
+    SqFT_func(x,y)  = SqFieldTheory2(x,y,k,b2)
 
-    for (p,Sqs) in zip(projection_orders,SqsGFMC_p)
-        Sq = mean(Sqs)[1,:] #./4
-        Sqerr = sqrt.(var(Sqs))[1,:] #./4
-        Sq ./= maximum(mean(Sqs))
-        Sqerr ./= maximum(mean(Sqs))
-        lines!(ax,kx,Sq,
-        # color = p,colorrange = extrema(projection_orders),colormap = :viridis,linewidth = 3,
-        label = L"$p=%$(p)$"
-        )
-        errorbars!(ax,kx,Sq,Sqerr,
-        whiskerwidth = 3.5,
-        # color = p,colorrange = extrema(projection_orders),colormap = :viridis
-        )
+    with_theme(theme_PiTicks()) do 
+        fig = Figure(fontsize = 18,size = (500,400))
+        ax = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"\mathcal{S}(\mathbf{q})",title = L"GFMC$$",yticks = SimpleTicks())
+        axquad = Axis(fig[2,1],xlabel = L"k_x^4",ylabel = L"\mathcal{S}(\mathbf{q})",yticks = SimpleTicks(),xticks = SimpleTicks())
+
+        kx = 2pi .* LinRange(0,1,size(S,1).+1)
+        
+        kx1, zoomindex = findmin(x->abs(x-0.2pi),kx)
+        kzoom = kx[begin:zoomindex]
+        for (p,Sqs) in zip(projection_orders,SqsGFMC_p)
+            Sqs ./= maximum(mean(Sqs))
+
+            Sq = mean(Sqs)[1,:] #./4
+            Sqerr = sqrt.(var(Sqs))[1,:] #./4
+            # Sqerr ./= maximum(mean(Sqs))
+            lines!(ax,kx,Sq,
+            # color = p,colorrange = extrema(projection_orders),colormap = :viridis,linewidth = 3,
+            label = L"$p=%$(p)$"
+            )
+            errorbars!(ax,kx,Sq,Sqerr,
+            whiskerwidth = 3.5,
+            # color = p,colorrange = extrema(projection_orders),colormap = :viridis
+            )
+            scatterlines!(axquad,kzoom.^4,Sq[begin:zoomindex],marker = '□',markersize = 8)
+            errorbars!(axquad,kzoom.^4,Sq[begin:zoomindex],Sqerr[begin:zoomindex],whiskerwidth = 3.5)
+        end
+        
+        kxFT = 2pi .* LinRange(0,1,300)
+        SqFT = SqFT_func.(kxFT,0)
+        SqFTFull = [SqFT_func(x,y) for x in kxFT, y in kxFT]
+        SqFT ./= maximum(SqFTFull)
+        lines!(ax,kxFT,SqFT,color = :black,linewidth = 2,linestyle = :dash,label = L"U(1)$$")
+
+        _, zoomindex = findmin(x->abs(x-kx[zoomindex]),kxFT)
+        kzoom = kxFT[begin:zoomindex]
+
+        lines!(axquad,kzoom.^4,SqFT[begin:zoomindex],color = :black,linewidth = 2,linestyle = :dash,label = L"U(1)$$")
+
+        lines!(axquad,kzoom.^4,kzoom .^4*1.15SqFT[zoomindex],color = :red,linestyle = :solid,label = L"$\simk^4$",linewidth = 0.8)
+        axislegend(ax,merge=true)
+        fig
     end
-
-    kx = 2pi .* LinRange(0,1,300)
-    SqFT = SqFieldTheory.(kx,0)
-    SqFTFull = [SqFieldTheory(x,y) for x in kx, y in kx]
-    SqFT ./= maximum(SqFTFull)
-    lines!(ax,kx,SqFT,color = :black,linewidth = 2,linestyle = :dash,label = L"U(1)$$")
-    axislegend(ax,merge=true)
-    fig
 end
+plotCut(SqsGFMC_p,1,1)
 ##
 
 ##
 SW.Random.seed!(1234)
+S = SW.stencilConfig(zeros(24,24),1;
+boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+)
+DT = SW.DiscreteTimeMethod(0.,6,size(S,1)^2/4)
+ψG = SW.fullVariationalFunction(S,0.168)
+stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,1000+ 30*i),ψG,10,i->max(2. - 1*log(i),0.1) ,SW.IterativeSRSolver();Nwalkers = 6*30,rel_tolerance=1e-8,equilibration_steps=100,pre_equilibration_steps=50_000,scatter_fraction=0.6)
+ψG = SW.FullVariationalGuidingFunction(stochReconfRes.params_steps[:,:,end-2])
+##
+DT = SW.DiscreteTimeMethod(0.,12,size(S,1)^2/3.8)
+scatter_fraction = 0.98
+@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,40,10_000,ψG;equilibration_steps=0,pre_equilibration_steps=50_000,scatter_fraction) for i in 1:6])
+##
+# results = resultsDT
+nBra = DT.nBranch
+plotEnergies(resultsDT,DT.nBranch,p=500,nThermal=100,label = L"Continuous time$$")
+
+##
+equilib_plots(resultsDT;scatter_fraction,averageSteps=10,Ntrack=30,p = 300)
+##
+# U field repulsion
+
+SW.Random.seed!(1234)
 S = SW.stencilConfig(zeros(16,16),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
-DT = SW.DiscreteTimeMethod(0.,5,67)
-scatter_fraction = 0.98
-@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,8000,ψG;equilibration_steps=0,pre_equilibration_steps=50_000,scatter_fraction) for i in 1:6])
+
+CT = SW.ContinuousTimeMethod(0.01,3,10.,SW.Hxx_SIA(0.3))
+ψG = SW.fullVariationalFunction(S,.2)
+stochReconfRes = SW.stochastic_reconfiguration(S,CT,i->round(Int,2000+ 200*i),ψG,10,i->max(1. - 0.1*log(i),0.3) ,SW.IterativeSRSolver();Nwalkers = 6*50,rel_tolerance=1e-8,equilibration_steps=100,pre_equilibration_steps=50_000,scatter_fraction=0.6)
+ψG = SW.FullVariationalGuidingFunction(stochReconfRes.params)
 ##
-results = resultsDT
-nBra = DT.nBranch
-plotEnergies(resultsDT,round(Int,DT.nBranch),p=200,nThermal=400,label = L"Continuous time$$")
+# ψG = SW.fullVariationalFunction(S,0.15)
+# CT = SW.ContinuousTimeMethod(0.03,1,0.2655*prod(size(S)),SW.Hxx_zero())
+CT = SW.ContinuousTimeMethod(0.03,1,23.2,SW.Hxx_SIA(0.3))
+scatter_fraction = 0.8
+@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,500,10000,ψG;equilibration_steps=0,pre_equilibration_steps=50_000,scatter_fraction) for i in 1:6])
+##
+# results = resultsCT
+plotEnergies(resultsCT,CT,nThermal=1,τ=2,normalize=true)
+##
+equilib_plots(resultsCT;scatter_fraction,averageSteps=10,Ntrack=80,p = 100)
 
 ##
-function movingaverage(X::Vector,numofele::Int)
-    BackDelta = div(numofele,2) 
-    ForwardDelta = isodd(numofele) ? div(numofele,2) : div(numofele,2) - 1
-    len = length(X)
-    Y = similar(X)
-    for n = 1:len
-        lo = max(1,n - BackDelta)
-        hi = min(len,n + ForwardDelta)
-        Y[n] = mean(X[lo:hi])
-    end
-    return Y
-end
-function trackWalkerPath(reconfigTable,InitialWalkers,NSteps)
-    walkerPopulation = zeros(Bool,size(reconfigTable,1),NSteps)
-    currentWalkers = Set(InitialWalkers)
-    nextWalkers = empty(currentWalkers)
-    for step in 1:NSteps
-        for walker in axes(reconfigTable,1)
-            if reconfigTable[walker,step] in currentWalkers
-                walkerPopulation[walker,step] = true
-                push!(nextWalkers,walker)
-            end
-        end
-        currentWalkers = copy(nextWalkers)
-        empty!(nextWalkers)
-    end
-    return walkerPopulation
-end
-
-function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p = 50)
-    fig = Figure(size = 0.8 .*(1000, 1200),theme = theme_SimpleTicks())
-    initWalkers = collect(round(Int,scatter_fraction*size(results[1].reconfigurationTable,1)):size(results[1].reconfigurationTable,1))
-    function getkw(i,title)
-        if i == firstindex(results)
-            return (;title,xlabelvisible = false,xticklabelsvisible = false)
-        elseif i != lastindex(results)
-            return (;xlabelvisible = false,xticklabelsvisible = false)
-        end
-        return (;)
-    end
-
-    axen = [Axis(fig[i,1],xlabel = "Iteration";getkw(i,"Energy")...) for i in eachindex(results)]
-    axws = [Axis(fig[i,2],xlabel = "Iteration";getkw(i,"weight")...) for i in eachindex(results)]
-    axreconf = [Axis(fig[i,3],xlabel = "Iteration";getkw(i,"walker heritage")...) for i in eachindex(results)]
-    axSq = [Axis(fig[i,4],xlabel = L"q_x",aspect = 1,ylabel = L"q_y";xticks = PiTicks(),yticks = PiTicks(),getkw(i,L"\mathcal{S}(\mathbf{q})")...) for i in eachindex(results)]
-
-    minweight,maxweight = (Inf,-Inf)
-    en_min,en_max = (Inf,-Inf)
-    
-    markenergy = Inf
-    markweight = -Inf
-    confex = results[1].SaveConfigs[:,:,begin,begin]
-    kx = 2pi .* LinRange(0,1,size(confex,1).+1)
-    ky = 2pi .* LinRange(0,1,size(confex,2).+1)
-
-    for (i,res) in enumerate(results)
-        ws = movingaverage(res.TotalWeights,averageSteps)
-        minweight = min(minimum(ws),minweight)
-        maxweight = max(maximum(ws),maxweight)
-        en = movingaverage(res.energies,averageSteps)
-
-        enAvg = mean(en[end÷2:end])
-        markenergy = min(markenergy,enAvg)
-
-        weightAvg = mean(ws[end÷2:end])
-        markweight = max(markweight,weightAvg)
-
-        en_min = min(minimum(en),en_min)
-        en_max = max(maximum(en),en_max)
-        lines!(axen[i],eachindex(en),en)
-        lines!(axws[i],eachindex(ws),ws)
-        WP = trackWalkerPath(res.reconfigurationTable,initWalkers,Ntrack)'
-        heatmap!(axreconf[i],WP)
-        hlines!(axreconf[i],minimum(initWalkers)-0.5,color = :red,linewidth = 1,linestyle = :dash)
-        Sq = SW.getSqGFMC(res,p÷nBra)
-        heatmap!(axSq[i],kx,ky,Sq)
-    end
-
-    for (i,res) in enumerate(results)
-        ylims!(axws[i],minweight,maxweight)
-        ylims!(axen[i],en_min,en_max)
-        hlines!(axen[i],markenergy,color = :red,linewidth = 1,linestyle = :dash)
-        hlines!(axws[i],markweight,color = :red,linewidth = 1,linestyle = :dash)
-    end
-
-    fig
-end
-
-equilib_plots(resultsDT;scatter_fraction,averageSteps=10,Ntrack=20,p = 150)
+SqsGFMC = fetch.([Threads.@spawn getSq(res,100÷nBra) for res in resultsCT])
+makeSqFTPlots(SqsGFMC)
 ##
+projection_orders = [800,300,100]
+SqsGFMC_p = [ fetch.([Threads.@spawn getSq(res,p÷nBra) for res in resultsCT]) for p in projection_orders]
+plotCut(SqsGFMC_p)

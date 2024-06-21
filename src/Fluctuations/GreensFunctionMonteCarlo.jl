@@ -60,6 +60,14 @@ struct Hxx_SIA <: AbstractDiagonalOperator
 end
 (Hxx::Hxx_SIA)(Walker::SpiderWebWalker) = Hxx.U * sum(abs2, get_config(Walker))
 
+struct CombinedOperator{F1,F2} <: AbstractDiagonalOperator
+    Hxx1::F1
+    Hxx2::F2
+end
+Base.:+(Hxx1::AbstractDiagonalOperator,Hxx2::AbstractDiagonalOperator) = CombinedOperator(Hxx1,Hxx2)
+
+(Hxx::CombinedOperator)(Walker::SpiderWebWalker) = Hxx.Hxx1(Walker) + Hxx.Hxx2(Walker)
+
 abstract type AbstractGFMCProblem end
 struct SpiderwebGFMCProblem{MethodType<:AbstractGFMCMethod,T<:AbstractFloat,C,F,W,O} <: AbstractGFMCProblem
     method::MethodType

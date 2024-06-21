@@ -8,8 +8,8 @@ Pkg.activate(@__DIR__)
 import SpiderWebModel as SW
 using HDF5
 nBra = 10
-NSteps = 100_000
-equilibration_steps = 100_000
+NSteps = 200_000
+equilibration_steps = 150_000
 NWalkers = 36*10
 α = 0.15
 λ = 0
@@ -17,7 +17,7 @@ NWalkers = 36*10
 
 ##
 for L in [16,18,20]
-    for i_arg in 1:8
+    for i_arg in 1:4
         @info "starting run" L i_arg
 
         w_avg_estimate = L^2/6 #estimated average weight for each iteration, to reduce floating point errors

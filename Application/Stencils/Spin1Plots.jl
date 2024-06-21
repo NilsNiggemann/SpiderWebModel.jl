@@ -28,7 +28,7 @@ with_theme(theme_SimpleTicks()) do
     fig
 end
 ##
-projectionSteps = 750
+projectionSteps = 1000
 SqsGFMC = eachslice(res["SqsGFMC"][string(projectionSteps)],dims=3)
 
 SqMat = mean(real(SqsGFMC)) ./4
@@ -55,11 +55,16 @@ errFunc = SW.getSqCont(errMat)
 #     ky = y
 #     (sqrt(2)*sqrt(-((-4 + 4*cos(kx)*cos(ky) + cos(2*kx)*(1 - 2*cos(2*ky)) + cos(2*ky))*(v + 8*w - 2*w*(4*cos(kx)*cos(ky) + cos(2*kx)*(1 - 2*cos(2*ky)) + cos(2*ky)))))*(cos(kx) - cos(ky) + 2*sin(kx)*sin(ky))^2)/((cos(kx) - cos(ky))^2 + 4*sin(kx)^2*sin(ky)^2+1e-2)
 # end
-function SqFieldTheory2(kx,ky,v,w)
-    kx = kx -pi
-    ky = ky -pi
-    (sqrt(2)*sqrt(4 - 4*cos(kx)*cos(ky) - cos(2*ky) + cos(2*kx)*(-1 + 2*cos(2*ky)))*(-cos(kx) + cos(ky) + 2*sin(kx)*sin(ky))^2)/(sqrt(v + 8*w + 2*w*(-4*cos(kx)*cos(ky) - cos(2*ky) + cos(2*kx)*(-1 + 2*cos(2*ky))))*((cos(kx) - cos(ky))^2 + 4*sin(kx)^2*sin(ky)^2) +1e-20)
+# function SqFieldTheory2(kx,ky,v,w)
+#     kx = kx -pi
+#     ky = ky -pi
+#     (sqrt(2)*sqrt(4 - 4*cos(kx)*cos(ky) - cos(2*ky) + cos(2*kx)*(-1 + 2*cos(2*ky)))*(-cos(kx) + cos(ky) + 2*sin(kx)*sin(ky))^2)/(sqrt(v + 8*w + 2*w*(-4*cos(kx)*cos(ky) - cos(2*ky) + cos(2*kx)*(-1 + 2*cos(2*ky))))*((cos(kx) - cos(ky))^2 + 4*sin(kx)^2*sin(ky)^2) +1e-20)
+# end
+
+function SqFieldTheory2(kx,ky,k,b2,)
+    (sqrt(2)*sqrt(-((-4 + 4*cos(kx)*cos(ky) + cos(2*kx)*(1 - 2*cos(2*ky)) + cos(2*ky))*(40*b2 + k + 8*b2*(cos(2*kx) + 2*cos(kx)*(-4*cos(ky) + cos(kx)*cos(2*ky))))))*   (cos(kx) - cos(ky) + 2*sin(kx)*sin(ky))^2)/((cos(kx) - cos(ky))^2 + 4*sin(kx)^2*sin(ky)^2+1e-30)
 end
+
 SqFieldTheory2(k,v,w) = SqFieldTheory2(k[1],k[2],v,w)
 
 function optimizeCoeffs(SqMat)
@@ -71,7 +76,10 @@ function optimizeCoeffs(SqMat)
         v = abs(v)
         w = abs(w)
         for (i,kx) in enumerate(k), (j,ky) in enumerate(k)
+            # l += abs2(SqMat[i,j] - SqFieldTheory2(kx,ky,v,w))#/(SqMat[i,j]+1e-5)
+            # if (kx^2 +ky^2) < (0.8pi)^2
             l += abs2(SqMat[i,j] - SqFieldTheory2(kx,ky,v,w))#/(SqMat[i,j]+1e-5)
+            # end
         end
         # for (i,kx) in enumerate(kx)
         #     l += abs2(SqMat[i,1] - SqFieldTheory2(kx,0,v,w))/(SqMat[i,1]+1e-5)
@@ -83,8 +91,8 @@ function optimizeCoeffs(SqMat)
     # inner_optimizer = GradientDescent()
     # v0 = 0.08125
     # w0 = 0.025
-    v0 = 63.
-    w0 = 0.00
+    v0 = 1.
+    w0 = 1.
     println(loss(v0,w0))
     x0 = [v0, w0]
     # (;v,w) = optimize(loss, [1e-10,1e-10],[Inf,Inf],Fminbox(inner_optimizer))
@@ -99,6 +107,9 @@ fittingCoeffs::NamedTuple{(:v, :w), Tuple{Float64, Float64}} = optimizeCoeffs(Sq
 SqFieldTheory(k) = SqFieldTheory2(k,fittingCoeffs...)
 SqFieldTheory(kx,ky) = SqFieldTheory2(kx,ky,fittingCoeffs...)
 ##
+# SqFieldTheory(k) = SqFieldTheory2(k,1/850,0.2/850)
+# SqFieldTheory(kx,ky) = SqFieldTheory2(kx,ky,1/850,0.2/850)
+
 
 
 with_theme(theme_PiTicks()) do 
@@ -298,20 +309,20 @@ with_theme(theme_PiTicks()) do
     xlabelpadding = -10,
     )
     
-    axpath1 = Axis(fig[2,1:3],xlabel = L"[hh]",ylabel = L"\mathcal{S}(\mathbf{q})",yticks = SimpleTicks(),xticks = PiTicks(),yminorticksvisible = true,xminorticksvisible = true,xminorgridvisible =true,yminorgridvisible=true,yaxisposition=:left,
+    axpath1 = Axis(fig[2,1:3],xlabel = L"k^4",ylabel = L"\mathcal{S}(\mathbf{q})",yticks = SimpleTicks(),xticks = PiTicks(),yminorticksvisible = true,xminorticksvisible = true,xminorgridvisible =true,yminorgridvisible=true,yaxisposition=:left,
 
     )
-    # axpath2 = Axis(fig[2,1:3],
-    # yaxisposition=:right,yticklabelcolor=:red,
-    # yticks = SimpleTicks(),
-    # xlabelvisible = false,
-    # ygridvisible=false,
-    # xgridvisible=false,
-    # xticklabelsvisible= false,
-    # xticksvisible= false,
-    # # xminorticksvisible=false
-    # ylabelvisible=false,
-    # )
+    axpath2 = Axis(fig[2,1:3],
+    yaxisposition=:right,yticklabelcolor=:red,
+    yticks = SimpleTicks(),
+    xlabelvisible = false,
+    ygridvisible=false,
+    xgridvisible=false,
+    xticklabelsvisible= false,
+    xticksvisible= false,
+    # xminorticksvisible=false
+    ylabelvisible=false,
+    )
     hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
     SqFT = [SqFieldTheory(x,y) for x in kx, y in ky]
 
@@ -320,18 +331,18 @@ with_theme(theme_PiTicks()) do
     path(t,angle) = t .*(cos(angle),sin(angle)) #.+ (pi,pi)
     
     
-    tRange = LinRange(0,.8pi,500)
+    tRange = LinRange(0,.2pi,500)
     # angle = deg2rad(45)
     angle = pi/4
     p1 = [path(t,angle) for t in tRange]
     xygrid = [(x+0.5pi,y+0.5pi) for x in kx, y in ky]
     tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
-    tRange² = (tRange) #.^2
+    tRange² = (tRange) .^4
     # filter!(x -> x[1] in kx && x[2] in ky,p1)
     lines!(axFT,Point.(xygrid[p1_discrete]);color=:red,linewidth = 2,linestyle = :dash)
     lines!(axMC,Point.(xygrid[p1_discrete]);color=:black,linewidth = 2)
     colors = (:black,:lightblue,:darkblue)
-    for (color,p) in zip(colors,(750,500))
+    for (color,p) in zip(colors,(1000,500))
         SqsGFMC = eachslice(res["SqsGFMC"][string(p)],dims=3)./4
 
         Sqp_all = [S[p1_discrete] for S in real(SqsGFMC)]
@@ -343,10 +354,11 @@ with_theme(theme_PiTicks()) do
         errorbars!(axpath1,tRange²,Sqp,Sqerr;color,whiskerwidth = 8)
         # xlims!(axpath1,-0.1,0.85pi)
     end
-    axislegend(axpath1,merge=true,position=:rb)
-    SqFTp = SqFieldTheory.(xygrid[p1_discrete])
+    axislegend(axpath1,merge=true,position=:lt)
+    SqFTp = [SqFieldTheory(x,y) for (x,y) in (xygrid[p1_discrete])]
 
-    lines!(axpath1,tRange²,SqFTp;color=:red,linewidth = 2,linestyle = :dash)
+    lines!(axpath2,tRange²,SqFTp;color=:red,linewidth = 2,linestyle = :dash)
+    lines!(axpath1,tRange²,tRange.^4*0.04/(0.03pi);color=:blue,linewidth = 2,linestyle = :solid)
     
     Colorbar(fig[1,3],hmMC,label = L"\mathcal{S}(\textbf{q})",height = Relative(1),ticks = SimpleTicks())
     Label(fig[1,1, TopLeft()],L"a)$$",padding =(-45,0,0,0))
