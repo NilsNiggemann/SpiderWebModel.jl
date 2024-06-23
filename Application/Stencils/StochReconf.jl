@@ -6,7 +6,7 @@ using Statistics
 using MakieHelpers
 using MKL
 ##
-S = SW.stencilConfig(zeros(20,20),1;
+S = SW.stencilConfig(zeros(12,12),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 # S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
@@ -19,7 +19,7 @@ nThermal = 100
 SW.Random.seed!(1234)
 DT = SW.DiscreteTimeMethod(0.,5,1.)
 
-stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,1000+ 200*i),ψG,50,0.6,SW.IterativeSRSolver();Nwalkers = 6*8,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
+stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,400+ 200*i),ψG,10,0.6,SW.IterativeSRSolver();Nwalkers = 6*8,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
 ##
 function plotVarEn(stochReconfRes)
     fig = Figure(theme = theme_SimpleTicks())

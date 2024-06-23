@@ -1,39 +1,12 @@
 import Pkg
-Pkg.activate("Application/")
+# Pkg.activate("../Application/")
 import SpiderWebModel as SW
 using CairoMakie
 using Statistics
 using MakieHelpers
 using SpiderWebModel
 
-function plotEnergies(results,nBra)
-    ens = [SW.getEnergies(res.TotalWeights,res.energies,1,250÷nBra) for res in results]
-
-    en = mean(ens)
-    # errs = getErrBlocking(results[1].energies[nThermal:end],results[1].TotalWeights[nThermal:end],2*10^4,20,E0) ./ ( (length(results[1].energies)-nThermal) ÷ 2*10^4)
-    ##
-    with_theme(theme_SimpleTicks()) do
-        fig = Figure(fontsize = 22)
-        ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
-        # ens = getfield.(obs,:E0)
-        en = mean(ens)
-        # M = length(results[1].energies)
-        # Mk = M ÷ length(ens)
-        # println(Mk)
-        err = sqrt.(var(ens))
-        # err = 0.004 .* ones(length(en))
-        proj = nBra .*eachindex(en)
-        scatter!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
-        errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black)
-        # hlines!([E0],color = :red,label = L"exact $$")
-        axislegend(ax,merge=true)
-        # xlims!(ax,0.5,last(proj))
-        # ylims!(ax,Emin,Emax)
-        # save("Application/exactFig/GFMCEnergy.png",fig)
-        fig
-    end
-end
-
+include("plottingUtils.jl")
 ##
 #___________Periodic Boundaries_______________________
 function getPeriodic(parent)
@@ -58,17 +31,22 @@ SqEx = SW.getStructureFac(HConfs,v0)
 GC.gc()
 GC.gc()
 
-outfile = "Data/temp/S12_5/"
+outfile = "Data/temp/S12_8/"
 rm(outfile;recursive=true,force=true)
 mkpath(outfile)
 nThermal = 1000
 nBra = 3
-ψG = SW.PlaquetteNumberGuidingFunction(0.197)
+ψG = SW.fullVariationalFunction(S,0.197)
+
 # ψG(N) = 1
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,8,1000÷nBra,nBra,ψG,1;outfile=string(outfile,i,".h5")) for i in 1:6])
+DT = SW.ContinuousTimeMethod(0.1,3,-E0)
+# stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,1000+ 200*i),ψG,50,0.6,SW.IterativeSRSolver();Nwalkers = 6*8,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
+# ψG = typeof(ψG)(stochReconfRes.params)
+# DT = SW.DiscreteTimeMethod(0,3,E0)
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,1000,ψG,equilibration_steps=0,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
 
 ##
-plotEnergies(results,nBra)
+plotEnergies(results,DT,E0,nThermal=10,normalize=true,Emin=NaN)
 
 ##___________ StraightForwardWalking _______________________
 # allPlaqs = collect(SW.plaquetteIterator(S))
@@ -92,10 +70,11 @@ let
 end
 ##
 BOp = SW.PlaquetteFlipOperator(S)
-resB = fetch.([Threads.@spawn SW.measure_operator(S,res.SaveConfigs,5,nBra,BOp,ψG,1;outfile = string(outfile,i,".h5")) for (i,res) in enumerate(results)])
+resB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,5,BOp,ψG,) for (i,res) in enumerate(results)])
+# resB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,5,BOp,ψG,1;outfile = string(outfile,i,".h5")) for (i,res) in enumerate(results)])
 ##
 BBOp = SW.BBOperator(S,refPlaq)
-resBB = fetch.([Threads.@spawn SW.measure_operator(S,res.SaveConfigs,5,nBra,BBOp,ψG,1;outfile = string(outfile,i,".h5")) for (i,res) in enumerate(results)])
+resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,5,BBOp,ψG,) for (i,res) in enumerate(results)])
 
 ##
 Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,10) for res in results]
