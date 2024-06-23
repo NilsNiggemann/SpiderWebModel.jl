@@ -90,7 +90,8 @@ end
 
 guidingfuncRatio_exponent(ψG::AbstractGuidingFunction,n::AbstractArray,n´::AbstractArray) = guidingfuncRatio_exponent(ψG,n,n´,eachindex(n,n´))
 
-function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightfunc::AbstractGuidingFunction,Λ=0)
+
+function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::AbstractGuidingFunction,Λ=0)
     (;Config,weights) = Walker
     empty!(weights)
     moves = getMoves!(Walker)
@@ -100,10 +101,10 @@ function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,weightf
         i,j,opNum = operator
         indices = AffectedPlaquetteList[i,j]
         applyPlaquette!(Config, i, j, opNum)
-         
+        
         n_x´ = getNPlaqfilled!(Walker,indices)
         
-        weight = guidingfuncRatio(weightfunc,n_x,n_x´,indices)
+        weight = guidingfuncRatio(ψG,n_x,n_x´,indices)
         push!(weights,weight)
         applyPlaquette!(Config, i, j, -opNum)
     end
@@ -167,6 +168,33 @@ function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::RK
         applyPlaquette!(Config, i, j, opNum)
         
         weight = length(moves)
+
+        push!(weights,weight)
+        applyPlaquette!(Config, i, j, -opNum)
+    end
+    if Λ != 0
+        push!(moves, DIAGONAL_MOVE_ID)
+        push!(weights,Λ)
+    end
+    return weights
+end
+
+function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::T,Λ=0) where T
+    (;Config,weights,moves,n_x,n_x´) = Walker
+    isempty(weights) && isempty(moves) || return weights #return if weights are already computed
+    
+    getMoves!(Walker)
+    getNPlaq!(Walker)
+    
+    for operator in moves
+        i,j,opNum = operator
+        indices = AffectedPlaquetteList[i,j]
+        applyPlaquette!(Config, i, j, opNum)
+        
+        getNPlaq!(Walker,indices)
+        
+        N□ = getNPlaq_difference(n_x,n_x´,indices) 
+        weight = ψG(N□)
 
         push!(weights,weight)
         applyPlaquette!(Config, i, j, -opNum)

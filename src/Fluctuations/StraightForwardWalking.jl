@@ -10,9 +10,9 @@ function PlaquetteFlipOperator(S::StencilSpinConfig)
     return PlaquetteFlipOperator(AffectedPlaquettes)
 end
 
-function apply_operator!(Walker::SpiderWebWalker,O::PlaquetteFlipOperator,weightfunc::T,I) where T
+function apply_operator!(Walker::SpiderWebWalker,O::PlaquetteFlipOperator,ψG::T,I) where T
     
-    weights = getWeightList1Move!(Walker,O.AffectedPlaquettes,weightfunc,I)
+    weights = getWeightList1Move!(Walker,O.AffectedPlaquettes,ψG,I)
 
     moveidx = StatsBase.sample(StatsBase.Weights(weights))
     move = (+1,-1)[moveidx]
@@ -22,30 +22,29 @@ function apply_operator!(Walker::SpiderWebWalker,O::PlaquetteFlipOperator,weight
     return w
 end
 
-function getWeightList1Move!(Walker::SpiderWebWalker,AffectedPlaquettes,weightfunc::T,I) where T
-    P⁺,P⁻ = P_applicable(Walker.Config,I)
+function getWeightList1Move!(Walker::SpiderWebWalker,AffectedPlaquettes,ψG::T,I) where T
+    i1,i2 = I
+    P⁺,P⁻ = P_applicable(Walker.Config,i1,i2)
     P⁺ || P⁻ || return SA[0.,0.]
 
     getNPlaq!(Walker)
 
-    w⁺ = P⁺ ? getWeight1Move!(Walker,AffectedPlaquettes,weightfunc,I,+1) : 0.
-    w⁻ = P⁻ ? getWeight1Move!(Walker,AffectedPlaquettes,weightfunc,I,-1) : 0.
+    w⁺ = P⁺ ? getWeight1Move!(Walker,AffectedPlaquettes,ψG,I,+1) : 0.
+    w⁻ = P⁻ ? getWeight1Move!(Walker,AffectedPlaquettes,ψG,I,-1) : 0.
 
     return SA[w⁺,w⁻]
 end
 
-function getWeight1Move!(Walker::SpiderWebWalker,AffectedPlaquettes,weightfunc::T,I,move) where T
+function getWeight1Move!(Walker::SpiderWebWalker,AffectedPlaquettes,ψG::T,I,move) where T
     (;Config,n_x,n_x´) = Walker
-
     i1,i2 = I
     applyPlaquette!(Config, i1,i2, move)
     
     indices = AffectedPlaquettes[i1,i2]
-    getNPlaq!(Walker,indices)
+    n_x´ = getNPlaqfilled!(Walker,indices)
 
-    N□ = getNPlaq_difference(n_x,n_x´,indices) 
+    weight = guidingfuncRatio(ψG,n_x,n_x´,indices)
 
-    weight = weightfunc(N□)
     applyPlaquette!(Config, i1,i2, -move)
 
     return weight
@@ -56,7 +55,7 @@ end
 """
 struct BBOperator <: AbstractOperator
     I::Tuple{Int,Int}
-    AffectedPlaquettes::Matrix{Vector{Int}}
+    AffectedPlaquettes::Matrix{OrderedCollections.OrderedSet{Int}}
 end
 
 # getBBOperator(I::Tuple,AffectedPlaquettes::Vector) =  BBOperator!(copy(AffectedPlaquettes),I)
@@ -66,7 +65,7 @@ function BBOperator!(AffectedPlaquettes::AbstractMatrix,Itup::Tuple)
     
     for J in CartesianIndices(AffectedPlaquettes)
         if J !== I && isassigned(AffectedPlaquettes,J)
-            unique!(append!(AffectedPlaquettes[J],affI))
+            union!(AffectedPlaquettes[J],affI)
         end
     end
     return BBOperator(Itup,AffectedPlaquettes)
@@ -76,7 +75,7 @@ function BBOperator(S::StencilSpinConfig,I::Tuple)
     return BBOperator!(AffectedPlaquettes,I)
 end
 
-function apply_operator!(Walker::SpiderWebWalker,O::BBOperator,weightfunc::T,J) where T
+function apply_operator!(Walker::SpiderWebWalker,O::BBOperator,ψG::T,J) where T
     I = O.I
     B2_flip_moves = SA[
         (1,1), #(+,+)
@@ -85,7 +84,7 @@ function apply_operator!(Walker::SpiderWebWalker,O::BBOperator,weightfunc::T,J) 
         (-1,-1), #(-,-)
     ]
     
-    weights = getWeightList2Moves!(Walker,B2_flip_moves,O.AffectedPlaquettes,weightfunc,I,J)
+    weights = getWeightList2Moves!(Walker,B2_flip_moves,O.AffectedPlaquettes,ψG,I,J)
     w = sum(weights)
     if iszero(w)
         return w
@@ -99,16 +98,16 @@ function apply_operator!(Walker::SpiderWebWalker,O::BBOperator,weightfunc::T,J) 
     return w
 end
 
-function getWeightList2Moves!(Walker::SpiderWebWalker,moves,AffectedPlaquettes,weightfunc::T,I,J) where T
+function getWeightList2Moves!(Walker::SpiderWebWalker,moves,AffectedPlaquettes,ψG::T,I,J) where T
     getNPlaq!(Walker)
 
     weights = map(moves) do move
-        getWeight2Moves!(Walker,AffectedPlaquettes,weightfunc,I,J,move)
+        getWeight2Moves!(Walker,AffectedPlaquettes,ψG,I,J,move)
     end
     return weights
 end
 
-function getWeight2Moves!(Walker::SpiderWebWalker,AffectedPlaquettes,weightfunc::T,I,J,move) where T
+function getWeight2Moves!(Walker::SpiderWebWalker,AffectedPlaquettes,ψG::T,I,J,move) where T
     (;Config,n_x,n_x´) = Walker
 
     idx_I,idx_J = @. 1 + (1-move) ÷ 2
@@ -130,30 +129,32 @@ function getWeight2Moves!(Walker::SpiderWebWalker,AffectedPlaquettes,weightfunc:
 
     N□ = getNPlaq_difference(n_x,n_x´,indices) 
 
-    weight = weightfunc(N□)
+    weight = ψG(N□)
     applyPlaquette!(Config, j1,j2, -move_J)
     applyPlaquette!(Config, i1,i2, -move_I)
 
     return weight
 end
 
-function initialize_forward_walking!(Walkers,weights,O::AbstractOperator,Configs,J,weightfunc::T) where T
+function initialize_forward_walking!(Walkers,weights,O::AbstractOperator,Configs,J::Tuple{Int,Int},ψG::T) where T
     # @inbounds for (α, Walker) in enumerate(Walkers)
     Threads.@threads for α in eachindex(Walkers)
         Walker = Walkers[α]
         ConfView = @view Configs[:,:,α]
         get_config(Walker) .= ConfView
-        wa = apply_operator!(Walker,O,weightfunc,J)
+        wa = apply_operator!(Walker,O,ψG,J)
         weights[α] = wa
     end
 end
+initialize_forward_walking!(Problem::AbstractGFMCProblem,O::AbstractOperator,Configs,J::Tuple{Int,Int}) = initialize_forward_walking!(Problem.Walkers,Problem.weights,O,Configs,J,Problem.ψG)
 
-function straight_forward_walking!(setup,NSteps,nBranch,weightfunc::T,Λ,w_avg_estimate) where T
+function straight_forward_walking!(prob::AbstractGFMCProblem,TotalWeights,reconfigurationList)
     
-    (;AffectedPlaquetteList,Walkers,weights,TotalWeights,reconfiguration_buffer,reconfigurationTable) = setup
+    (;Walkers,weights,AffectedPlaquetteList,reconfiguration_buffer,ψG,method) = prob
 
+    NSteps = size(TotalWeights,1)
     Operator_weight = mean(weights)
-    reconfigurationList = @view reconfigurationTable[:,1]
+
     reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
     
     if all(iszero,weights)
@@ -161,10 +162,11 @@ function straight_forward_walking!(setup,NSteps,nBranch,weightfunc::T,Λ,w_avg_e
         return TotalWeights
     end
     for i in 1:NSteps
-        propagateWalkers!(Walkers,weights,AffectedPlaquetteList,weightfunc,Λ,nBranch,w_avg_estimate)
-
+        
+        propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method)
+        
         TotalWeights[i] = mean(weights)
-        reconfigurationList = @view reconfigurationTable[:,i]
+
         reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
     end
     TotalWeights[begin] *= Operator_weight
@@ -181,32 +183,31 @@ end
 
 setup_operatorObservables(mProj,NumObs,NSteps,Op::AbstractOperator,outfile::Nothing) = zeros(NSteps,mProj,NumObs)
 
-function measure_operator(InitialState,outfile,SaveConfigs,mProj,nBranch,O::AbstractOperator,weightfunc::T,Λ,w_avg_estimate,AllPlaqs = collect(plaquetteIterator(InitialState))) where T
+function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::AbstractOperator,ψG::T,AllPlaqs = collect(plaquetteIterator(InitialState))) where T
     Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
     NSteps = NSteps
-    setup = setup_many_walker_GFMC(InitialState,Nwalkers,mProj)
+    setup = setup_many_walker_GFMC(InitialState,Nwalkers)
     results = setup_operatorObservables(mProj,length(AllPlaqs),NSteps,O,outfile)
+
+    Problem = SpiderwebGFMCProblem(method,InitialState,ψG,setup.Walkers,setup.weights,setup.AffectedPlaquetteList,setup.reconfiguration_buffer,results)
+
+    reconfigurationList = zeros(Int,length(Problem.Walkers))
     for n in 1:NSteps
         Configs = @view SaveConfigs[:,:,:,n]
         for (j,J) in enumerate(AllPlaqs)
-            initialize_forward_walking!(setup.Walkers,setup.weights,O,Configs,J,weightfunc)
-            res = straight_forward_walking!(setup,mProj,nBranch,weightfunc,Λ,w_avg_estimate)
-            results[:,j,n] .= res
+            initialize_forward_walking!(Problem,O,Configs,J)
+
+            TotalWeights = @view results[n,:,j]
+            straight_forward_walking!(Problem,TotalWeights,reconfigurationList)
+            # results[:,j,n] .= res
 
         end
     end
     return results
 end
 
-function measure_operator(InitialState,SaveConfigs,mProj,nBranch,O::AbstractOperator,weightfunc,Λ,w_avg_estimate,AllPlaqs = collect(plaquetteIterator(InitialState));outfile = nothing)
-    measure_operator(InitialState,outfile,SaveConfigs,mProj,nBranch,O,weightfunc,Λ,w_avg_estimate,AllPlaqs)
-end
-
-function measure_operator(InitialState,inputfile::AbstractString,O::AbstractOperator,mProj::Integer,weightfunc,w_avg_estimate,AllPlaqs = collect(plaquetteIterator(InitialState));outfile = nothing)
-    SaveConfigs = readMMapArray(inputfile,"SaveConfigs")
-    nBranch = h5read(inputfile,"nBra")
-    Λ = h5read(inputfile,"Λ")
-    measure_operator(InitialState,SaveConfigs,mProj,nBranch,O,weightfunc,Λ,w_avg_estimate,AllPlaqs;outfile)
+function measure_operator(InitialState,method::AbstractGFMCMethod,SaveConfigs,mProj,O::AbstractOperator,ψG,AllPlaqs = collect(plaquetteIterator(InitialState));outfile = nothing)
+    measure_operator(InitialState,method,outfile,SaveConfigs,mProj,O,ψG,AllPlaqs)
 end
 
 function get_observables_sfw(Gnp,sfw_weights,meanweight,m = size(sfw_weights,2))

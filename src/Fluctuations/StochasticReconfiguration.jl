@@ -235,18 +235,19 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
     
     ψG = deepcopy(ψG)
     params = ψG.params
-    
+
     convergedSteps = 0
 
-    E0s = Vector{Float64}()
-    ΔE = Vector{Float64}()
-    params_steps = Vector{typeof(params)}()
     normDelta = Inf
 
     _,indicesMapping,uniqueInds = getDistReduction(InitialState,ψG)
     maxNSteps = maximum(NSteps)
     prob = setup_GFMC_problem(InitialState,method,Nwalkers,maxNSteps,ψG) 
     initializeGFMC!(prob,equilibration_steps,pre_equilibration_steps,scatter_fraction)
+
+    results = get_stoch_rec_Observables(n,ψG,outfile)
+
+    ind = 0
     for i in 1:n
         
         range = eachindex(prob.Observables.TotalWeights)[1:NSteps[i]]
@@ -264,16 +265,18 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
         add_reconstructedFullParams!(ψG,indicesMapping,δα .*dt[i])
         
         E0 = mean(res.energies[range])
-        push!(E0s, E0)
-        ΔE0i = sqrt(var(res.energies[range]))
-        push!(ΔE,ΔE0i)
-
-        push!(params_steps, copy(params))
+        results.E0[i] = E0
+        ΔE0 = sqrt(var(res.energies[range]))
+        results.ΔE[i] = ΔE0
+        
+        # push!(params_steps, copy(params))
+        selectdim(results.params,arraydim(results.params),i) .= ψG.params
 
         α = get_alpha_i(ψG)
         w_avg = mean(res.TotalWeights[range])
-        @info "optimization step $i" dt[i] NSteps[i] "|δα|" = normDelta δα[1] E0 ΔE0 = ΔE0i convergedSteps mean(α) w_avg
+        @info "optimization step $i" dt[i] NSteps[i] "|δα|" = normDelta δα[1] E0 ΔE0 = ΔE0 convergedSteps mean(α) w_avg
 
+        ind = i
         if normDelta < rel_tolerance
             convergedSteps += 1
 
@@ -282,16 +285,12 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
             convergedSteps = 0
         end
     end
-    params_steps_arr = stack(params_steps)
-    if !isnothing(outfile)
-        h5write(outfile,"params",ψG.params)
-        h5write(outfile,"E0s",E0s)
-        h5write(outfile,"ΔE",ΔE)
-        h5write(outfile,"params_steps",params_steps_arr)
-    end
 
-    return (;params = params,E0_i = E0s,ΔE_i = ΔE,params_steps = params_steps_arr)
+    params = selectdim(results.params,arraydim(results.params),ind)
+
+    return (;results...,params)
 end
+arraydim(a::AbstractArray{T,N}) where {T,N} = N
 
 function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSteps,ψG,n,dt,solver::AbstractSRSolver = IterativeSRSolver();equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps,scatter_fraction=0.8)
     
@@ -304,3 +303,22 @@ end
 makeVec(x::AbstractVector,len) = x
 makeVec(x::Number,len) = fill(x,len)
 makeVec(f::Function,len) = f.(1:len)
+
+function get_stoch_rec_Observables(Nsteps,ψG,::Nothing)
+    E0 = zeros(Nsteps)
+    ΔE = zeros(Nsteps)
+    params = zeros(size(ψG.params)...,Nsteps)
+    return (;E0 = E0,ΔE = ΔE,params = params)
+end
+
+function get_stoch_rec_Observables(Nsteps,ψG,outfile::AbstractString)
+    h5open(outfile,"cw") do file
+        E0 = createMMapArray(file,"E0",Float64,(Nsteps,))
+        ΔE = createMMapArray(file,"ΔE",Float64,(Nsteps,))
+        params = createMMapArray(file,"params_steps",Float32,(size(ψG.params)...,Nsteps))
+        E0 .= 0
+        ΔE .= 0
+        params .= 0
+        return (;E0 = E0,ΔE = ΔE,params = params)
+    end
+end

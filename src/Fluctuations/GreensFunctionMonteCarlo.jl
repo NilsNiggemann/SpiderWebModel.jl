@@ -41,7 +41,8 @@ struct ContinuousTimeMethod{F2} <: AbstractGFMCMethod
     w_avg_estimate::Float64
     Hxx::F2
 end
-ContinuousTimeMethod(;τ,nBranch,w_avg_estimate=1.,Hxx) = ContinuousTimeMethod(τ,nBranch,w_avg_estimate,Hxx)
+ContinuousTimeMethod(τ,nBranch,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(τ,nBranch,w_avg_estimate,Hxx)
+ContinuousTimeMethod(;τ,nBranch,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(τ,nBranch,w_avg_estimate,Hxx)
 
 abstract type AbstractDiagonalOperator end
 (Hxx::AbstractDiagonalOperator)(x::SpiderWebWalker) = Hxx(get_config(x))
@@ -90,7 +91,7 @@ struct GFMCObservables{DT<:AbstractFloat,T,T2} <: AbstractGFMCObservables
 end
 
 function _setup_GFMC_problem(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,NSteps::Integer,ψG,outfile)
-    setup = setup_many_walker_GFMC(InitialState,Nwalkers,NSteps)
+    setup = setup_many_walker_GFMC(InitialState,Nwalkers)
     (;AffectedPlaquetteList,Walkers,weights,reconfiguration_buffer) = setup
     ObsSetup = setupObservables(InitialState,Nwalkers,NSteps,outfile)
     (;energies,SaveConfigs,TotalWeights,reconfigurationTable) = ObsSetup
@@ -211,7 +212,6 @@ function getNPlaqfilled!(Walker::SpiderWebWalker,affected_indices)
     # println(affected_indices)
     # empty!(n_x´)
     # resize!(n_x´,length(n_x))
-
     n_x´ .= n_x
 
     for PlaqIndex in affected_indices
@@ -234,33 +234,6 @@ function getNPlaq_difference(nPlaq_x,nPlaq_x´,affectedPlaquettes)
 end
 
 const DIAGONAL_MOVE_ID = (0,0,0)
-
-function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::T,Λ=0) where T
-    (;Config,weights,moves,n_x,n_x´) = Walker
-    isempty(weights) && isempty(moves) || return weights #return if weights are already computed
-    
-    getMoves!(Walker)
-    getNPlaq!(Walker)
-    
-    for operator in moves
-        i,j,opNum = operator
-        indices = AffectedPlaquetteList[i,j]
-        applyPlaquette!(Config, i, j, opNum)
-        
-        getNPlaq!(Walker,indices)
-        
-        N□ = getNPlaq_difference(n_x,n_x´,indices) 
-        weight = ψG(N□)
-
-        push!(weights,weight)
-        applyPlaquette!(Config, i, j, -opNum)
-    end
-    if Λ != 0
-        push!(moves, DIAGONAL_MOVE_ID)
-        push!(weights,Λ)
-    end
-    return weights
-end
 
 function performMarkovStep!(Walker::SpiderWebWalker)
     (;moves,weights) = Walker
@@ -451,7 +424,7 @@ function splitIntoBins(array,binsize)
     Iterators.partition(array,binsize)
 end
 
-function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers::Integer,NSteps::Integer) where {ConfType <: StencilSpinConfig}
+function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers::Integer) where {ConfType <: StencilSpinConfig}
     AffectedPlaquetteList = precomputeAffectedPlaquettes(InitialState)
     plaquettePositions = collect(plaquetteIterator(InitialState))
     Walkers = Vector{SpiderWebWalker{ConfType}}(undef,Nwalkers)
@@ -498,12 +471,15 @@ function readMMapArray(filename::AbstractString,datasetname::String)
     end
 end
 
-function saveParameters(filename::String,Λ,equilibration_steps,nBranch,ψG,w_avg_estimate)
+function saveParameters(filename::String,Λ,equilibration_steps,nBranch,ψG,w_avg_estimate;kwargs...)
     h5open(filename,"cw") do file
         file["Λ"] = Λ
         file["equilibration_steps"] = equilibration_steps
         file["nBranch"] = nBranch
         file["w_avg_estimate"] = w_avg_estimate
+        for (k,v) in kwargs
+            file[String(k)] = v
+        end
         saveVariationalParameter(file,ψG)
     end
 end
@@ -513,7 +489,7 @@ function saveParameters(filename::String,equilibration_steps,method::DiscreteTim
 end
 function saveParameters(filename::String,equilibration_steps,method::ContinuousTimeMethod,ψG)
     (;τ,nBranch,w_avg_estimate) = method
-    saveParameters(filename,τ,equilibration_steps,nBranch,ψG,w_avg_estimate)
+    saveParameters(filename,Inf,equilibration_steps,nBranch,ψG,w_avg_estimate;τ=τ)
 end
 
 saveParameters(::Nothing,args...) = nothing
@@ -529,7 +505,7 @@ end
 function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0, pre_equilibration_steps=equilibration_steps ÷ 5,scatter_fraction=0.8)
     
     (;AffectedPlaquetteList,Walkers,weights,reconfiguration_buffer,Observables,method,ψG) = prob
-    (;energies,SaveConfigs,outfile,TotalWeights,reconfigurationTable) = Observables
+    (;outfile,reconfigurationTable) = Observables
 
     saveParameters(outfile,equilibration_steps,method,ψG)
 
@@ -537,9 +513,9 @@ function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0, pre_eq
         random_init_walkers!(Walkers,pre_equilibration_steps,scatter_fraction)
     end
     #fill buffers for available steps and weights
+    reconfigurationList = @view reconfigurationTable[:,1]
     for _ in 1:equilibration_steps
         propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method)
-        reconfigurationList = @view reconfigurationTable[:,1]
         reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
     end
 
