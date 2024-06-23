@@ -7,3 +7,6 @@
 /docs/Manifest.toml
 /test/coverage/Manifest.toml
 .vscode/*
+/temp/*
+/Data/GFMC_1*
+*/ConfsRaw/*

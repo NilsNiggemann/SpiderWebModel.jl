@@ -2,65 +2,87 @@ using LatticeFFTs
 using LatticeFFTs
 using LatticeFFTs.Interpolations
 
-function getStructureFac(AllStates::AbstractVector{<:SpinConfig}, weights, tol = 0)
-    plan = getLatticeFFTPlan(AllStates[1].Mat, 0)
+function getStructureFacWeights(AllStates::AbstractVector{<:SpinConfig}, weights, tol = 0)
     # weights = abs2.(Psi)
     # state_weight = collect(zip( AllStates,weights))[inds]
+    Conf = parent(AllStates[1])
+    Sq = similar(Conf, Complex{eltype(Conf)})
+    Si = similar(Conf, Complex{eltype(Conf)})
+    plan = LatticeFFTs.FFTW.plan_fft(Conf)
+    # Sq(c) = mul!(outBuffer,plan,c)
+    
+    Lx,Ly = size(Conf)
 
-    Sq =
-        fetch.([
-            Threads.@spawn getInterpolatedFFT(
-                c.Mat,
-                0,
-                plan;
-                Interpolation = BSpline(Constant()),
-            ) for c in AllStates
-        ])
+    resultFull = similar(Sq,Lx+1,Ly+1)
+    resultFull .= 0
+    result = @view resultFull[1:end-1,1:end-1]
+
+    avgweight = mean(weights)
+    avgweight = 1
+    avgweight⁻¹ = 1 / avgweight
+    for (c, weight) in zip(AllStates, weights)
+        Si .= c
+        mul!(Sq, plan, Si)
+        result .+= abs2.(Sq) .* (avgweight⁻¹*weight)
+    end
+
+    kx = (0:Lx) .*(2pi/Lx)
+    ky = (0:Ly) .*(2pi/Ly)
     # Sq = [getInterpolatedFFT(weight* c.Mat,0,plan;Interpolation = BSpline(Constant())) for (c,weight) in state_weight]
-    SSq(kx, ky) = sum(w^2 * s(kx, ky) * s(-kx, -ky) for (w, s) in zip(weights, Sq))
+    # SSq(kx, ky) = sum(w^2 * s(kx, ky) * s(-kx, -ky) for (w, s) in zip(weights, Sq))
+    # SSq(kx, ky) = sum(w^2 * abs2(Sq[kx, ky]) for (w, s) in zip(weights, Sq))
 
-    k = Sq[1].itp.ranges[1]
-    Sq_k = fetch.([Threads.@spawn SSq(kx, ky) for kx in k, ky in k])
+    # k = Sq[1].itp.ranges[1]
+    # Sq_k = fetch.([Threads.@spawn SSq(Tuple(I)...) for I in CartesianIndices(Sq[1])])
+    result = result .* (avgweight)
+    resultFull[end,1:end] .= resultFull[1,1:end]
+    resultFull[1:end,end] .= resultFull[1:end,1]
 
-    return (; k, Sq = SSq, Sq_k)
+    return (; kx,ky, Sq = resultFull)
+end
+
+import LatticeFFTs.Interpolations
+
+function _convertToInds(k,L)
+    k´ = mod2pi(k)
+    i = round(Int,k´/2pi*L)+1
+    # i = rem(i,L)+1
+end
+
+function getSqCont(SqMat)
+    Lx,Ly = size(SqMat) .-1
+
+    function Sq(kx,ky)
+        ix = _convertToInds(kx,Lx)
+        iy = _convertToInds(ky,Ly)
+        # ix = rem2pi(kx´)*(Lx-1)+1
+        return SqMat[ix,iy]
+    end
+    # dims = size(SqMat) .-1
+    # nk = Tuple(0:N for N in dims)
+    # Sq = Interpolations.interpolate(SqMat, Interpolations.NoInterp())
+    # Sq = Interpolations.scale(Sq, 2π ./ dims .* nk)
+    # Sq = Interpolations.extrapolate(Sq, Periodic())
+
+    # Sq(k) = Sq(k[1],k[2])
+    return Sq
 end
 
 function getStructureFac(
     AllStates::AbstractVector{<:SpinConfig},
-    eigen::Union{Eigen,NamedTuple},
+    ψ0::AbstractVector,
     tol = 0,
 )
-    Psi = eigen.vectors[:, 1]
     NumSites = length(AllStates[1])
-    weights = abs2.(Psi) ./ NumSites
-    return getStructureFac(AllStates, weights, tol)
+    weights = abs2.(ψ0) ./ NumSites
+    return getStructureFacWeights(AllStates, weights, tol)
 end
 
 function getEqualWeightStructureFac(AllStates)
-    plan = getLatticeFFTPlan(AllStates[1].Mat, 0)
-    Sq =
-        fetch.([
-            Threads.@spawn getInterpolatedFFT(
-                c.Mat,
-                0,
-                plan;
-                Interpolation = BSpline(Constant()),
-            ) for c in AllStates
-        ])
-
     NumSites = length(AllStates[1])
-    weight(Nstates) = 1 / (Nstates * NumSites)
-
-    SSq(kx, ky) = sum(s(kx, ky) * s(-kx, -ky) for s in Sq) * weight(length(Sq))
-
-    function SSq(kx, ky, maxindex)
-        sum(Sq[i](kx, ky) * Sq[i](-kx, -ky) for i = 1:maxindex) * weight(maxindex)
-    end
-
-    k = Sq[1].itp.ranges[1]
-    Sq_k = fetch.([Threads.@spawn SSq(kx, ky) for kx in k, ky in k])
-
-    return (; k, Sq = SSq, Sq_k)
+    weights = abs2.(normalize!(ones(length(AllStates)))) ./ NumSites
+    println(weights[1])
+    return getStructureFacWeights(AllStates, weights)
 end
 
 getR(ij::CartesianIndex{2}) = float(SA[ij[1], ij[2]])
@@ -79,24 +101,22 @@ function getRij_vec(Config::SpinConfig)
     return [Ri[i] - Ri[j] for i in eachindex(Ri) for j = 1:i]
 end
 
-function getSij(Configs::AbstractVector{<:SpinConfig}, i, j)
-    return mean(c[i] * c[j] for c in Configs)
+function getSij(AllStates, ψ0::AbstractVector,i,j)
+    Sij = 0.
+    for n in eachindex(ψ0)
+        Si = AllStates[n][i]
+        Sj = AllStates[n][j]
+        Sij += abs2(ψ0[n]) * Si*Sj
+    end
+    return Sij
 end
 
-function getSij(Configs::AbstractVector{<:SpinConfig}, i)
-    return fetch.([Threads.@spawn getSij(Configs, i, j) for j in eachindex(Configs[1])])
-end
-
-function getSij(Configs::AbstractVector{<:SpinConfig})
-    fac(i, j) = ifelse(i == j, 1, 2)
-    return fetch.([
-        Threads.@spawn fac(i, j) * getSij(Configs, i, j) for i in LinearIndices(Configs[1])
-        for j = 1:i
-    ])
-end
-
-function getMagnetization(AllStates, eigen)
+function getMagnetization(AllStates, eigen::AbstractMatrix)
     ψ0 = eigen.vectors[:, 1]
+    return getMagnetization(AllStates, ψ0)
+end
+
+function getMagnetization(AllStates, ψ0::AbstractVector)
     mag = zeros(AllStates |> first |> size)
     for n in eachindex(ψ0)
         Si = AllStates[n]
@@ -105,47 +125,91 @@ function getMagnetization(AllStates, eigen)
     return mag
 end
 
-function getMagnetization(AllStates::AbstractVector{<:LazyConfig}, eigen)
-    ψ0 = eigen.vectors[:, 1]
 
-    InitConfig = first(AllStates).parent
-    Conf = copy(InitConfig)
-    mag = zeros(size(Conf))
+function getBi_square(AllStates,plaqMapping,ψ0::AbstractVector,I)
+    res = 0.
+    AllStatesDict = Dict(AllStates[i] => i for i in eachindex(AllStates))
+    @inline function flipPlaquette(StateRep,ij)
+        plaqstate = StateRep[ij]
+        setindex(StateRep, ij, !plaqstate)
+    end
 
     for n in eachindex(ψ0)
-        Si = spinConfig!(Conf, AllStates[n])
-        mag .+= abs2(ψ0[n]) .* Si
-    end
-    return mag
-end
+        x = AllStates[n]
 
-function getStructureFac(AllStates::AbstractVector{<:LazyConfig}, eigen, tol = 0)
-    Conf = spinConfig(first(AllStates))
-
-    plan = getLatticeFFTPlan(Conf.Mat, 0)
-    Psi = eigen.vectors[:, 1]
-    Nsites = length(Conf)
-
-    function getSqi(state, ψn)
-        Conf = spinConfig!(Conf, state)
-        getInterpolatedFFT(
-            abs2(ψn) * Conf.Mat,
-            0,
-            plan;
-            Interpolation = BSpline(Constant()),
-        )
-    end
-    Sq = getSqi(first(AllStates), first(Psi))
-    k = Sq.itp.ranges[1]
-    Sq_k = zeros(length(k), length(k))
-
-    for (c, psin) in zip(AllStates, Psi)
-        Sqi = getSqi(c, psin)
-        for (i, kx) in enumerate(k)
-            for (j, ky) in enumerate(k)
-                Sq_k[i, j] += real(Sqi(kx, ky))
-            end
+        x´ = flipPlaquette(x, plaqMapping(I))
+        if x´ in keys(AllStatesDict)
+            m´ = AllStatesDict[x´]
+            res += ψ0[n] * ψ0[m´]
         end
     end
-    return (; k, Sq_k)
+    return res
+end
+
+function getBij_square(AllStates,plaqMapping,ψ0::AbstractVector,I,J)
+    res = 0.
+    AllStatesDict = Dict(AllStates[i] => i for i in eachindex(AllStates))
+    @inline function flipPlaquette(StateRep,ij)
+        plaqstate = StateRep[ij]
+        setindex(StateRep, ij, !plaqstate)
+    end
+
+    for n in eachindex(ψ0)
+        x = AllStates[n]
+
+        x´ = flipPlaquette(x, plaqMapping(I))
+        x´ in keys(AllStatesDict) || continue # do not allow virtual tunneling out of Hilbert space
+        x´ = flipPlaquette(x´,plaqMapping(J))
+        
+        if x´ in keys(AllStatesDict)
+            m´ = AllStatesDict[x´]
+            res += ψ0[n] * ψ0[m´]
+        end
+    end
+    return res
+end
+copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
+@views function getSqGFMC(res,p)
+    Gnp = precomputeNormalizedAccWeight(res.TotalWeights,1,p)    # Gnp = ones(length(res.TotalWeights[nThermal:end]),p)
+
+    Conf = res.SaveConfigs[:,:,begin,begin]
+    NSites = length(Conf)
+    Sq = similar(Conf, ComplexF32)
+    
+    Si = similar(Conf, ComplexF32)
+    plan = LatticeFFTs.FFTW.plan_fft(Si)
+
+    function SqFunc(Conf)
+        # Si .= Conf
+        copytont!(Si,Conf)
+        mul!(Sq, plan, Si)
+        for i in eachindex(Sq)
+            Sq[i] = abs2(Sq[i])
+        end
+        Sq
+        # Sq .= abs2.(Sq)
+    end
+    SaveConfs = res.SaveConfigs
+    reconfTable = res.reconfigurationTable
+    res = getObs(Gnp,SaveConfs,reconfTable,SqFunc,p÷2)
+    newRes = similar(res,size(res).+1)
+    newRes[begin:end-1,begin:end-1] .= res
+
+    @views newRes[end,begin:end] .= newRes[begin,:]
+    @views newRes[begin:end,end] .= newRes[:,begin]
+    return real(newRes ./NSites)
+    # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
+end
+
+function getSqsGFMC(Results,p,nBra=nothing)
+    getNbra(res,::Nothing) = res.nBra
+    getNbra(res,nBra) = nBra
+    Sqs = Vector{Matrix{Float64}}(undef,length(Results))
+    Threads.@threads for i in eachindex(Results,Sqs)
+        res = Results[i]
+        _nBra = getNbra(res,nBra)
+        Sq = getSqGFMC(res,p÷_nBra)
+        Sqs[i] = Sq
+    end
+    return Sqs
 end

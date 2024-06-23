@@ -1,4 +1,4 @@
-function getCharges(Conf::SpinConfig, flipParity = false)
+function getCharges(Conf::AbstractSpinConfig, flipParity = false)
     Charges = zeros(size(Conf.Mat))
 
     for i in axes(Conf.Mat, 1), j in axes(Conf.Mat, 2)

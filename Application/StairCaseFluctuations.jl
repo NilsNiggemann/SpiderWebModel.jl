@@ -1,50 +1,20 @@
 import SpiderWebModel as SW
-using StaticArrays, CairoMakie
+using CairoMakie
 using MakieHelpers
-import SpiderWebModel: getStairCase
+import SpiderWebModel: getStairCase, StaticArrays
 ##
 function getPeriodic(parent)
     state = parent |> Array
     SW.SpinConfig(SW.PeriodicMatrix(state), parent.S)
 end
 ##
-let
-    state = getStairCase(14)
-    GC.gc()
-    # @time SW.getAllNeighborStates(state)
-    @time SW.generateAllPaths(state)
-end
-##
 
-##
-function plotPath()
-    # state = SW.getStairCase(8)
-    state = getPeriodic(SW.periodicState5x5(10))
-    # state = SW.SpinConfig(SW.PeriodicMatrix(state),1/2)
-
-    @time res = SW.getAllNeighborStates(state)
-    current = 1
-
-    display(SW.plotApplPlaquettes(res.AllStates[current]))
-    for i = 1:20
-        current = rand(res.Neighbors[current])
-        display(SW.plotApplPlaquettes(res.AllStates[current]))
-    end
-    state
-end
-plotPath()
-##
-
-##
-# Stair = getStairCase(12)
-# @profview res = SW.getAllNeighborStates(Stair)
-##
-
-function solveED(state, μ, args...; kwargs...)
-    @time res = SW.getAllNeighborStates(state)
-    @time H = SW.H(res.AllStates, res.Neighbors, μ)
-    @time sol = SW.SolveH(H, args...; kwargs...)
-    return (; res, sol, H)
+function solveED(state, args...; kwargs...)
+    @time HilbertSpace = SW.generateHilbertSpace(state)
+    @time sol = SW.SolveHKrylov(HilbertSpace.H, args...; kwargs...)
+    E0 = sol.values[1]
+    ψ0 = sol.vectors[1]
+    return (;E0,ψ0,HilbertSpace)
 end
 
 function getObservables(res, sol)
@@ -94,15 +64,38 @@ function plotOverview(Observables; title = L"")
     end
 end
 
+getRKWavefunction(ψ) = SW.normalize!(one.(ψ))
 plotOverview(res, sol; kwargs...) = plotOverview(getObservables(res, sol); kwargs...)
 
 ##
-
-μ = 0
-Sol5x5 = solveED(SW.periodicState5x5(14), μ)
+InitialConf = getPeriodic(SW.getStairCase(14))
+SolStair = solveED(InitialConf)
 ##
-# @profview plotOverview(Sol5x5.res,Sol5x5.sol,title = L"$5×5$ state, $μ = %$μ$")
-@time plotOverview(Sol5x5.res, Sol5x5.sol, title = L"$5×5$ state, $μ = %$μ$")
+with_theme(theme_PiTicks()) do
+    
+    fig = Figure(size = 0.8 .* (600, 300))
+    ticks = PiTicks([pi,2pi])
+    ax1 = Axis(fig[1, 1], xlabel = L"q_x", ylabel = L"q_y", aspect = 1,xminorticksvisible = true, yminorticksvisible = true,xticks = ticks, yticks = ticks,title = L"\mu = 0")
+    ax2 = Axis(fig[1, 2], xlabel = L"q_x", ylabel = L"q_y", aspect = 1,ylabelvisible = false,yticklabelsvisible = false,xminorticksvisible = true, yminorticksvisible = true,xticks = ticks, yticks = ticks,title = L"\mu=1")
+    States = SW.spinConfig.(SolStair.HilbertSpace.AllStates,Ref(InitialConf),Ref(SolStair.HilbertSpace.plaqMapping))
+    Sq = SW.getStructureFac(States, SolStair.ψ0)
+    kx = collect(Sq.kx)
+    ky = collect(Sq.ky)
+    kx .+= pi/2
+    ky .+= pi/2
+    SqFunc = SW.getSqCont(Sq.Sq)
+    SqMat = [real(SqFunc(x,y)) for x in kx, y in ky]
+
+    SqRK = SW.getStructureFac(States, getRKWavefunction(SolStair.ψ0))
+    colorrange = extrema(SqMat)
+    SqRKFunc = SW.getSqCont(SqRK.Sq)
+    SqRKMat = [real(SqRKFunc(x,y)) for x in kx, y in ky]
+    hm1 = heatmap!(ax1, kx, ky, SqMat;colorrange )
+    hm2 = heatmap!(ax2, kx, ky, SqRKMat;colorrange)
+    Colorbar(fig[1, 3], hm2, label = L"\mathcal{S}^{zz}(\mathbf{q})")
+    save("exactFig/StructureFacRKComparison.pdf", fig)
+    fig
+end
 ##
 
 Sol6x6 = solveED(SW.periodicState6x6(14), μ)

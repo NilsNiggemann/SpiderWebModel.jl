@@ -1,15 +1,15 @@
 using CairoMakie
 using CairoMakie.Makie.ColorSchemes
-function plotSpinConfig!(ax, S::SpinConfig; plotConstraints = true, kwargs...)
+function plotSpinConfig!(ax, S::AbstractSpinConfig; plotConstraints = true, kwargs...)
     vals = filter!(x -> !ismissing(x) && !isnan(x), unique(S.Mat))
     isempty(vals) && (vals = [-1, 1])
-    Amin = min(minimum(vals), -S.S)
-    Amax = max(maximum(vals), S.S)
+    Amin = min(minimum(vals), -getSpin(S))
+    Amax = max(maximum(vals), getSpin(S))
     us = Amin:Amax
     # hm = heatmap!(ax,Array(S.Mat),colorrange = (Amin,Amax),colormap = cgrad(:linear_bgy_10_95_c74_n256, length(us), categorical = true);kwargs...)
     hm = heatmap!(
         ax,
-        Array(S.Mat),
+        Array(parent(S)),
         colorrange = (Amin, Amax),
         colormap = cgrad(:grays, length(us), categorical = true);
         kwargs...,
@@ -23,7 +23,7 @@ function plotSpinConfig!(ax, S::SpinConfig; plotConstraints = true, kwargs...)
     return hm
 end
 
-function plotSpinConfig!(ax, S::SpinConfig{Bool}; kwargs...)
+function plotSpinConfig!(ax, S::AbstractSpinConfig{Bool}; kwargs...)
     plotSpinConfig!(ax, floatSpinConfig(S); kwargs...)
 end
 
@@ -51,8 +51,9 @@ function plotSpinConfig(S; kwargs...)
     fig = Figure(size = 1.2 .* (450, 400))
     ax = Axis(fig[1, 1]; getConfigAxis(S)...)
     hm = plotSpinConfig!(ax, S; kwargs...)
-    us = filter!(x -> !ismissing(x) && !isnan(x), unique(S))
-    isempty(us) && (us = [-1, 1])
+    # us = filter!(x -> !ismissing(x) && !isnan(x), unique(S))
+    us = -S.S:S.S
+    # isempty(us) && (us = [-1, 1])
     Colorbar(fig[1, 2], hm, ticks = us)
     return fig
 end

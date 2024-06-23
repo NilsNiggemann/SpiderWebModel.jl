@@ -2,7 +2,7 @@ using SpinFRGLattices
 using SpinFRGLattices.Octochlore: spin
 using SpinFRGLattices.StructArrays
 using CairoMakie
-using StaticArrays
+using SpinFRGLattices.StaticArrays
 using MakieHelpers
 ##
 Lm(qx, qy) = 2SVector(cos(qx + qy) - cos(qx - qy), cos(qx) - cos(qy))
@@ -50,14 +50,11 @@ function getCouplingsToS1(RefSite = Rvec(0, 0, 1))
 end
 
 ##
-using DataFrames
-
-##
 p0 = Point2f(1, 0)
 a = SpinFRGLattices.Octochlore.reduceCouplings(getCouplingsToS1(Rvec(p0..., 1)))
 filter!(x -> x.fac != 0, a)
 filter!(x -> x.site != Rvec(p0..., 1), a)
-aDF = DataFrame(; n1 = StructArray(a.site).n1, n2 = StructArray(a.site).n2, fac = a.fac)
+# aDF = DataFrame(; n1 = StructArray(a.site).n1, n2 = StructArray(a.site).n2, fac = a.fac)
 ##
 let
     p0 = Point2f(0, 0)
@@ -65,7 +62,8 @@ let
     filter!(x -> x.fac != 0, a)
     filter!(x -> x.site != Rvec(p0..., 1), a)
 
-    aDF = DataFrame(; n1 = StructArray(a.site).n1, n2 = StructArray(a.site).n2, fac = a.fac)
+    # aDF = DataFrame(; n1 = StructArray(a.site).n1, n2 = StructArray(a.site).n2, fac = a.fac)
+    aDF = StructArray(;fac = a.fac, n1 = StructArray(a.site).n1, n2 = StructArray(a.site).n2)
 
     p = [Point2f(n1, n2) for (n1, n2) in zip(aDF.n1, aDF.n2)]
     fig = Figure()
@@ -136,7 +134,7 @@ let
         a = SpinFRGLattices.Octochlore.reduceCouplings(getCouplingsToS1(Rvec(p0..., 1)))
         filter!(x -> x.fac != 0, a)
         filter!(x -> inbox(x.site), a)
-        aDF = DataFrame(;
+        aDF = StructArray(;
             n1 = StructArray(a.site).n1,
             n2 = StructArray(a.site).n2,
             fac = a.fac,
@@ -144,15 +142,17 @@ let
 
         p = [Point2f(n1, n2) for (n1, n2) in zip(aDF.n1, aDF.n2)]
 
-        col = Dict(0 => :black, 2 => :red, -2 => :blue, 4 => :darkred, -4 => :darkblue)
+        col = Dict(0 => :black, 2 => :red, -2 => :blue, 4 => :red, -4 => :blue)
+        # ls = Dict(0 => :solid, 2 => :dash, -2 => :dash, 4 => :solid, -4 => :solid)
 
         for (i, p) in enumerate(p)
             lines!(
                 [p0, p],
-                linewidth = 2 * abs(aDF.fac[i]),
+                linewidth = 1 * abs(aDF.fac[i]),
                 # color=col[aDF.fac[i]],
                 color = :black,
-                label = string(aDF.fac[i]),
+                label = Makie.latexstring(aDF.fac[i]),
+                # linestyle = ls[aDF.fac[i]],
             )
             push!(PlotPoints, p)
         end
@@ -161,7 +161,73 @@ let
 
     # axislegend(ax,unique=true)
 
-    save("couplings_All_plaq.png", fig)
+    save("couplings_All_plaq.svg", fig)
+    fig
+end
+
+##
+
+let
+    L = 1
+    AllPoints = [Point2f(n1, n2) for n1 = (-L):L for n2 = (-L):L]
+    inbox(x) = abs(x[1]) <= 1 && abs(x[2]) <= 1
+    inbox(x::Rvec_2D) = abs(x.n1) <= 1 && abs(x.n2) <= 1
+    filter!(inbox, AllPoints)
+
+    fig = Figure(size = (400, 400), backgroundcolor = :transparent)
+    ax = Axis(
+        fig[1, 1],
+        aspect = 1,
+        xgridcolor = :black,
+        ygridcolor = :black,
+        backgroundcolor = (:white, 0.0),
+        xticks = [-1, 0, 1],
+        yticks = [-1, 0, 1],
+        xticklabelsvisible = false,
+        yticklabelsvisible = false,
+        xticksvisible = false,
+        yticksvisible = false,
+        xgridvisible = false,
+        ygridvisible = false,
+        bottomspinevisible = false,
+        topspinevisible = false,
+        leftspinevisible = false,
+        rightspinevisible = false,
+    )
+
+    PlotPoints = Set(copy(AllPoints))
+    for p0 in AllPoints
+        a = SpinFRGLattices.Octochlore.reduceCouplings(getCouplingsToS1(Rvec(p0..., 1)))
+        filter!(x -> x.fac != 0, a)
+        filter!(x -> inbox(x.site), a)
+        aDF = StructArray(;
+            n1 = StructArray(a.site).n1,
+            n2 = StructArray(a.site).n2,
+            fac = a.fac,
+        )
+
+        p = [Point2f(n1, n2) for (n1, n2) in zip(aDF.n1, aDF.n2)]
+
+        col = Dict(0 => :black, 2 => :red, -2 => :blue, 4 => :red, -4 => :blue)
+        ls = Dict(0 => :solid, 2 => :dash, -2 => :dash, 4 => :solid, -4 => :solid)
+
+        for (i, p) in enumerate(p)
+            lines!(
+                [p0, p],
+                linewidth = 0.6 * abs(aDF.fac[i])^2 + 0.5aDF.fac[i],
+                color=col[aDF.fac[i]],
+                # color = :black,
+                label = Makie.latexstring(aDF.fac[i]),
+                # linestyle = ls[aDF.fac[i]],
+            )
+            push!(PlotPoints, p)
+        end
+    end
+    scatter!(collect(PlotPoints), color = :black, markersize = 32)
+
+    # axislegend(ax,unique=true)
+
+    save("couplings_All_plaq.svg", fig)
     fig
 end
 ##

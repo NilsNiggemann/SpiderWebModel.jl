@@ -33,17 +33,17 @@ function getSitesFromPlaquette(Mat::AbstractMatrix)
     )
 end
 
-function getSitesFromPlaquette(P::SpinConfig)
+function getSitesFromPlaquette(P::AbstractSpinConfig)
     return getSitesFromPlaquette(P.Mat)
 end
 
-function constraint(P::SpinConfig)
+function constraint(P::AbstractSpinConfig)
     return constraint(getSitesFromPlaquette(P))
 end
 
-function getPlaquette(S::SpinConfig, i, j)
-    Mat = @view S.Mat[(i-1):(i+1), (j-1):(j+1)]
-    return SpinConfig(Mat, S.S)
+Base.@propagate_inbounds function getPlaquette(S::AbstractSpinConfig, i, j)
+    Mat = @view parent(S)[(i-1):(i+1), (j-1):(j+1)]
+    return SpinConfig(Mat, getSpin(S))
 end
 
 """generates all possible combinations 0,1 of the 8 spins in a plaquette """
@@ -75,14 +75,14 @@ function plaquetteIsInBounds(Conf::AbstractMatrix, iCenter::Integer, jCenter::In
     return checkbounds(Bool, Conf, i, j)
 end
 
-function plaquetteIsInBounds(Conf::SpinConfig, iCenter::Integer, jCenter::Integer)
-    plaquetteIsInBounds(Conf.Mat, iCenter, jCenter)
+function plaquetteIsInBounds(Conf::AbstractSpinConfig, iCenter::Integer, jCenter::Integer)
+    plaquetteIsInBounds(parent(Conf), iCenter, jCenter)
 end
 
-function allSpinsInBounds(Conf::SpinConfig; verbose = false)
-    for x in Conf.Mat
+function allSpinsInBounds(Conf,Spin; verbose = false)
+    for x in Conf
         isnan(x) && continue
-        if abs(x) > Conf.S
+        if abs(x) > Spin
             verbose && println("Spin larger than S")
             return false
         end
@@ -90,9 +90,13 @@ function allSpinsInBounds(Conf::SpinConfig; verbose = false)
     return true
 end
 
+function allSpinsInBounds(Conf::AbstractSpinConfig; verbose = false)
+    allSpinsInBounds(parent(Conf.Mat), getSpin(Conf); verbose)
+end
+
 """Assumes that constraint are only defined on every alternating site, starting from the first index"""
-function fulFillsConstraint_nonStrict(Conf::SpinConfig, flipParity = false; verbose = false)
-    for i in axes(Conf.Mat, 1), j in axes(Conf.Mat, 2)
+function fulFillsConstraint_nonStrict(Conf::AbstractSpinConfig, flipParity = false; verbose = false)
+    for i in axes(Conf, 1), j in axes(Conf, 2)
         iseven(i + j + flipParity) || continue
         plaquetteIsInBounds(Conf, i, j) || continue
         P = getPlaquette(Conf, i, j)
@@ -109,7 +113,7 @@ function fulFillsConstraint_nonStrict(Conf::SpinConfig, flipParity = false; verb
     return true
 end
 
-function fulFillsConstraint(Conf::SpinConfig, flipParity = false; verbose = false)
+function fulFillsConstraint(Conf::AbstractSpinConfig, flipParity = false; verbose = false)
     allSpinsInBounds(Conf; verbose) || return false
     return fulFillsConstraint_nonStrict(Conf, flipParity; verbose)
 end

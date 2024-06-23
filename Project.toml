@@ -1,7 +1,7 @@
 name = "SpiderWebModel"
 uuid = "8e1b84da-b1d7-4311-a21b-52324f990117"
 authors = ["Nils Niggemann <nils.niggemann@fu-berlin.de>"]
-version = "0.1.0"
+version = "0.3.0"
 
 [deps]
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
@@ -15,10 +15,13 @@ Dictionaries = "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4"
 Gurobi = "2e9cd046-0924-5485-92f1-d5272153d98b"
 H5Zblosc = "c8ec2601-a99c-407f-b158-e79c03c2f5f7"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153"
 JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 LatticeFFTs = "83e9f648-131d-4a3c-a1de-d155351cd207"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
+LoopVectorization = "bdcacae8-1622-11e9-2a5c-532679323890"
 MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
@@ -26,6 +29,8 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+Stencils = "264155e8-78a8-466a-aa59-c9b28c34d21a"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [extras]
