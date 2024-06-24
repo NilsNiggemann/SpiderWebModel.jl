@@ -5,8 +5,9 @@ using CairoMakie
 using Statistics
 using MakieHelpers
 using MKL
+include("plottingUtils.jl")
 ##
-S = SW.stencilConfig(zeros(12,12),1;
+S = SW.stencilConfig(zeros(18,18),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 # S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
@@ -14,12 +15,12 @@ boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 ψG = SW.fullVariationalFunction(S,0.15)
 # ψG = SW.localPlaquetteGuidingFunction(S,0.15)
 # SW.get_beta_ij(ψG) .= 0.0001
-nThermal = 100
+nThermal = 300
 ##
 SW.Random.seed!(1234)
-DT = SW.DiscreteTimeMethod(0.,5,1.)
+DT = SW.DiscreteTimeMethod(0.,10,prod(size(S)))
 
-stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,400+ 200*i),ψG,10,0.6,SW.IterativeSRSolver();Nwalkers = 6*8,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
+stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,10+ 2*i),ψG,50,0.03,SW.IterativeSRSolver();Nwalkers = 6*20,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
 ##
 function plotVarEn(stochReconfRes)
     fig = Figure(theme = theme_SimpleTicks())
@@ -27,11 +28,11 @@ function plotVarEn(stochReconfRes)
     ax = Axis(fig[1, 1], xlabel = "Iteration", ylabel = "Energy",xlabelvisible=false,xticklabelsvisible=false)
     ax2 = Axis(fig[2,1], xlabel = "Iteration", ylabel = "α")
 
-    E_min = minimum(stochReconfRes.E0_i)
-    Epl =stochReconfRes.E0_i
+    E_min = minimum(stochReconfRes.E0)
+    Epl =stochReconfRes.E0
     # Epl = abs.(stochReconfRes.E0_i .- E_min)
     x = eachindex(Epl)
-    errorbars!(ax,x,Epl,stochReconfRes.ΔE_i,whiskerwidth=5)
+    errorbars!(ax,x,Epl,stochReconfRes.ΔE,whiskerwidth=5)
     lines!(ax,x,Epl)
     # ylims!(ax,0.001,10.)
     # lines!(ax2,x,SW.mean(stochReconfRes.params_steps,dims=1)[1,1,:])
@@ -43,19 +44,19 @@ plotVarEn(stochReconfRes)
 ##
 SW.Random.seed!(12322)
 nThermal = 0
-DT = SW.DiscreteTimeMethod(0.,5,size(S,1)^2/4)
+DT = SW.DiscreteTimeMethod(0.,5,prod(size(S))/4)
 ψGnew = typeof(ψG)(stochReconfRes.params)
 
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,5_000,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,80,1_000,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:6])
 ##
 SW.Random.seed!(1232)
 
 # @time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,2*80,750,nBraOld,ψGold,1;equilibration_steps=nThermal,pre_equilibration_steps=nBra*nThermal,w_avg_estimate = 8.) for _ in 1:32])
-@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,5_000,ψG;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:6])
+@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,80,1_000,ψG;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:6])
 ##
 # plotEnergies(results,nBra,-20.35;Emin=-20.5,Emax=-19.8) # L=10
-plotEnergies(resultsOld,DT.nBranch,nThermal=100,p=400)
-plotEnergies!(results,DT.nBranch;nThermal=100,p=400,color=:red) # L=15
+plotEnergies(resultsOld,DT.nBranch,nThermal=100,p=400,normalize=true)
+plotEnergies!(results,DT.nBranch;nThermal=100,p=400,color=:red,normalize=true) # L=15
 # plotEnergies(results,DT.nBranch;nThermal=1,p=1000,color=:red) # L=15
 current_figure()
 # plotEnergies(results,nBra,-49.7;Emin=-50.5,Emax=-46)
