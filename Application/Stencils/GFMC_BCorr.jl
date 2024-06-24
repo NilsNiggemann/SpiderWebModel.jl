@@ -39,11 +39,12 @@ nBra = 3
 ψG = SW.fullVariationalFunction(S,0.197)
 
 # ψG(N) = 1
-DT = SW.ContinuousTimeMethod(0.1,3,-E0)
+# DT = SW.ContinuousTimeMethod(0.1,3,-E0)
+DT = SW.DiscreteTimeMethod(0.,3,-E0)
 # stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,1000+ 200*i),ψG,50,0.6,SW.IterativeSRSolver();Nwalkers = 6*8,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
 # ψG = typeof(ψG)(stochReconfRes.params)
 # DT = SW.DiscreteTimeMethod(0,3,E0)
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,1000,ψG,equilibration_steps=0,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,10,800,ψG,equilibration_steps=0,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
 
 ##
 plotEnergies(results,DT,E0,nThermal=10,normalize=true,Emin=NaN)
@@ -77,12 +78,12 @@ BBOp = SW.BBOperator(S,refPlaq)
 resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,5,BBOp,ψG,) for (i,res) in enumerate(results)])
 
 ##
-Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,10) for res in results]
+Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,5) for res in results]
 
 GFMCPlaqs = collect(SW.plaquetteIterator(S))
 
-BVals = [[SW.get_observables_sfw(Gnp,res[:,j,:]',mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resB,results) ]
-BBVals = [[SW.get_observables_sfw(Gnp,res[:,j,:]',mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resBB,results) ]
+BVals = [[SW.get_observables_sfw(Gnp,res[:,:,j],mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resB,results) ]
+BBVals = [[SW.get_observables_sfw(Gnp,res[:,:,j],mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resBB,results) ]
 ##
 let 
     fig = Figure()
