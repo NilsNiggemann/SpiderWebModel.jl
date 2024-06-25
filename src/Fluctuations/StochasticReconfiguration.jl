@@ -81,7 +81,7 @@ function getDistReduction(S,ψG::FullVariationalGuidingFunction)
     if !isperiodic(S)
         indicesMapping = collect(eachindex(ψG.params))
         uniqueInds = collect(indicesMapping)
-        return AllDists,indicesMapping,uniqueInds
+        return (;AllDists,indicesMapping,uniqueInds)
     end
 
     α = get_alpha_i(ψG)
@@ -94,11 +94,11 @@ function getDistReduction(S,ψG::FullVariationalGuidingFunction)
     uniqueInds = [1]
     # indicesMapping = collect(eachindex(α))
     # uniqueInds = collect(eachindex(α))
-    LxLy = size(S)
+    Lx,Ly = size(S)
 
     for (i,ri) in enumerate(Allplaqs)
         for (j,rj) in enumerate(Allplaqs)
-            Rij = abs.(SVector(nearbyInt.(ri, rj,LxLy)))
+            Rij = getReducedDist(ri,rj,Lx,Ly)
             # Rij = SVector(0,0)
             # Rij = (i,j)
             betaIndex += 1
@@ -110,8 +110,37 @@ function getDistReduction(S,ψG::FullVariationalGuidingFunction)
         end
     end
 
-    return AllDists,indicesMapping,uniqueInds
+    return (;AllDists,indicesMapping,uniqueInds)
 
+end
+getReducedDist(ri,rj,Lx,Ly) = abs.(SVector(nearbyInt.(ri, rj,(Lx,Ly))))
+
+centralPos(Lx,Ly) = (Lx//2,Ly//2)
+centralPos(S::AbstractMatrix) = centralPos(size(S)...)
+function getCentralPlaquette(S)
+    allplaqs = collect(plaquetteIterator(S))
+    central = centralPos(S)
+    return allplaqs[findmin([norm(central .- r) for r in allplaqs])[2]]
+end
+function symmetryReducePlaquettes(S,R_ref)
+    
+    AllDists = Dict{SVector{2,Int},Int}()
+
+    Allplaqs = collect(plaquetteIterator(S))
+
+    indicesMapping = Int[]
+    uniqueInds = Int[]
+    Lx,Ly = size(S)
+    ri = R_ref
+    for (j,rj) in enumerate(Allplaqs)
+        Rij = getReducedDist(ri,rj,Lx,Ly)
+        if Rij ∉ keys(AllDists)
+            uniqueInds = push!(uniqueInds,j)
+            AllDists[Rij] = length(uniqueInds)
+        end
+        push!(indicesMapping,AllDists[Rij])
+    end
+    return (;AllDists,indicesMapping,uniqueInds)
 end
 
 function getDistReduction(S,ψG::LocalPlaquetteGuidingFunction)
@@ -128,7 +157,7 @@ function getDistReduction(S,ψG::LocalPlaquetteGuidingFunction)
     indicesMapping = Int[]
     uniqueInds = Int[]
     LxLy = size(S)
-    r_Central = (LxLy .+1) .//2 
+    r_Central = centralPos(S)
     for (i,ri) in enumerate(Allplaqs)
         x,y = ri .- r_Central
         if y < -x
@@ -146,7 +175,7 @@ function getDistReduction(S,ψG::LocalPlaquetteGuidingFunction)
         push!(indicesMapping,AllDists[symMapped])
     end
     
-    return AllDists,indicesMapping,uniqueInds
+    return (;AllDists,indicesMapping,uniqueInds)
 
 end
 
@@ -231,7 +260,7 @@ function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatri
 end
 stochastic_reconfiguration_step(E_i,Ok_i,::AbstractSRSolver) = error("solver not implemented")
 
-function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,ψG,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps,scatter_fraction = 0.8)
+function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,ψG,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps,scatter_fraction = 0.8,reconfigure=true)
     
     ψG = deepcopy(ψG)
     params = ψG.params
@@ -251,7 +280,7 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
     for i in 1:n
         
         range = eachindex(prob.Observables.TotalWeights)[1:NSteps[i]]
-        @time res = runGFMC!(prob,range)
+        @time res = runGFMC!(prob,range,reconfigure)
 
         resSlice = @view res.SaveConfigs[:,:,:,range]
         confs = eachslice( resSlice,dims=(3,4))
@@ -270,7 +299,7 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
         results.ΔE[i] = ΔE0
         
         # push!(params_steps, copy(params))
-        selectdim(results.params,arraydim(results.params),i) .= ψG.params
+        selectdim(results.params_steps,arraydim(results.params_steps),i) .= params
 
         α = get_alpha_i(ψG)
         w_avg = mean(res.TotalWeights[range])
@@ -286,18 +315,18 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
         end
     end
 
-    params = selectdim(results.params,arraydim(results.params),ind)
+    params = selectdim(results.params_steps,arraydim(results.params_steps),ind)
 
     return (;results...,params)
 end
 arraydim(a::AbstractArray{T,N}) where {T,N} = N
 
-function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSteps,ψG,n,dt,solver::AbstractSRSolver = IterativeSRSolver();equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps,scatter_fraction=0.8)
+function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSteps,ψG,n,dt,solver::AbstractSRSolver = IterativeSRSolver();equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps,scatter_fraction=0.8,reconfigure=true)
     
     NStepsVec = makeVec(NSteps,n)
     dtVec = makeVec(dt,n)
 
-    return _stochastic_reconfiguration(InitialState,method,solver,NStepsVec,ψG,n,dtVec,equilibration_steps,rel_tolerance,Nwalkers,outfile,pre_equilibration_steps,scatter_fraction)
+    return _stochastic_reconfiguration(InitialState,method,solver,NStepsVec,ψG,n,dtVec,equilibration_steps,rel_tolerance,Nwalkers,outfile,pre_equilibration_steps,scatter_fraction,reconfigure)
 end
 
 makeVec(x::AbstractVector,len) = x
@@ -308,7 +337,7 @@ function get_stoch_rec_Observables(Nsteps,ψG,::Nothing)
     E0 = zeros(Nsteps)
     ΔE = zeros(Nsteps)
     params = zeros(size(ψG.params)...,Nsteps)
-    return (;E0 = E0,ΔE = ΔE,params = params)
+    return (;E0 = E0,ΔE = ΔE,params_steps = params)
 end
 
 function get_stoch_rec_Observables(Nsteps,ψG,outfile::AbstractString)
@@ -319,6 +348,6 @@ function get_stoch_rec_Observables(Nsteps,ψG,outfile::AbstractString)
         E0 .= 0
         ΔE .= 0
         params .= 0
-        return (;E0 = E0,ΔE = ΔE,params = params)
+        return (;E0 = E0,ΔE = ΔE,params_steps = params)
     end
 end

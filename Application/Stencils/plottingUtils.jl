@@ -44,7 +44,7 @@ function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0
     errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black;kwargs...)
     !isnan(E0)&& hlines!([E0],color = :red,label = L"exact $$")
     axislegend(ax,merge=true)
-    xlims!(ax,first(proj),last(proj))
+    xlims!(ax,0,last(proj))
     !isnan(Emin)&& !isnan(Emax) && ylims!(ax,Emin,Emax)
     return ax
 end
@@ -145,3 +145,16 @@ function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p =
     fig
 end
 
+function plotVarEn(stochReconfRes;normalization=1)
+    fig = Figure(theme = theme_SimpleTicks())
+
+    ax = Axis(fig[1, 1], xlabel = "Iteration", ylabel = "Energy",xlabelvisible=false,xticklabelsvisible=false)
+    ax2 = Axis(fig[2,1], xlabel = "Iteration", ylabel = "α")
+
+    Epl =stochReconfRes.E0 ./ normalization
+    x = eachindex(Epl)
+    errorbars!(ax,x,Epl,stochReconfRes.ΔE./ normalization,whiskerwidth=5)
+    lines!(ax,x,Epl)
+    lines!(ax2,x,stochReconfRes.params_steps[1,1,:])
+    fig
+end

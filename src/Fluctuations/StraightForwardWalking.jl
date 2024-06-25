@@ -38,6 +38,8 @@ end
 function getWeight1Move!(Walker::SpiderWebWalker,AffectedPlaquettes,ψG::T,I,move) where T
     (;Config,n_x,n_x´) = Walker
     i1,i2 = I
+    n_x = getNPlaq!(Walker)
+
     applyPlaquette!(Config, i1,i2, move)
     
     indices = AffectedPlaquettes[i1,i2]
@@ -108,13 +110,15 @@ function getWeightList2Moves!(Walker::SpiderWebWalker,moves,AffectedPlaquettes,�
 end
 
 function getWeight2Moves!(Walker::SpiderWebWalker,AffectedPlaquettes,ψG::T,I,J,move) where T
-    (;Config,n_x,n_x´) = Walker
+    (;Config) = Walker
 
     idx_I,idx_J = @. 1 + (1-move) ÷ 2
     move_I, move_J = move
 
     P_applicable(Config,I)[idx_I] || return 0.
     i1,i2 = I
+    n_x = getNPlaq!(Walker)
+
     applyPlaquette!(Config, i1,i2, move_I)
     
     if !P_applicable(Config,J)[idx_J] 
@@ -125,11 +129,10 @@ function getWeight2Moves!(Walker::SpiderWebWalker,AffectedPlaquettes,ψG::T,I,J,
     applyPlaquette!(Config, j1,j2, move_J)
     
     indices = AffectedPlaquettes[j1,j2]
-    getNPlaq!(Walker,indices)
+    n_x´ = getNPlaqfilled!(Walker,indices)
 
-    N□ = getNPlaq_difference(n_x,n_x´,indices) 
+    weight = guidingfuncRatio(ψG,n_x,n_x´,indices)
 
-    weight = ψG(N□)
     applyPlaquette!(Config, j1,j2, -move_J)
     applyPlaquette!(Config, i1,i2, -move_I)
 
@@ -181,7 +184,7 @@ function setup_operatorObservables(mProj,NumObs,NSteps,Op::AbstractOperator,outf
     return OperatorWeights
 end
 
-setup_operatorObservables(mProj,NumObs,NSteps,Op::AbstractOperator,outfile::Nothing) = zeros(NSteps,mProj,NumObs)
+setup_operatorObservables(mProj,NumObs,NSteps,Op::AbstractOperator,outfile::Nothing) = zeros(mProj,NumObs,NSteps)
 
 function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::AbstractOperator,ψG::T,AllPlaqs = collect(plaquetteIterator(InitialState))) where T
     Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
@@ -197,7 +200,7 @@ function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveCo
         for (j,J) in enumerate(AllPlaqs)
             initialize_forward_walking!(Problem,O,Configs,J)
 
-            TotalWeights = @view results[n,:,j]
+            TotalWeights = @view results[:,j,n]
             straight_forward_walking!(Problem,TotalWeights,reconfigurationList)
             # results[:,j,n] .= res
 

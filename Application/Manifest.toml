@@ -2,7 +2,7 @@
 
 julia_version = "1.10.0"
 manifest_format = "2.0"
-project_hash = "469bd2e8642b8d727fd9604d2ba9684df1633333"
+project_hash = "68651df4d684441a3c587672de752d869a8d6d07"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -1683,7 +1683,7 @@ weakdeps = ["ChainRulesCore"]
 deps = ["Arpack", "BitIntegers", "CairoMakie", "ChunkSplitters", "CircularArrays", "DSP", "DataStructures", "Dictionaries", "Gurobi", "H5Zblosc", "HDF5", "IterativeSolvers", "JuMP", "KrylovKit", "LatticeFFTs", "LinearAlgebra", "LinearMaps", "LoopVectorization", "MathOptInterface", "OrderedCollections", "ProgressMeter", "Random", "SparseArrays", "StaticArrays", "Statistics", "StatsBase", "Stencils", "Test"]
 path = ".."
 uuid = "8e1b84da-b1d7-4311-a21b-52324f990117"
-version = "0.3.0"
+version = "0.3.1"
 
 [[deps.SpinFRGLattices]]
 deps = ["StaticArrays", "StructArrays", "Test"]

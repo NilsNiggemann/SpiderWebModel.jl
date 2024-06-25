@@ -536,7 +536,7 @@ function startManyWalkerGFMC(InitialState::StencilSpinConfig,method::AbstractGFM
     startManyWalkerGFMC(prob,equilibration_steps,pre_equilibration_steps,scatter_fraction)
 end
 
-function runGFMC!(prob::AbstractGFMCProblem,range)
+function runGFMC!(prob::AbstractGFMCProblem,range,reconfigure::Bool=true)
     (;Walkers,weights,AffectedPlaquetteList,reconfiguration_buffer,Observables,ψG,method) = prob
     (;energies,SaveConfigs,outfile,TotalWeights, reconfigurationTable) = Observables
     
@@ -547,15 +547,16 @@ function runGFMC!(prob::AbstractGFMCProblem,range)
         energies[i] = getLocalEnergyWalkers_before(weights,Walkers,method)
         TotalWeights[i] = mean(weights)
         
-        reconfigurationList = @view reconfigurationTable[:,i]
-        reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
-
-        saveConfigs!(SaveConfigs,i,Walkers)            
+        if reconfigure
+            reconfigurationList = @view reconfigurationTable[:,i]
+            reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
+        end
+        saveConfigs!(SaveConfigs,i,Walkers)
     end
     return Observables
 end
-runGFMC!(prob::AbstractGFMCProblem) = runGFMC!(prob,eachindex(prob.Observables.TotalWeights))
-runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int) = runGFMC!(prob,eachindex(prob.Observables.TotalWeights)[1:Nsteps])
+runGFMC!(prob::AbstractGFMCProblem;reconfigure=true) = runGFMC!(prob,eachindex(prob.Observables.TotalWeights),reconfigure)
+runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int;reconfigure=true) = runGFMC!(prob,eachindex(prob.Observables.TotalWeights)[1:Nsteps],reconfigure)
 
 function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::DiscreteTimeMethod)
     (;Λ,nBranch,w_avg_estimate) = method

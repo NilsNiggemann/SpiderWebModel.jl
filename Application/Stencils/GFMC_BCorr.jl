@@ -39,11 +39,12 @@ nBra = 3
 ψG = SW.fullVariationalFunction(S,0.197)
 
 # ψG(N) = 1
-DT = SW.ContinuousTimeMethod(0.1,3,-E0)
+# DT = SW.ContinuousTimeMethod(0.1,3,-E0)
+DT = SW.DiscreteTimeMethod(0.,3,-E0)
 # stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,1000+ 200*i),ψG,50,0.6,SW.IterativeSRSolver();Nwalkers = 6*8,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
 # ψG = typeof(ψG)(stochReconfRes.params)
 # DT = SW.DiscreteTimeMethod(0,3,E0)
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,1000,ψG,equilibration_steps=0,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,2000,ψG,equilibration_steps=100,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
 
 ##
 plotEnergies(results,DT,E0,nThermal=10,normalize=true,Emin=NaN)
@@ -70,18 +71,19 @@ let
 end
 ##
 BOp = SW.PlaquetteFlipOperator(S)
-resB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,5,BOp,ψG,) for (i,res) in enumerate(results)])
+resB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,5,BOp,ψG,collect(SW.plaquetteIterator(S))[1:1]) for (i,res) in enumerate(results)])
 # resB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,5,BOp,ψG,1;outfile = string(outfile,i,".h5")) for (i,res) in enumerate(results)])
 ##
 BBOp = SW.BBOperator(S,refPlaq)
-resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,5,BBOp,ψG,) for (i,res) in enumerate(results)])
+resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,5,BBOp,ψG,SW.getApplicablePlaquettes(S)) for (i,res) in enumerate(results)])
 
 ##
-Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,10) for res in results]
+Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,5) for res in results]
 
-GFMCPlaqs = collect(SW.plaquetteIterator(S))
+GFMCPlaqs = SW.getApplicablePlaquettes(S)
+# GFMCPlaqs = collect(SW.plaquetteIterator(S))
 
-BVals = [[SW.get_observables_sfw(Gnp,res[:,j,:]',mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resB,results) ]
+BVals = [[SW.get_observables_sfw(Gnp,res[:,j,:]',mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)[1:1]] for (Gnp,res,result) in zip(Gnps,resB,results) ]
 BBVals = [[SW.get_observables_sfw(Gnp,res[:,j,:]',mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resBB,results) ]
 ##
 let 
@@ -90,9 +92,9 @@ let
     pointsGFMC = Point.(GFMCPlaqs)
     nth(x) = x[end]
     BBEnd = nth.(mean(BBVals)) 
-    BEnd = nth.(mean(BVals))
+    BEnd = only(nth.(mean(BVals)))
     localCorr = only(findfirst(==(refPlaq),GFMCPlaqs))
-    corrEnd = BBEnd .- BEnd[localCorr] .*BEnd
+    corrEnd = BBEnd .- BEnd^2
     
     corrEnd[localCorr] /= 2
 
@@ -113,7 +115,7 @@ let
     fig
 end
 ##
-Plaq2 = (3,4)
+Plaq2 = (4,7)
 # Plaq2 = rand(pairPlaqs)
 # Plaq2 = refPlaq
 
@@ -127,106 +129,73 @@ hlines!([exactCorr],color = :red)
 current_figure()
 ##
 #___________Spin-1_______________________
-ψG = SW.PlaquetteNumberGuidingFunction(0.15)
-S = SW.stencilConfig(zeros(8,8),1;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
+S = SW.stencilConfig(zeros(12,12),1;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
+DT = SW.DiscreteTimeMethod(0.,2,prod(size(S)))
+ψG = SW.fullVariationalFunction(S,0.15)
+stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,300+ 20*i),ψG,50,1.,SW.IterativeSRSolver();Nwalkers = 6*20,rel_tolerance=1e-8,equilibration_steps=100,pre_equilibration_steps=10_000)
 ##
+ψG = typeof(ψG)(stochReconfRes.params)
+DT = SW.DiscreteTimeMethod(0.,8,0.2658*prod(size(S)))
 
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,8,1000÷nBra,nBra,ψG,1) for i in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,3000,ψG,equilibration_steps=5000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
 ##
-plotEnergies(results,nBra)
+plotEnergies(results,nBra,p=100;normalize=true)
 ##
-refPlaq = (5,6)
-wrap_idx(x,L) = abs(x) >= L ÷ 2 ? x - sign(x)*L : x
-# function wrap_idx(x,L)
-#     if x <= -(L ÷2)
-#         return x + L
-#     elseif x > (L ÷2)
-#         return x - L
-#     end
-#     return x
-# end
-function isReducedPlaq(P,refPlaq,L)
-    x,y = P .- refPlaq
-    x = wrap_idx(x,L)
-    y = wrap_idx(y,L)
-    return x>=0 && y>=0 && x>=y
-end
-allPlaqs = collect(SW.plaquetteIterator(S))
-reducedPlaqs = filter(P->isReducedPlaq(P,refPlaq,size(S,1)),allPlaqs)
 # scatter(Point.(allPlaqs))
 # scatter!(Point.(reducedPlaqs),color = :red)
 # current_figure()
+refPlaq = SW.getCentralPlaquette(S)
+symReduc = SW.symmetryReducePlaquettes(S,refPlaq)
+GFMCPlaqs = collect(SW.plaquetteIterator(S))[symReduc.uniqueInds]
+
 ##
+
 BOp = SW.PlaquetteFlipOperator(S)
-resB = fetch.([Threads.@spawn SW.measure_operator(S,res.SaveConfigs,50,nBra,BOp,ψG,1) for res in results])
+resB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,50 ÷DT.nBranch,BOp,ψG,[refPlaq]) for (i,res) in enumerate(results)])
 ##
 BBOp = SW.BBOperator(S,refPlaq)
-resBB = fetch.([Threads.@spawn SW.measure_operator(S,res.SaveConfigs,50,nBra,BBOp,ψG,1) for res in results])
+resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,50 ÷DT.nBranch,BBOp,ψG,GFMCPlaqs) for (i,res) in enumerate(results)])
+
 
 ##
+Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,6) for res in results]
 
-Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,50) for res in results]
-
-BBVals = [[SW.get_observables_sfw(Gnp,res[:,:,j],mean(result.TotalWeights)) for j in eachindex(allPlaqs)] for (Gnp,res,result) in zip(Gnps,resBB,results) ]
-BVals = [[SW.get_observables_sfw(Gnp,res[:,:,j],mean(result.TotalWeights)) for j in eachindex(allPlaqs)] for (Gnp,res,result) in zip(Gnps,resB,results) ]
+BBVals = [[SW.get_observables_sfw(Gnp,res[:,j,:]',mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resBB,results) ]
+BVals = [SW.get_observables_sfw(Gnp,res[:,begin,:]',mean(result.TotalWeights)) for (Gnp,res,result) in zip(Gnps,resB,results) ]
 
 ##
 using SpiderWebModel.StaticArrays
 
+function getBBCorrelator(BBVals,BVals,symReduc;index = lastindex(BBVals[1][1]))
 
-function mapPlaqToReduced(P,refPlaq,L)
-    x´ = abs(P[1] - refPlaq[1])
-    y´ = abs(P[2] - refPlaq[2])
-    wrap(x) = wrap_idx(x,L)
-    if x´ > y´
-        return wrap.((x´,y´)) .+refPlaq
-    else
-        return wrap.((y´,x´)) .+refPlaq
+    BBCorrelatorRaw = getBBCorrelator(BBVals,BVals,index)
+
+    BBCorrelator = similar(BBCorrelatorRaw, length(symReduc.indicesMapping))
+    for (i,k) in enumerate(symReduc.indicesMapping)
+        BBCorrelator[i] = BBCorrelatorRaw[k]
     end
+    return BBCorrelator
 end
 
-function getBBCorrelator(BBVals,BVals,redPlaqs,allPlaqs,refPlaq)
-    nth(x) = x[30]
-    BBEnd = nth.(mean(BBVals)) 
-    BEnd =  nth.(mean(BVals))
-    localCorr = only(findfirst(==(refPlaq),reducedPlaqs))
-    BBCorrelatorRaw = BBEnd .- BEnd[localCorr] .*BEnd
-    return BBCorrelatorRaw = BBEnd .- BEnd[localCorr] .*BEnd
-    # L = maximum(maximum,allPlaqs)
-    # BBCorrelator = empty(BBCorrelatorRaw)
-    # for P in allPlaqs
-    #     P´ = mapPlaqToReduced(P,refPlaq,L)
-    #     i = findfirst(==(P´),redPlaqs)
-    #     if i === nothing
-    #         # error("Plaquette $P not found")
-    #         push!(BBCorrelator,0)
-    #     else
-    #         push!(BBCorrelator,BBCorrelatorRaw[i])
-    #     end
-    # end
-    # return BBCorrelator
-end
-function getBBCorrelator(BBVals,BVals,refPlaq)
-    nth(x) = x[30]
-    BBEnd = nth.(mean(BBVals)) 
-    BEnd =  nth.(mean(BVals))
-    localCorr = only(findfirst(==(refPlaq),reducedPlaqs))
-    BBCorrelatorRaw = BBEnd .- BEnd[localCorr] .*BEnd
-    return BBCorrelatorRaw = BBEnd .- BEnd[localCorr] .*BEnd
+function getBBCorrelator(BBVals,BVals,index::Int)
+    nth(x) = x[index]
+    BBEnd = nth.(mean(BBVals))
+    BEnd =  nth(mean(BVals))
+    BBCorrelatorRaw = BBEnd .- BEnd^2
+    return BBCorrelatorRaw
 end
 
 # inds = findall(P->isReducedPlaq(P,refPlaq,size(S,1)),allPlaqs)
 # BBVals = [x[inds] for x in BVals]
 # BVals = [x[inds] for x in BVals]
+BBCorrelator = getBBCorrelator(BBVals,BVals,symReduc,index = 6)
 
-BBCorrelator = getBBCorrelator(BBVals,BVals,refPlaq)
-    
 # BBCorrelator = getBBCorrelator(BBVals,BVals,reducedPlaqs,allPlaqs,refPlaq)
 ##
 let 
     fig = Figure()
     ax = Axis(fig[1,1];SW.getConfigAxis(S)...,backgroundcolor = :white)
-    pointsGFMC = Point.(allPlaqs)
+    pointsGFMC = Point.(collect(SW.plaquetteIterator(S)))
 
     corrEnd = copy(BBCorrelator)
     # corrEnd = last.(mean(BBVals))
@@ -235,33 +204,17 @@ let
     pointsGFMC = pointsGFMC[perm]
     # corrEnd = copy( BEnd[localCorr] .*BEnd)
     # corrEnd = copy( BBEnd)
-    sizefunc(x) = abs(x)*30*8
+    sizefunc(x) = abs(x)*30*10
+    localScale = 2
+    corrEnd[1] /= localScale
     sizes = sizefunc.(corrEnd) 
-
-    corrEnd[localCorr] /= 1
+    corrEnd[1] *= localScale
     
     points = Point.(pairPlaqs)
     markerfunc(x) = x>0 ? '●' : '○'
     scatter!(ax,pointsGFMC, markersize = sizes,colormap = :viridis, color = sizefunc.(corrEnd),alpha = 1.0,marker = markerfunc.(corrEnd))
     fig
 end
-##
-with_theme(theme_PiTicks()) do
-    
-    obsMat = zeros(size(S))
-    obsVals = BBCorrelator
-    for (i,I) in enumerate(SW.plaquetteIterator(S))
-        obsMat[I...] = obsVals[i]
-    end
-    FT = SW.LatticeFFTs.fft(obsMat)
-    FT[1,1] = NaN
-    fig = Figure()
-    ax = Axis(fig[1,1];aspect = 1)
-    k = 0:size(FT,1) ./ size(FT,1) .*2pi
-    heatmap!(ax,k,k,real(FT))
-    fig
-end
-##
 
 
 function FTPlaq(rPlaq,Vals,k)
@@ -273,15 +226,18 @@ function FTPlaq(rPlaq,Vals,k)
 end
 
 with_theme(theme_PiTicks()) do
-    Tinv = SW.SA[
-        1 -1;
-        1 1
-    ]
-    ri = [SW.SVector(r .- refPlaq) for r in SW.plaquetteIterator(S)]
-    rPlaq = [mapToPlaquetteBasis(r) for r in ri]
+    T = SW.SA[
+        1 1;
+        -1 1
+    ]/2
+    ri = [T * SW.SVector(r .- refPlaq) for r in SW.plaquetteIterator(S)]
+    # rPlaq = [mapToPlaquetteBasis(r) for r in ri]
+    capfilter(x) = min(abs(x),100)
+
+    # return scatter(Point.(ri),color = capfilter.(300 .*BBCorrelator./maximum(BBCorrelator)),markersize = capfilter.(50 * BBCorrelator./maximum(BBCorrelator)),axis =(;aspect=1,xticks=SimpleTicks(-6:6), yticks=SimpleTicks(-6:6)))
 
     # return scatter(Point.(ri),color = BBCorrelator,markersize = 150 * abs.(BBCorrelator))
-    k = LinRange(-pi,pi,500)
+    k = LinRange(-pi,pi,200)
 
     FT = [FTPlaq(ri,BBCorrelator,SW.SA[kx,ky]) for (kx,ky) in Iterators.product(k,k)]
     fig = Figure()
