@@ -1,76 +1,112 @@
 #!/bin/bash
 #=
 #!/bin/bash
-
-#SBATCH --account=pmfrg
-
-#SBATCH --job-name=B2S1GFMC                 # replace name
-#SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --mail-user=nils.niggemann@fu-berlin.de  # replace email address
-# SBATCH --nodes=1
-# SBATCH --ntasks-per-node=1
+#SBATCH --job-name=GFMCS1
+#SBATCH --mail-user=nils.niggemann@fu-berlin.de
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=128
+# SBATCH --export=ALL,JULIA_EXCLUSIVE=1
+#SBATCH --time=3-10:00:00
+#SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
+#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/SFW/%a.out
+#SBATCH --partition=normal
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=48
-#SBATCH --mem=90GB         # memory , more means less gc time
-#SBATCH --time=0-24:00:00          # total run time limit (HH:MM:SS)
-#SBATCH --mail-type=END
-#SBATCH --output=/p/project/pmfrg/niggemann1/JobsOutput/Spiderweb/GFMC/B2Spin1_%a.out    # File to which standard Out- will be written
-
-jutil env activate -p pmfrg
-cd $PROJECT/niggemann1
-module --force purge
-module load Stages/2024  
-module load GCCcore/.12.3.0
-
-module load Julia/1.9.3
-export JULIA_DEPOT_PATH=/p/scratch/pmfrg/niggemann1/.julia/
-
-julia -O3 -t $SLURM_CPUS_PER_TASK /p/project/pmfrg/niggemann1/Jobs/SpiderWebModel.jl/Application/GFMC/B2CorrForwardWalking.jl ${SLURM_ARRAY_TASK_ID}
+#SBATCH --mem=220GB
+# SBATCH --qos=cont
+#SBATCH --mail-type=ALL
+#SBATCH --ntasks-per-node=1
+~/.bashrc
+julia -O3 -t $SLURM_CPUS_PER_TASK /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/B2CorrForwardWalking.jl $SLURM_ARRAY_TASK_ID
 exit
 =#
 
 cd(@__DIR__)
+
+i_arg = parse(Int, ARGS[1])
+
+infile = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_small/") for file in files][i_arg]
+
 ##
+
 using Pkg
 Pkg.activate(@__DIR__)
 import SpiderWebModel as SW
 using HDF5
-
-i_arg = parse(Int, ARGS[1])
-
-infiles = readdir("/p/scratch/pmfrg/niggemann1/Spiderweb/Data2/",join=true)
-
-jobarray = [(file,range) for file in infiles for range in Iterators.partition(1:700_000,55_000)]
-infile,Nrange = jobarray[i_arg]
-@assert isfile(infile) "input file does not exist!"
 ##
 nBra = h5read(infile,"nBranch")
-mProj = 1000 ÷nBra
-α = h5read(infile,"PlaquetteNumberGuidingFunction/alpha")
-Λ = h5read(infile,"Λ")
-w_avg_estimate = h5read(infile,"w_avg_estimate")
-Lx,Ly,NWalkers,NSteps = h5open(infile,"r") do f
-    f["SaveConfigs"] |> size
-end
+res = SW.readResults(infile,NSteps)[1];
+L,_,NWalkers,NSteps = size(res.SaveConfigs)
+λ = h5read(infile,"Λ")
+ψG = SW.FullVariationalGuidingFunction(h5read(infile,"FullVariationalGuidingFunction/params"))
 
-outfile = "/p/scratch/pmfrg/niggemann1/Spiderweb/DataForwardWalking/Spin1GFMC_B2_L=$(Lx)_nBra=$(nBra)_NSteps=$(NSteps)_NW=$(NWalkers)_alpha=$(α)_Lam=$(Λ)_$(i_arg).h5"
-##
+outfile = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_ForwardWalking/L=$(L)/$i_arg/Spin1GFMC_L=$(L)_nBra=$(nBra)_NSteps=$(NSteps)_NW=$(NWalkers)_$(i_arg).h5"
 mkpath(dirname(outfile))
-@assert !isfile(outfile) "output file already exists!"
+@assert !isfile(outfile) "file already exists!"
 
 
 #___________Spin-1_______________________
 ##
-parentState = SW.stencilConfig(zeros(Lx,Ly),1)
 
-GuidingWaveFunction = SW.PlaquetteNumberGuidingFunction(α)
-##
-@info "starting run" i_arg infile Nrange outfile Λ w_avg_estimate nBra mProj NWalkers NSteps length(jobarray)
+parentState = SW.stencilConfig(zeros(L,L),1;
+boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+)
+w_avg_estimate = SW.h5read(infile,"w_avg_estimate")
+DT = SW.DiscreteTimeMethod(λ,nBra,w_avg_estimate)
 
-# @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,8,nThermal+3_000÷nBra,nBra,varFuncTest,1) for _ in 1:8])
-# @time results = SW.startManyWalkerGFMC(parentState,NWalkers,NSteps÷nBra,nBra,GuidingWaveFunction,Λ)
-SaveConfigs = @view SW.readMMapArray(infile,"SaveConfigs")[:,:,:,Nrange]
 ##
+
+refPlaq = SW.getCentralPlaquette(parentState)
+symReduc = SW.symmetryReducePlaquettes(parentState,refPlaq)
+GFMCPlaqs = collect(SW.plaquetteIterator(parentState))[symReduc.uniqueInds]
+
+mProj = 300 ÷ nBra
 BOp = SW.PlaquetteFlipOperator(parentState)
-resB = SW.measure_operator(parentState,SaveConfigs,mProj,nBra,BOp,GuidingWaveFunction,Λ,w_avg_estimate;outfile)
-h5write(outfile,"NStart",first(Nrange))
+BBOp = SW.BBOperator(parentState,refPlaq)
+##
+@info "starting run" L λ mProj nBra NSteps NWalkers outfile
+
+resB = SW.measure_operator(parentState,DT,res.SaveConfigs,mProj,BOp,ψG,[refPlaq];outfile)
+##
+resBB = SW.measure_operator(parentState,DT,res.SaveConfigs,mProj,BBOp,ψG,GFMCPlaqs;outfile)
+
+##
+using SpiderWebModel.Statistics
+@info "run over. Starting evaluation step"
+Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights,1,mProj)
+
+BBVals = [SW.get_observables_sfw(Gnp,resBB[:,j,:]',mean(res.TotalWeights)) for j in eachindex(GFMCPlaqs)]
+
+BVals = SW.get_observables_sfw(Gnp,resBB[:,begin,:]',mean(res.TotalWeights))
+
+##
+
+using SpiderWebModel.StaticArrays
+
+function getBBCorrelator(BBVals,BVals,symReduc;index = lastindex(BBVals[1]))
+
+    BBCorrelatorRaw = getBBCorrelator(BBVals,BVals,index)
+
+    BBCorrelator = similar(BBCorrelatorRaw, length(symReduc.indicesMapping))
+    for (i,k) in enumerate(symReduc.indicesMapping)
+        BBCorrelator[i] = BBCorrelatorRaw[k]
+    end
+    return BBCorrelator
+end
+
+function getBBCorrelator(BBVals,BVals,index::Int)
+    nth(x) = x[index]
+    BBEnd = nth.(BBVals)
+    BEnd =  nth(BVals)
+    BBCorrelatorRaw = BBEnd .- BEnd^2
+    return BBCorrelatorRaw
+end
+
+BBCorrelators = stack([
+    getBBCorrelator(BBVals,BVals,symReduc,index = i)
+    for i in 1:mProj
+    ]
+)
+##
+outfileFinal = "../Data/BBCorr/BBCorr_L=$(L)_$(i_arg)"
+mkpath(dirname(outfileFinal))
+h5write(outfileFinal,"BBCorrelator",BBCorrelators)
