@@ -184,7 +184,7 @@ function setup_operatorObservables(mProj,NumObs,NSteps,Op::AbstractOperator,outf
     return OperatorWeights
 end
 
-setup_operatorObservables(mProj,NumObs,NSteps,Op::AbstractOperator,outfile::Nothing) = zeros(NSteps,mProj,NumObs)
+setup_operatorObservables(mProj,NumObs,NSteps,Op::AbstractOperator,outfile::Nothing) = zeros(mProj,NumObs,NSteps)
 
 function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::AbstractOperator,ψG::T,AllPlaqs = collect(plaquetteIterator(InitialState))) where T
     Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
@@ -200,7 +200,7 @@ function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveCo
         for (j,J) in enumerate(AllPlaqs)
             initialize_forward_walking!(Problem,O,Configs,J)
 
-            TotalWeights = @view results[n,:,j]
+            TotalWeights = @view results[:,j,n]
             straight_forward_walking!(Problem,TotalWeights,reconfigurationList)
             # results[:,j,n] .= res
 

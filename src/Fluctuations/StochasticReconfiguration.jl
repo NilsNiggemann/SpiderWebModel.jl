@@ -81,7 +81,7 @@ function getDistReduction(S,ψG::FullVariationalGuidingFunction)
     if !isperiodic(S)
         indicesMapping = collect(eachindex(ψG.params))
         uniqueInds = collect(indicesMapping)
-        return AllDists,indicesMapping,uniqueInds
+        return (;AllDists,indicesMapping,uniqueInds)
     end
 
     α = get_alpha_i(ψG)
@@ -94,11 +94,11 @@ function getDistReduction(S,ψG::FullVariationalGuidingFunction)
     uniqueInds = [1]
     # indicesMapping = collect(eachindex(α))
     # uniqueInds = collect(eachindex(α))
-    LxLy = size(S)
+    Lx,Ly = size(S)
 
     for (i,ri) in enumerate(Allplaqs)
         for (j,rj) in enumerate(Allplaqs)
-            Rij = abs.(SVector(nearbyInt.(ri, rj,LxLy)))
+            Rij = getReducedDist(ri,rj,Lx,Ly)
             # Rij = SVector(0,0)
             # Rij = (i,j)
             betaIndex += 1
@@ -110,8 +110,37 @@ function getDistReduction(S,ψG::FullVariationalGuidingFunction)
         end
     end
 
-    return AllDists,indicesMapping,uniqueInds
+    return (;AllDists,indicesMapping,uniqueInds)
 
+end
+getReducedDist(ri,rj,Lx,Ly) = abs.(SVector(nearbyInt.(ri, rj,(Lx,Ly))))
+
+centralPos(Lx,Ly) = (Lx//2,Ly//2)
+centralPos(S::AbstractMatrix) = centralPos(size(S)...)
+function getCentralPlaquette(S)
+    allplaqs = collect(plaquetteIterator(S))
+    central = centralPos(S)
+    return allplaqs[findmin([norm(central .- r) for r in allplaqs])[2]]
+end
+function symmetryReducePlaquettes(S,R_ref)
+    
+    AllDists = Dict{SVector{2,Int},Int}()
+
+    Allplaqs = collect(plaquetteIterator(S))
+
+    indicesMapping = Int[]
+    uniqueInds = Int[]
+    Lx,Ly = size(S)
+    ri = R_ref
+    for (j,rj) in enumerate(Allplaqs)
+        Rij = getReducedDist(ri,rj,Lx,Ly)
+        if Rij ∉ keys(AllDists)
+            uniqueInds = push!(uniqueInds,j)
+            AllDists[Rij] = length(uniqueInds)
+        end
+        push!(indicesMapping,AllDists[Rij])
+    end
+    return (;AllDists,indicesMapping,uniqueInds)
 end
 
 function getDistReduction(S,ψG::LocalPlaquetteGuidingFunction)
@@ -128,7 +157,7 @@ function getDistReduction(S,ψG::LocalPlaquetteGuidingFunction)
     indicesMapping = Int[]
     uniqueInds = Int[]
     LxLy = size(S)
-    r_Central = (LxLy .+1) .//2 
+    r_Central = centralPos(S)
     for (i,ri) in enumerate(Allplaqs)
         x,y = ri .- r_Central
         if y < -x
@@ -146,7 +175,7 @@ function getDistReduction(S,ψG::LocalPlaquetteGuidingFunction)
         push!(indicesMapping,AllDists[symMapped])
     end
     
-    return AllDists,indicesMapping,uniqueInds
+    return (;AllDists,indicesMapping,uniqueInds)
 
 end
 

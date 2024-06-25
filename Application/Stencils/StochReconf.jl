@@ -22,24 +22,7 @@ DT = SW.DiscreteTimeMethod(0.,10,prod(size(S)))
 
 stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,10+ 2*i),ψG,50,0.03,SW.IterativeSRSolver();Nwalkers = 6*20,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
 ##
-function plotVarEn(stochReconfRes)
-    fig = Figure(theme = theme_SimpleTicks())
 
-    ax = Axis(fig[1, 1], xlabel = "Iteration", ylabel = "Energy",xlabelvisible=false,xticklabelsvisible=false)
-    ax2 = Axis(fig[2,1], xlabel = "Iteration", ylabel = "α")
-
-    E_min = minimum(stochReconfRes.E0)
-    Epl =stochReconfRes.E0
-    # Epl = abs.(stochReconfRes.E0_i .- E_min)
-    x = eachindex(Epl)
-    errorbars!(ax,x,Epl,stochReconfRes.ΔE,whiskerwidth=5)
-    lines!(ax,x,Epl)
-    # ylims!(ax,0.001,10.)
-    # lines!(ax2,x,SW.mean(stochReconfRes.params_steps,dims=1)[1,1,:])
-    lines!(ax2,x,stochReconfRes.params_steps[1,1,:])
-    # lines!(ax2,x,SW.mean(stochReconfRes.params_steps,dims=1)[1,end,:])
-    fig
-end
 plotVarEn(stochReconfRes)
 ##
 SW.Random.seed!(12322)
