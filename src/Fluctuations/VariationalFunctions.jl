@@ -162,16 +162,9 @@ function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::RK
     
     getMoves!(Walker)
     
-    for operator in moves
-        i,j,opNum = operator
-        indices = AffectedPlaquetteList[i,j]
-        applyPlaquette!(Config, i, j, opNum)
-        
-        weight = length(moves)
+    resize!(weights,length(moves))
+    weights .= 1.
 
-        push!(weights,weight)
-        applyPlaquette!(Config, i, j, -opNum)
-    end
     if Λ != 0
         push!(moves, DIAGONAL_MOVE_ID)
         push!(weights,Λ)
