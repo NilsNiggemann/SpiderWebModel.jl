@@ -8,27 +8,29 @@ resRK = h5open(filesRK[end]) do f
     read(f)
 end
 ##
-res = h5open("../Data/Spin1GFMC_Eval_open.h5") do f
+res = h5open("../Data/Spin1GFMC_Eval_periodic.h5") do f
     read(f)
 end
 ##
 with_theme(theme_SimpleTicks()) do
     en = res["energies"]
     e0s,e0s_err = mean(en,dims=2)[:],sqrt.(var(en,dims=2)[:])
+    L = res["L"]
     # e0s = (e0s .- minimum(e0s) .+1e-1)
     fig = Figure(fontsize = 22)
     ax = Axis(fig[1,1],xlabel = L"projection order $$",ylabel = L"E_0/L^2",xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
 
     proj = res["nBra"] .*eachindex(e0s)
-    scatter!(ax,proj,e0s/40^2,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
-    errorbars!(ax,proj,e0s/40^2,e0s_err/40^2,whiskerwidth = 3.5,color = :black)
+    scatter!(ax,proj,e0s ./L^2,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
+    errorbars!(ax,proj,e0s ./L^2,e0s_err ./L^2,whiskerwidth = 3.5,color = :black)
     axislegend(ax,merge=true)
-    # ylims!(ax,-75.05,-71.9)
+    ylims!(ax,-0.266,-0.265)
+    hlines!(ax,[-0.26582],color=:red)
     # save("Application/exactFig/GFMCEnergy.png",fig)
     fig
 end
 ##
-projectionSteps = 1000
+projectionSteps = 500
 SqsGFMC = eachslice(res["SqsGFMC"][string(projectionSteps)],dims=3)
 
 SqMat = mean(real(SqsGFMC)) ./4
@@ -37,12 +39,12 @@ SqFunc = SW.getSqCont(SqMat)
 
 errFunc = SW.getSqCont(errMat)
 
-# function SqFieldTheory(x,y)
-#     num = cos(x) - cos(y) +2sin(x)sin(y) 
-#     denom = (cos(x) - cos(y))^2 + (2sin(x)sin(y))^2
-#     return num^2/(sqrt(denom)+1e-30)
-# end
-# SqFieldTheory(k) = SqFieldTheory(k[1],k[2])
+function SqFieldTheory(x,y)
+    num = cos(x) - cos(y) +2sin(x)sin(y) 
+    denom = (cos(x) - cos(y))^2 + (2sin(x)sin(y))^2
+    return num^2/(sqrt(denom)+1e-30)
+end
+SqFieldTheory(k) = SqFieldTheory(k[1],k[2])
 ##
 # function SqFieldTheory2(x,y,v,w)
 #     a = (cos(x) - cos(y))^2 +(2sin(x)sin(y))^2

@@ -39,6 +39,31 @@ function plotVarEn(stochReconfRes)
     # lines!(ax2,x,SW.mean(stochReconfRes.params_steps,dims=1)[1,end,:])
     fig
 end
+function plotVarEn(filename::String,imax=nothing)
+    fig = Figure()
+
+    ax = Axis(fig[1, 1], xlabel = "Iteration", ylabel = "Energy",xlabelvisible=false,xticklabelsvisible=false)
+    ax2 = Axis(fig[2,1], xlabel = "Iteration", ylabel = "α")
+
+    E0_i = h5read(filename,"E0")
+    ΔE_i = h5read(filename,"ΔE")
+    params_steps =  h5read(filename,"params_steps")
+
+    if imax !== nothing
+        E0_i = E0_i[1:imax]
+        ΔE_i = ΔE_i[1:imax]
+        params_steps = params_steps[:,:,1:imax]
+    end
+    Epl =E0_i
+    x = eachindex(Epl)
+    errorbars!(ax,x,Epl,ΔE_i,whiskerwidth=5)
+    lines!(ax,x,Epl)
+    # ylims!(ax,0.001,10.)
+    # lines!(ax2,x,SW.mean(params_steps,dims=1)[1,1,:])
+    lines!(ax2,x,params_steps[1,1,:])
+    # lines!(ax2,x,SW.mean(stochReconfRes.params_steps,dims=1)[1,end,:])
+    fig
+end
 plotVarEn(stochReconfRes)
 ##
 SW.Random.seed!(12322)
