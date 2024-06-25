@@ -113,9 +113,12 @@ function getDistReduction(S,ψG::FullVariationalGuidingFunction)
     return (;AllDists,indicesMapping,uniqueInds)
 
 end
-getReducedDist(ri,rj,Lx,Ly) = abs.(SVector(nearbyInt.(ri, rj,(Lx,Ly))))
+function getReducedDist(ri,rj,Lx,Ly) 
+    rpr = abs.(SVector(nearbyInt.(ri, rj,(Lx,Ly))))
+    return sort(rpr)
+end
 
-centralPos(Lx,Ly) = (Lx//2,Ly//2)
+centralPos(Lx,Ly) = ((Lx+1)//2,(Ly+1)//2)
 centralPos(S::AbstractMatrix) = centralPos(size(S)...)
 function getCentralPlaquette(S)
     allplaqs = collect(plaquetteIterator(S))
