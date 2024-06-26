@@ -129,7 +129,7 @@ hlines!([exactCorr],color = :red)
 current_figure()
 ##
 #___________Spin-1_______________________
-S = SW.stencilConfig(zeros(12,12),1;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
+S = SW.stencilConfig(zeros(16,16),1;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
 DT = SW.DiscreteTimeMethod(0.,2,prod(size(S)))
 ψG = SW.fullVariationalFunction(S,0.15)
 stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,200+ 5*i),ψG,30,0.8,SW.IterativeSRSolver();Nwalkers = 6*20,rel_tolerance=1e-8,equilibration_steps=100,pre_equilibration_steps=10_000)
@@ -150,13 +150,14 @@ GFMCPlaqs = collect(SW.plaquetteIterator(S))[symReduc.uniqueInds]
 allPlaqs = collect(SW.plaquetteIterator(S))
 
 ##
-
+outfile = "Data/temp/S1/L=$(size(S,1))"
+mkpath(outfile)
 BOp = SW.PlaquetteFlipOperator(S)
-resB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,1,BOp,ψG,[refPlaq]) for (i,res) in enumerate(results)])
+resB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,1,BOp,ψG,[refPlaq];outfile = outfile*"$i.h5") for (i,res) in enumerate(results)])
 ##
 BBOp = SW.BBOperator(S,refPlaq)
 # resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,1,BBOp,ψG,GFMCPlaqs) for (i,res) in enumerate(results)])
-resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,1,BBOp,ψG,GFMCPlaqs) for (i,res) in enumerate(results)])
+resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,1,BBOp,ψG,GFMCPlaqs;outfile = outfile*"$i.h5") for (i,res) in enumerate(results)])
 
 
 ##
@@ -228,6 +229,13 @@ function FTPlaq(rPlaq,Vals,k)
     res
 end
 
+function ω_photon(kx,ky)
+    sx,cx = sincos(kx)
+    sy,cy = sincos(ky)
+    w2 = (cx - cy)^2 + 4*(sx*sy)^2
+    return sqrt(w2)
+end
+ω_photon((kx,ky)) = ω_photon(kx,ky)
 with_theme(theme_PiTicks()) do
     T = SW.SA[
         1 1;
@@ -237,16 +245,23 @@ with_theme(theme_PiTicks()) do
     # rPlaq = [mapToPlaquetteBasis(r) for r in ri]
     capfilter(x) = min(abs(x),30)
 
-    return scatter(Point.(ri),color = capfilter.(200 .*BBCorrelator./maximum(BBCorrelator)),markersize = capfilter.(400 * BBCorrelator./maximum(BBCorrelator)),axis =(;aspect=1,xticks=SimpleTicks(-6:6), yticks=SimpleTicks(-6:6)))
+    # return scatter(Point.(ri),color = capfilter.(200 .*BBCorrelator./maximum(BBCorrelator)),markersize = capfilter.(400 * BBCorrelator./maximum(BBCorrelator)),axis =(;aspect=1,xticks=SimpleTicks(-6:6), yticks=SimpleTicks(-6:6)))
 
     # return scatter(Point.(ri),color = BBCorrelator,markersize = 150 * abs.(BBCorrelator))
     k = LinRange(-pi,pi,200)
 
     FT = [FTPlaq(ri,BBCorrelator,SW.SA[kx,ky]) for (kx,ky) in Iterators.product(k,k)]
-    fig = Figure()
+    fig = Figure(size = 1.3 .*(500,250))
     ax = Axis(fig[1,1];aspect = 1)
+    ax2 = Axis(fig[1,2];aspect = 1)
+
     hm = heatmap!(ax,k,k,FT)
-    Colorbar(fig[1,2],hm)
+
+    photw = ω_photon.(Iterators.product(k,k))
+    photw .*= maximum(FT)/maximum(photw)
+
+    heatmap!(ax2,k,k,photw,colormap = :viridis,colorrange = extrema(FT))
+    Colorbar(fig[1,3],hm)
     fig
 end
 ##
@@ -274,7 +289,7 @@ with_theme(theme_PiTicks()) do
     end
     return heatmap(obsMat)
 
-    FT = SW.LatticeFFTs.fft(obsMat)
+    FT = SW.FFTW.fft(obsMat)
     FT[1,1] = NaN
     fig = Figure()
     ax = Axis(fig[1,1];aspect = 1)
