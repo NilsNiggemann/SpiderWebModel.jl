@@ -88,7 +88,7 @@ end
     Sq = similar(Conf, ComplexF64)
     
     Si = similar(Conf, ComplexF64)
-    plan = SW.LatticeFFTs.FFTW.plan_fft(Conf)
+    plan = SW.FFTW.plan_fft(Conf)
 
     function SqFunc(Conf)
         Si .= Conf

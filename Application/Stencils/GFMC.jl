@@ -237,7 +237,7 @@ function getSq(res,p)
     
     Si = similar(Conf, ComplexF64)
 
-    plan = SW.LatticeFFTs.FFTW.plan_fft(Si)
+    plan = SW.FFTW.plan_fft(Si)
 
     function SqFunc(Conf)
         Si.= Conf

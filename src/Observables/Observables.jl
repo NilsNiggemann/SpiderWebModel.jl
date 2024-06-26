@@ -1,14 +1,10 @@
-using LatticeFFTs
-using LatticeFFTs
-using LatticeFFTs.Interpolations
-
 function getStructureFacWeights(AllStates::AbstractVector{<:SpinConfig}, weights, tol = 0)
     # weights = abs2.(Psi)
     # state_weight = collect(zip( AllStates,weights))[inds]
     Conf = parent(AllStates[1])
     Sq = similar(Conf, Complex{eltype(Conf)})
     Si = similar(Conf, Complex{eltype(Conf)})
-    plan = LatticeFFTs.FFTW.plan_fft(Conf)
+    plan = FFTW.plan_fft(Conf)
     # Sq(c) = mul!(outBuffer,plan,c)
     
     Lx,Ly = size(Conf)
@@ -41,30 +37,24 @@ function getStructureFacWeights(AllStates::AbstractVector{<:SpinConfig}, weights
     return (; kx,ky, Sq = resultFull)
 end
 
-import LatticeFFTs.Interpolations
-
-function _convertToInds(k,L)
-    k´ = mod2pi(k)
-    i = round(Int,k´/2pi*L)+1
-    # i = rem(i,L)+1
+function _convertToInds(k, L)
+    i =  k*L/(2pi)
+    i = (i + L) % L # Ensure positive indices before modulo
+    i = round(Int,i) +1
+    i == L+1 && return 1
+    return i
 end
 
-function getSqCont(SqMat)
-    Lx,Ly = size(SqMat) .-1
+function getSqCont(SqMat;cutoffEnd = 1)
+    SqPlot = @view SqMat[1:end-cutoffEnd,1:end-cutoffEnd]
+    Lx,Ly = size(SqPlot)
 
     function Sq(kx,ky)
         ix = _convertToInds(kx,Lx)
         iy = _convertToInds(ky,Ly)
-        # ix = rem2pi(kx´)*(Lx-1)+1
-        return SqMat[ix,iy]
+        return SqPlot[ix,iy]
     end
-    # dims = size(SqMat) .-1
-    # nk = Tuple(0:N for N in dims)
-    # Sq = Interpolations.interpolate(SqMat, Interpolations.NoInterp())
-    # Sq = Interpolations.scale(Sq, 2π ./ dims .* nk)
-    # Sq = Interpolations.extrapolate(Sq, Periodic())
-
-    # Sq(k) = Sq(k[1],k[2])
+    Sq(k) = Sq(k[1],k[2])
     return Sq
 end
 
@@ -81,7 +71,6 @@ end
 function getEqualWeightStructureFac(AllStates)
     NumSites = length(AllStates[1])
     weights = abs2.(normalize!(ones(length(AllStates)))) ./ NumSites
-    println(weights[1])
     return getStructureFacWeights(AllStates, weights)
 end
 
@@ -177,7 +166,7 @@ copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
     Sq = similar(Conf, ComplexF32)
     
     Si = similar(Conf, ComplexF32)
-    plan = LatticeFFTs.FFTW.plan_fft(Si)
+    plan = FFTW.plan_fft(Si)
 
     function SqFunc(Conf)
         # Si .= Conf
