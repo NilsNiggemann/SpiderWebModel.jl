@@ -15,7 +15,7 @@ function plotEnergies(results,method,E0=NaN;normalize=false,kwargs...)
     end
 end
 
-function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,τ=nothing, nThermal=1,normalize=false,kwargs...)
+function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,τ=nothing, nThermal=1,normalize=false,dense = false,kwargs...)
     
     getnBra(i::Integer) = i
     getnBra(m::SW.AbstractGFMCMethod) = m.nBranch
@@ -37,11 +37,18 @@ function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0
         en = en ./NSpins
         err = err ./NSpins
         !isnan(E0) && (E0 = E0 /NSpins)
+        !isnan(Emin) && (Emin = Emin /NSpins)
+        !isnan(Emax) && (Emax = Emax /NSpins)
     end
     
     proj = _getscaling(method) .*eachindex(en)
-    scatterlines!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5;kwargs...)
-    errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black;kwargs...)
+    if dense
+        l = lines!(ax,proj,en,label = L"GFMC$$",color = :black,kwargs...)
+        band!(ax,proj,en .- err,en .+ err,color = (l.color[],0.3),kwargs...)
+    else
+        scatterlines!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5;kwargs...)
+        errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black;kwargs...)
+    end
     !isnan(E0)&& hlines!([E0],color = :red,label = L"exact $$")
     axislegend(ax,merge=true)
     xlims!(ax,0,last(proj))
@@ -128,9 +135,10 @@ function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p =
         hlines!(axen[i],[weightAvg,],color = :black)
 
 
-        WP = trackWalkerPath(res.reconfigurationTable,initWalkers,Ntrack)'
-        heatmap!(axreconf[i],WP)
-        hlines!(axreconf[i],minimum(initWalkers)-0.5,color = :red,linewidth = 1,linestyle = :dash)
+        # WP = trackWalkerPath(res.reconfigurationTable,initWalkers,Ntrack)'
+        WP = reverse(SW.getBranchingMatrix(res.reconfigurationTable,Ntrack,Ntrack-1).PopulationMatrix',dims= 1)
+        heatmap!(axreconf[i],WP,colormap = :jet)
+        hlines!(axreconf[i],minimum(initWalkers)-0.5,color = :black,linewidth = 1,linestyle = :dash)
         Sq = SW.getSqGFMC(res,p÷nBra)
         heatmap!(axSq[i],kx,ky,Sq)
     end
@@ -143,6 +151,24 @@ function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p =
     end
 
     fig
+end
+
+function getBranchingMatrix(reconfigurationTable,NSteps)
+    BranchingMatrix = fill(0,size(reconfigurationTable,1),NSteps)
+    recView = @view reconfigurationTable[:,begin:NSteps]
+    getBranchingMatrix!(BranchingMatrix,recView)
+end
+
+function getBranchingMatrix!(BranchingMatrix::AbstractMatrix,reconfigurationTable::AbstractMatrix)
+    BranchingMatrix[:,begin] .= @view reconfigurationTable[:,begin]
+
+    for n in axes(reconfigurationTable,2)[begin+1:end]
+        for α in axes(reconfigurationTable,1)
+            α´ = reconfigurationTable[α,n]
+            BranchingMatrix[α,n] = BranchingMatrix[α´,n-1]
+        end
+    end
+    return BranchingMatrix
 end
 
 function plotVarEn(stochReconfRes;normalization=1)

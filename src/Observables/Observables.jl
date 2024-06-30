@@ -157,6 +157,30 @@ function getBij_square(AllStates,plaqMapping,ψ0::AbstractVector,I,J)
     end
     return res
 end
+
+function getSiSi_tau(AllStates,eigen,tau,I=(1,1))
+    (;values,vectors) = eigen
+    I_Cart = CartesianIndex(I)
+    v0 = vectors[:,1]
+    # S_I = getindex.(AllStates,I_Cart)
+
+    res = zeros(length(tau))
+    e0 = values[1]
+
+    for n in eachindex(values)
+        vn = @view vectors[:,n]
+        S_0n = 0. +0im
+        for (i,Conf) in enumerate(AllStates)
+            S_0n += Conf[I_Cart] * vn[i]*v0[i]
+        end
+        for (ti,t) in enumerate(tau)
+            res[ti] += abs2(S_0n) * exp(-(values[n]-e0)*t)
+        end
+    end
+    return res
+
+end
+
 copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
 @views function getSqGFMC(res,p)
     Gnp = precomputeNormalizedAccWeight(res.TotalWeights,1,p)    # Gnp = ones(length(res.TotalWeights[nThermal:end]),p)
@@ -202,3 +226,4 @@ function getSqsGFMC(Results,p,nBra=nothing)
     end
     return Sqs
 end
+

@@ -5,6 +5,7 @@ using CairoMakie
 using Statistics
 using MakieHelpers
 using SpiderWebModel
+include("plottingUtils.jl")
 ##
 S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 # S = SW.stencilConfig(SW.constructConfigPath(15,15,SW.ALLGS_S12),1/2)
@@ -391,17 +392,17 @@ plotCut(SqsGFMC_p,1,1)
 
 ##
 SW.Random.seed!(1234)
-S = SW.stencilConfig(zeros(24,24),1;
+S = SW.stencilConfig(zeros(16,16),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 DT = SW.DiscreteTimeMethod(0.,6,size(S,1)^2/4)
 ψG = SW.fullVariationalFunction(S,0.168)
-stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,1000+ 30*i),ψG,10,i->max(2. - 1*log(i),0.1) ,SW.IterativeSRSolver();Nwalkers = 6*30,rel_tolerance=1e-8,equilibration_steps=100,pre_equilibration_steps=50_000,scatter_fraction=0.6)
-ψG = SW.FullVariationalGuidingFunction(stochReconfRes.params_steps[:,:,end-2])
+# stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,1000+ 30*i),ψG,10,i->max(2. - 1*log(i),0.1) ,SW.IterativeSRSolver();Nwalkers = 6*30,rel_tolerance=1e-8,equilibration_steps=100,pre_equilibration_steps=50_000,scatter_fraction=0.6)
+# ψG = SW.FullVariationalGuidingFunction(stochReconfRes.params_steps[:,:,end-2])
 ##
 DT = SW.DiscreteTimeMethod(0.,12,size(S,1)^2/3.8)
-scatter_fraction = 0.98
-@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,40,10_000,ψG;equilibration_steps=0,pre_equilibration_steps=50_000,scatter_fraction) for i in 1:6])
+scatter_fraction = 0.8
+@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,80,1500,ψG;equilibration_steps=0,pre_equilibration_steps=50_000,scatter_fraction) for i in 1:2])
 ##
 # results = resultsDT
 nBra = DT.nBranch

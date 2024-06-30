@@ -28,11 +28,15 @@ HConfs = getPeriodic.(SW.spinConfig.(HStair.AllStates,Ref(S_ED),Ref(HStair.plaqM
 magEx = SW.getMagnetization(HConfs, v0)
 SqEx = SW.getStructureFac(HConfs,v0)
 ##
+results = nothing
+sleep(0.5)
+##
 GC.gc()
 GC.gc()
-
-outfile = "Data/temp/S12_8/"
+##
+outfile = "Data/temp/S12_1/"
 rm(outfile;recursive=true,force=true)
+##
 mkpath(outfile)
 nThermal = 1000
 nBra = 3
@@ -40,14 +44,14 @@ nBra = 3
 
 # ψG(N) = 1
 # DT = SW.ContinuousTimeMethod(0.1,3,-E0)
-DT = SW.DiscreteTimeMethod(0.,3,-E0)
+DT = SW.DiscreteTimeMethod(0.,1,-E0)
 # stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,1000+ 200*i),ψG,50,0.6,SW.IterativeSRSolver();Nwalkers = 6*8,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
 # ψG = typeof(ψG)(stochReconfRes.params)
 # DT = SW.DiscreteTimeMethod(0,3,E0)
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,2000,ψG,equilibration_steps=100,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,1500,ψG,equilibration_steps=100,pre_equilibration_steps=1_000,scatter_fraction=0.5,outfile = outfile*"$(i).h5") for i in 1:6])
 
 ##
-plotEnergies(results,DT,E0,nThermal=10,normalize=true,Emin=NaN)
+plotEnergies(results,DT,E0,nThermal=10,normalize=true,Emin = -0.1046,Emax = -0.10444)
 
 ##___________ StraightForwardWalking _______________________
 # allPlaqs = collect(SW.plaquetteIterator(S))
@@ -129,15 +133,15 @@ hlines!([exactCorr],color = :red)
 current_figure()
 ##
 #___________Spin-1_______________________
-S = SW.stencilConfig(zeros(16,16),1;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
-DT = SW.DiscreteTimeMethod(0.,2,prod(size(S)))
+S = SW.stencilConfig(zeros(14,14),1;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
+DT = SW.DiscreteTimeMethod(0.,1,prod(size(S)))
 ψG = SW.fullVariationalFunction(S,0.15)
 stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,200+ 5*i),ψG,30,0.8,SW.IterativeSRSolver();Nwalkers = 6*20,rel_tolerance=1e-8,equilibration_steps=100,pre_equilibration_steps=10_000)
 ##
 ψG = typeof(ψG)(stochReconfRes.params)
 DT = SW.DiscreteTimeMethod(0.,8,0.2658*prod(size(S)))
 
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,1000,ψG,equilibration_steps=5000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,3000,ψG,equilibration_steps=1000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
 ##
 plotEnergies(results,nBra,p=100;normalize=true)
 ##
@@ -151,13 +155,14 @@ allPlaqs = collect(SW.plaquetteIterator(S))
 
 ##
 outfile = "Data/temp/S1/L=$(size(S,1))"
+rm(outfile;recursive=true,force=true)
 mkpath(outfile)
 BOp = SW.PlaquetteFlipOperator(S)
-resB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,1,BOp,ψG,[refPlaq];outfile = outfile*"$i.h5") for (i,res) in enumerate(results)])
+resB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,1,BOp,ψG,[refPlaq];outfile = nothing #=outfile*"$i.h5"=#) for (i,res) in enumerate(results)])
 ##
 BBOp = SW.BBOperator(S,refPlaq)
 # resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,1,BBOp,ψG,GFMCPlaqs) for (i,res) in enumerate(results)])
-resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,1,BBOp,ψG,GFMCPlaqs;outfile = outfile*"$i.h5") for (i,res) in enumerate(results)])
+resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,1,BBOp,ψG,GFMCPlaqs;outfile = nothing #=outfile*"$i.h5"=#) for (i,res) in enumerate(results)])
 
 
 ##

@@ -87,7 +87,6 @@ with_theme(theme_PiTicks()) do
         xzpanelcolor = (:black, 0.15), yzpanelcolor = (:black, 0.15),
         zgridcolor = :grey, ygridcolor = :grey, xgridcolor = :grey,xlabel = L"q_x",ylabel = L"q_y",zlabel,zticks = SimpleTicks(),xticks = ticklabels,yticks = ticklabels,protrusions=(30,60,-0,-0),backgroundcolor = :gray97,ylabeloffset=70)
     # Box(fig[1, 1], strokewidth = 0)
-    surface!(ax, x, y, 0 .*z; colormap = cmap, colorrange = (zmin, zmax),)
     sm = surface!(ax, x, y, z; colormap = cmap, colorrange = (zmin, zmax),
     transparency = true,alpha = 1,shininess = 30f0,backlight=10f0)
     

@@ -684,3 +684,72 @@ function random_init_walkers!(Walkers::AbstractVector{<:SpiderWebWalker},equilib
         end
     end
 end
+
+
+function getImagTimeCorr(Gnp,reconfigurationTable,ObsFunc::T,m=size(Gnp,2)÷2) where {T}
+    N = lastindex(reconfigurationTable,2)
+    Obs = [zero(ObsFunc(1,2m)) for i in 1:m]
+
+    # num = zero(Obs)
+    denom = zero(Obs[1])
+
+    Nw = size(reconfigurationTable,1)
+    p = size(Gnp,2)
+
+    BranchingMatrix = zeros(Int,Nw,m+1)
+
+    WalkerMultiplicities = zeros(Int,Nw,m+1)
+    for n in m+1:N
+        Gn = Gnp[n,p]
+        denom += Gn*Nw
+        # reconfView = @view reconfigurationTable[:,n-m:n]
+        
+        getBranchingMatrix!(BranchingMatrix,WalkerMultiplicities,reconfigurationTable,n,m)
+        # if any(iszero,BranchingMatrix)
+        #     return (;BranchingMatrix,WalkerMultiplicities,n)
+        # end
+        for α in 1:Nw
+            O0 = ObsFunc(BranchingMatrix[α,m],n-m)
+            for ntau in 1:m
+                mult = WalkerMultiplicities[α,ntau]
+                mult == 0 && continue
+                Otau = ObsFunc(BranchingMatrix[α,ntau],n-ntau)
+                Obs[ntau] += Gn*mult*O0*Otau
+            end
+            # num +=GnO 
+        end
+    end
+    
+    for i in eachindex(Obs)
+        Obs[i] /= denom
+    end
+    return reverse!(Obs)
+end
+
+function getBranchingMatrix!(BranchingMatrix::AbstractMatrix,PopulationMatrix,reconfigurationTable::AbstractMatrix,n,projectionLength)
+    # BranchingMatrix[:,begin] .= @view reconfigurationTable[:,begin]
+    PopulationMatrix .= 0 
+    for α in axes(reconfigurationTable,1)
+        α´ = α
+        for i_m in 0:projectionLength
+            α´ = reconfigurationTable[α´,n-i_m]
+            # println((; α,α´,i_m))
+            BranchingMatrix[α,end-i_m] = α´
+            PopulationMatrix[α´,end-i_m] += 1
+        end
+    end
+    return (;BranchingMatrix,PopulationMatrix)
+end
+
+function getBranchingMatrix(reconfigurationTable,n,projectionLength) 
+    BranchingMatrix = zeros(Int,size(reconfigurationTable,1),projectionLength+1)
+    PopulationMatrix = zeros(Int,size(reconfigurationTable,1),projectionLength+1)
+    getBranchingMatrix!(BranchingMatrix,PopulationMatrix,reconfigurationTable,n,projectionLength)
+end
+
+function constructSpinCorrTau(AllConfigs)
+
+    function Sz(α,n)
+        return float(AllConfigs[1,1,α,n])/2
+    end
+end
