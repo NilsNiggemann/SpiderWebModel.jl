@@ -40,32 +40,48 @@ end
 
 nThermal = 1000
 nBra = 3
-# ψG = SW.PlaquetteNumberGuidingFunction(0.197)
-ψG = constructExactGuidingFunc(v0,HConfs)
+ψG = SW.PlaquetteNumberGuidingFunction(0.197)
+# ψG = constructExactGuidingFunc(v0,HConfs)
 ##
 # ψG(N) = 1
-CT = SW.ContinuousTimeMethod(0.1,1,-E0)
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,40,2500,ψG,equilibration_steps=100,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:32])
+CT = SW.ContinuousTimeMethod(0.05,1,-E0)
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,100,2050,ψG,equilibration_steps=5000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:32])
 ##
 # plotEnergies(results,CT,E0,nThermal=10,dense=true)
-plotEnergies(results,CT,E0,nThermal=10,dense = false,Emin = E0-2e-1,Emax = E0+1e-1,τ = 1)
-# plotEnergies(results,CT,E0,nThermal=10,normalize=true,Emin=E0-2e-2,Emax = E0+2e-2,dense = true)
+# plotEnergies(results,CT,E0,nThermal=10,dense = false,Emin = E0-2e-1,Emax = E0+1e-1,τ = 1)
+plotEnergies(results,CT,E0,nThermal=10,normalize=true,Emin=E0-2e-2,Emax = E0+2e-2,dense = true)
 ##
-function getSStau(res,p)
+function getSStau(res,p,O)
     Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights,1,p)
-    ObsFunc = SW.constructSpinCorrTau(res.SaveConfigs)
+    ObsFunc = SW.constructSWF_operator(res.SaveConfigs,O)
+    # O = SW.PlaquetteNumberOperator_1(I)
+    # function ObsFunc(α,n)
+    #     conf = @view res.SaveConfigs[:,:,α,n]
+        
+    #     confS = SW.StencilSpinConfig(
+    #         SW.Stencils.StencilArray{Tuple{8,8}}(conf,SW.Stencils.Moore(),SW.Stencils.Wrap(),SW.Stencils.Conditional()),
+    #         Int8(1)
+    #     )
+        
+    #     return O(confS)
 
-    SW.getImagTimeCorr(Gnp,res.reconfigurationTable,ObsFunc)
+    # end
+
+    SW.getImagTimeCorr(Gnp,res.reconfigurationTable,ObsFunc,p÷2)
 end
+plaqs = collect(SW.plaquetteIterator(S))
 
-AllCorrs = getSStau.(results,100)
+# AllCorrs = [getSStau(res,100,I) for I in plaqs for res in results]
+# @profview getSStau.(results[1:4],10,Ref((2,3)))
+# AllCorrs = getSStau.(results,30,x->x[1,2]*x[2,3]/4)
+AllCorrs = getSStau.(results,30,x->x[1,2]/2)
 meanSStau = mean(AllCorrs)
 ##
 tau = CT.τ .* (eachindex(meanSStau) .-1)
-S_tau_exact = SW.getSiSi_tau(HConfs,ExSol,tau)
+S_tau_exact = SW.getTauCorr(HConfs,ExSol,tau,x->x[1,2])
 ##
 lines(tau,meanSStau,label = "Spin Correlation",color = :black)
 lines!(tau,S_tau_exact,label = "Spin Correlation",color = :red,linestyle = :dash)
-ylims!(0,1/4)
-band!(tau,meanSStau .- sqrt.(std(AllCorrs)),meanSStau .+ sqrt.(std(AllCorrs)),color = (:black,0.3))
+# ylims!(0,1/4)
+band!(tau,meanSStau .- std(AllCorrs),meanSStau .+ std(AllCorrs),color = (:black,0.3))
 current_figure()

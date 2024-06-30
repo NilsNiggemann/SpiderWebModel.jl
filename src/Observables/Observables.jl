@@ -158,9 +158,8 @@ function getBij_square(AllStates,plaqMapping,ψ0::AbstractVector,I,J)
     return res
 end
 
-function getSiSi_tau(AllStates,eigen,tau,I=(1,1))
+function getTauCorr(AllStates,eigen,tau,O::T) where T
     (;values,vectors) = eigen
-    I_Cart = CartesianIndex(I)
     v0 = vectors[:,1]
     # S_I = getindex.(AllStates,I_Cart)
 
@@ -171,7 +170,7 @@ function getSiSi_tau(AllStates,eigen,tau,I=(1,1))
         vn = @view vectors[:,n]
         S_0n = 0. +0im
         for (i,Conf) in enumerate(AllStates)
-            S_0n += Conf[I_Cart] * vn[i]*v0[i]
+            S_0n += O(Conf) * vn[i]*v0[i]
         end
         for (ti,t) in enumerate(tau)
             res[ti] += abs2(S_0n) * exp(-(values[n]-e0)*t)
@@ -227,3 +226,10 @@ function getSqsGFMC(Results,p,nBra=nothing)
     return Sqs
 end
 
+# struct SzOperator <: AbstractOperator
+#     I::CartesianIndex{2}
+# end
+# SzOperator((i,j)) = SzOperator(CartesianIndex(i,j))
+
+# (S::SzOperator)(conf::StencilSpinConfig) = conf[S.I] /2
+# (S::SzOperator)(conf::AbstractMatrix{<:AbstractFloat}) = conf[S.I]

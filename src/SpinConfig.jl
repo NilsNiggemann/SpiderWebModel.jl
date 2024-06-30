@@ -27,6 +27,11 @@ end
     return plaquetteIterator(parent(S))
 end
 
+@inline function plaquetteIterator(S::PeriodicMatrix)
+    inboundsInds = Base.Iterators.product(axes(S, 1), axes(S, 2))
+    filterInds = Iterators.filter(ind -> isodd(sum(ind)), inboundsInds)
+end
+
 function booleanSpinConfig(Conf::AbstractMatrix, S::Real = 1 / 2)
     S == 1 / 2 || error("S must be 1/2")
     return SpinConfig(Conf .== 1 / 2, S)
