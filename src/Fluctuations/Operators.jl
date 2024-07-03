@@ -30,12 +30,12 @@ Base.:+(Hxx1::AbstractDiagonalOperator,Hxx2::AbstractDiagonalOperator) = Combine
 
 (Hxx::CombinedOperator)(Walker::SpiderWebWalker) = Hxx.Hxx1(Walker) + Hxx.Hxx2(Walker)
 
-struct PlaquetteNumberOperator_1 <: 
+struct PlaquetteNumberOperator <: 
     AbstractDiagonalOperator 
     I::CartesianIndex{2}
 end
-PlaquetteNumberOperator_1((i,j)) = PlaquetteNumberOperator_1(CartesianIndex(i,j))
-function (N::PlaquetteNumberOperator_1)(x::StencilSpinConfig)
+PlaquetteNumberOperator(I::Tuple) = PlaquetteNumberOperator(CartesianIndex(I))
+function (N::PlaquetteNumberOperator)(x::StencilSpinConfig)
     applPlus, applMinus = P_applicable(x, N.I)
     n = applPlus + applMinus
     return n

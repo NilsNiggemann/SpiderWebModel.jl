@@ -5,7 +5,7 @@ using CairoMakie
 using Statistics
 using MakieHelpers
 using SpiderWebModel
-
+using Optim
 include("plottingUtils.jl")
 ##
 #___________Periodic Boundaries_______________________
@@ -15,10 +15,10 @@ function getPeriodic(parent)
 end
 
 S = SW.stencilConfig(parent(SW.getStairCase(8)),1/2;
-boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+# boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
-S_ED = getPeriodic(SW.getStairCase(size(S,1)))
-# S_ED = SW.getStairCase(size(S,1))
+# S_ED = getPeriodic(SW.getStairCase(size(S,1)))
+S_ED = SW.getStairCase(size(S,1))
 # S = SW.stencilConfig(parent(SW.getStairCase(7)),1/2)
 # S_ED = SW.getStairCase(size(S,1))
 HStair = SW.generateHilbertSpace(S_ED)
@@ -44,16 +44,22 @@ nBra = 3
 # ψG = constructExactGuidingFunc(v0,HConfs)
 ##
 # ψG(N) = 1
-CT = SW.ContinuousTimeMethod(0.05,1,-E0)
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,100,2050,ψG,equilibration_steps=5000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:32])
+CT = SW.ContinuousTimeMethod(0.2,1,-E0)
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,800,20000,ψG,equilibration_steps=500,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:12])
+@time println("done")
 ##
 # plotEnergies(results,CT,E0,nThermal=10,dense=true)
-# plotEnergies(results,CT,E0,nThermal=10,dense = false,Emin = E0-2e-1,Emax = E0+1e-1,τ = 1)
-plotEnergies(results,CT,E0,nThermal=10,normalize=true,Emin=E0-2e-2,Emax = E0+2e-2,dense = true)
+plotEnergies(results,CT,E0,nThermal=10,dense = true,Emin = E0-2e-3,Emax = E0+1e-3,τ = 50)
+# plotEnergies(results,CT,E0,nThermal=10,normalize=true,Emin=E0-2e-2,Emax = E0+2e-2,dense = true)
 ##
-function getSStau(res,p,O)
+function getSStau(res,p,mtau,O)
     Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights,1,p)
     ObsFunc = SW.constructSWF_operator(res.SaveConfigs,O)
+    
+    Gnp2 = SW.precomputeNormalizedAccWeight(res.TotalWeights,1,mtau)
+
+    GSObs = SW.getObs(Gnp2,res.SaveConfigs,res.reconfigurationTable,O)
+
     # O = SW.PlaquetteNumberOperator_1(I)
     # function ObsFunc(α,n)
     #     conf = @view res.SaveConfigs[:,:,α,n]
@@ -67,21 +73,152 @@ function getSStau(res,p,O)
 
     # end
 
-    SW.getImagTimeCorr(Gnp,res.reconfigurationTable,ObsFunc,p÷2)
+    SW.getImagTimeCorr(Gnp,res.reconfigurationTable,ObsFunc,mtau) .- GSObs.^2
 end
 plaqs = collect(SW.plaquetteIterator(S))
 
 # AllCorrs = [getSStau(res,100,I) for I in plaqs for res in results]
 # @profview getSStau.(results[1:4],10,Ref((2,3)))
-# AllCorrs = getSStau.(results,30,x->x[1,2]*x[2,3]/4)
-AllCorrs = getSStau.(results,30,x->x[1,2]/2)
+# obs(x) = x[2,3]+x[3,3]#*x[2,3]
+obs(x,normalization=1) = x[2,3]*normalization^2*x[2,4] + x[2,3]*normalization
+
+#  AllCorrs = getSStau.(results,20,x->obs(x),0.5)
+# @profview getSStau.(results,20,x->obs(x,0.5))
+AllCorrs = fetch.([Threads.@spawn getSStau(res,60,20,x->obs(x,0.5)) for res in results])
+# AllCorrs = getSStau.(results,200,x->x[1,2]*0.5 + x[2,3]*0.5)
 meanSStau = mean(AllCorrs)
 ##
 tau = CT.τ .* (eachindex(meanSStau) .-1)
-S_tau_exact = SW.getTauCorr(HConfs,ExSol,tau,x->x[1,2])
+S_tau_exact = SW.getTauCorr(HConfs,ExSol,tau,obs) .- SW.getGSObsED(HConfs,v0,obs)^2
 ##
-lines(tau,meanSStau,label = "Spin Correlation",color = :black)
-lines!(tau,S_tau_exact,label = "Spin Correlation",color = :red,linestyle = :dash)
-# ylims!(0,1/4)
-band!(tau,meanSStau .- std(AllCorrs),meanSStau .+ std(AllCorrs),color = (:black,0.3))
-current_figure()
+function fitExp(tau,O_tau,numTerms=1;verbose=false)
+
+    function model(A_n,En,tau)
+        return sum(a^2 * exp(-e * tau) for (a,e) in zip(A_n,En))
+    end
+    model(v,tau) = @views model(v[1,:],v[2,:],tau)
+
+    function loss(params)
+        predic = model.(Ref(params),tau)
+        return sum(abs2,(O_tau .- predic) ./O_tau)
+    end
+
+
+    x0 = ones(2,numTerms)
+    # res = optimize(loss, x0,LBFGS(); autodiff = :forward)
+    # precond(n) = SW.SparseArrays.spdiagm(-1 => -ones(n-1), 0 => 2ones(n), 1 => -ones(n-1)) * (n+1)
+
+    # res = optimize(loss, x0, method = ConjugateGradient(P = nothing))
+    res = optimize(loss, x0)
+    # res = optimize(loss, x0,SimulatedAnnealing())
+    
+    verbose && display(res)
+    sol = Optim.minimizer(res)
+    A_i = sol[1,:]
+    Δ_i = sol[2,:]
+    return (;A_i,Δ_i,sol,model,res)
+end
+##
+with_theme(theme_SimpleTicks()) do 
+    fig = Figure(size = 0.7 .*(800, 1000))
+    ax = Axis(fig[1, 1], xlabel = L"τ", ylabel = L"\mathcal{O}(τ)",
+    # yscale = Makie.pseudolog10,
+    yscale = log10,
+    xlabelvisible = false, xticklabelsvisible=false
+    )
+
+    axfit = Axis(fig[2, 1], xlabel = L"τ", ylabel = L"|\mathcal{O}(τ) - \mathcal{O}_\textrm{fit}(τ)|",yscale = log10,xlabelvisible = false, xticklabelsvisible=false)
+
+    axdelta = Axis(fig[3, 1], xlabel = L"τ", ylabel = L"\Delta")
+    
+    firstInd = findfirst(>(0.5),tau)
+    lastInd = findfirst(>=(3.8),tau)
+    if isnothing(lastInd)
+        lastInd = lastindex(tau)
+    end
+    if isnothing(firstInd)
+        firstInd = firstindex(tau)
+    end
+    # (;A,Delta)= fitExp(tau[firstInd:end],meanSStau[firstInd:end])
+    taufit = tau[firstInd:lastInd]
+    meanSStaufit = meanSStau[firstInd:lastInd]
+
+    (;A_i,Δ_i,sol,model) = fitExp(taufit,meanSStaufit,2)
+    Delta = minimum(Δ_i)
+    cutoff = 1e-10
+
+    normalizeVals(x) = max(x,cutoff)
+    yGFMC = normalizeVals.(meanSStau)
+    yExact = normalizeVals.(S_tau_exact)
+    yGFMCUpper = normalizeVals.(meanSStau .+ std(AllCorrs))
+    yGFMCLower = normalizeVals.(meanSStau .- std(AllCorrs))
+
+    scatterlines!(ax,tau,yGFMC,label = L"GFMC $$",color = :black)
+    lastval = S_tau_exact[end] 
+    lastval_tau = taufit[end]
+
+    gap = (ExSol.values[2] - ExSol.values[1])
+
+    y0 = lastval * exp(gap * lastval_tau)
+
+    lines!(ax,tau,yExact,label = L"exact $$",color = :red,linestyle = :dash)
+
+    
+    # lines!(ax,taufit,y0 .*exp.(-taufit*gap),label = L"e^{ΔE}",color = :blue,linestyle = :dash)
+
+    # lines!(ax,taufit,A .*exp.(-taufit*Delta),label = L"e^{ΔE}",color = :blue,linestyle = :dash)
+    # ylims!(0,1/4)
+    band!(ax,tau,yGFMCLower,yGFMCUpper,color = (:black,0.3))
+
+    lowerlim = minimum(filter(x->x >cutoff+1e-6, yGFMC))
+
+    ylims!(ax,lowerlim,maximum(yGFMC))
+    lines!(ax,taufit,normalizeVals.(model.(Ref(sol),taufit)),label = L"fit $$",color = :blue,linestyle = :solid,linewidth = 3)
+
+    Δs = [log.(normalizeVals.(O_GFMC[1])./normalizeVals.(O_GFMC)) ./ tau for O_GFMC in AllCorrs]
+    Δ = mean(Δs)
+    Δerr = std(Δs)
+    scatterlines!(axfit,taufit,abs.(meanSStaufit .- model.(Ref(sol),taufit)),label = L"\mathcal{O}(τ) - \mathcal{O}_\textrm{fit}(τ)",color = :black)
+
+    scatterlines!(axdelta,tau[firstInd:lastInd],Δ[firstInd:lastInd],label = L"\Delta_\textrm{GFMC}(τ)",color = :black)
+    upperband = Δ .+ Δerr
+    lowerband = Δ .- Δerr
+    band!(axdelta,tau[firstInd:lastInd],upperband[firstInd:lastInd],lowerband[firstInd:lastInd],color = (:black,0.3))
+    
+    strd(x) = string(round(x,digits = 3))
+    Δex = log.(yExact[1]./yExact) ./ tau
+    lines!(axdelta,tau,Δex,label = L"\Delta_\textrm{exact}(τ)",color = :red,linestyle = :dash)
+    hlines!(axdelta,[gap],color = :red,label = L"Δ_\textrm{exact} = %$(strd(gap))")
+    hlines!(axdelta,[Delta],color = :blue,label = L"Δ_\textrm{GFMC} = %$(strd(Delta))")
+    axislegend(ax)
+    axislegend(axdelta,position=:rt)
+    
+    rowsize!(fig.layout, 1, Relative(0.4))
+    rowsize!(fig.layout, 2, Relative(0.2))
+    rowsize!(fig.layout, 3, Relative(0.4))
+    linkxaxes!(ax, axfit, axdelta)
+    fig
+end
+
+##
+obs(x,normalization=1) = x[1,2]+ x[2,3] + x[4,5]#*normalization^3*x[5,4]#*x[1,3] #+ x[2,3]*normalization
+
+with_theme(theme_SimpleTicks()) do 
+    tau = LinRange(0,20.2,100)
+    S_tau_exact = SW.getTauCorr(HConfs,ExSol,tau,obs) .- SW.getGSObsED(HConfs,v0,obs)^2
+
+    fig = Figure()
+    ax = Axis(fig[1, 1], xlabel = L"τ", ylabel = L"\mathcal{O}(τ)",
+    yscale = log10,
+    )
+    axdelta = Axis(fig[2, 1], xlabel = L"τ", ylabel = L"\Delta")
+
+    lines!(ax,tau,S_tau_exact,label = L"\mathcal{O}(τ)",color = :red)
+
+    Δex = log.(S_tau_exact[1]./S_tau_exact) ./ tau
+    lines!(axdelta,tau,Δex,label = L"\Delta_\textrm{exact}(τ)",color = :red,linestyle = :dash)
+    gap = (ExSol.values[2] - ExSol.values[1])
+    strd(x) = string(round(x,digits = 3))
+    hlines!(axdelta,[gap],color = :red,label = L"Δ_\textrm{exact} = %$(strd(gap))")
+    fig
+end

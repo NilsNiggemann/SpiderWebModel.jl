@@ -4,6 +4,10 @@ struct PeriodicMatrix{T,Mat<:AbstractMatrix{T}} <: AbstractMatrix{T}
     Ly::Int
     offset::Int
 end
+@inline function plaquetteIterator(S::PeriodicMatrix)
+    inboundsInds = Base.Iterators.product(axes(S, 1), axes(S, 2))
+    filterInds = Iterators.filter(ind -> isodd(sum(ind)), inboundsInds)
+end
 
 PeriodicMatrix(Mat, Lx, Ly) = PeriodicMatrix(Mat, Lx, Ly, 0)
 PeriodicMatrix(Mat) = PeriodicMatrix(Mat, size(Mat)..., 0)

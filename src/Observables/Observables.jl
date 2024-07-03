@@ -177,7 +177,14 @@ function getTauCorr(AllStates,eigen,tau,O::T) where T
         end
     end
     return res
+end
 
+function getGSObsED(AllStates,v0,O::T) where T
+    res = 0.
+    for (i,Conf) in enumerate(AllStates)
+        res += O(Conf) * abs2(v0[i])
+    end
+    return res
 end
 
 copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)

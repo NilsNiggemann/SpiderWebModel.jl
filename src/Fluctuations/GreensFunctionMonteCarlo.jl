@@ -661,9 +661,9 @@ function random_init_walkers!(Walkers::AbstractVector{<:SpiderWebWalker},equilib
 end
 
 
-function getImagTimeCorr(Gnp,reconfigurationTable,ObsFunc::T,m=size(Gnp,2)÷2) where {T}
+function getImagTimeCorr(Gnp,reconfigurationTable,ObsFunc::T,mtau=size(Gnp,2)÷4, m=size(Gnp,2)÷2) where {T}
     N = lastindex(reconfigurationTable,2)
-    Obs = [zero(ObsFunc(1,2m)) for i in 1:m]
+    Obs = [zero(ObsFunc(1,2m)) for i in 1:mtau]
 
     # num = zero(Obs)
     denom = zero(Obs[1])
@@ -681,11 +681,11 @@ function getImagTimeCorr(Gnp,reconfigurationTable,ObsFunc::T,m=size(Gnp,2)÷2) w
         getBranchingMatrix!(BranchingMatrix,WalkerMultiplicities,reconfigurationTable,n,m)
         for α in 1:Nw
             O0 = ObsFunc(BranchingMatrix[α,m],n-m)
-            for ntau in 1:m
-                mult = WalkerMultiplicities[α,ntau]
+            for ntau in 0:mtau-1
+                mult = WalkerMultiplicities[α,m-ntau]
                 mult == 0 && continue
-                Otau = ObsFunc(BranchingMatrix[α,ntau],n-ntau)
-                Obs[end-ntau+1] += Gn*mult*O0*Otau
+                Otau = ObsFunc(BranchingMatrix[α,m-ntau],n-m+ntau)
+                Obs[ntau+1] += Gn*mult*O0*Otau
             end
         end
     end
