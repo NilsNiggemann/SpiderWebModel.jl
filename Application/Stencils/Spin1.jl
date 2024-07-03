@@ -37,42 +37,37 @@ using Statistics
 using SpiderWebModel
 using HDF5
 ##
-# @views function readResults(filename,range)
-#     energies = h5read(filename,"energies")[range]
-#     TotalWeights = h5read(filename,"TotalWeights")[range]
-#     reconfTable =  SW.readMMapArray(filename,"reconfigurationTable")[:,range]
-#     SaveConfigs = SW.readMMapArray(filename,"SaveConfigs")[:,:,:,range]
-#     nBra = h5read(filename,"nBranch")
-#     return (;energies,TotalWeights,SaveConfigs,reconfTable,nBra)
-# end
 
+binsize=6_000
 
-binsize=3_000
+groups = readdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_small",join=true)
 
-files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_small/L=28/") for file in files]
-
-AllResults = vcat(SW.readResults.(files,binsize)...);
 outfile = "../Data/Spin1GFMC_Eval_periodic.h5"
 mkpath(dirname(outfile))
-##
 
-function getEns(results)
-    en = [SW.getEnergies(res.TotalWeights,res.energies,1,1000÷res.nBra) for res in results]
-end
-en  = stack(getEns(AllResults))
-##
-h5open(outfile,"w") do file
-    file["energies"] = en
-    file["nBra"] = AllResults[1].nBra
-    file["L"] = size(AllResults[1].SaveConfigs,1)
-end
-##
+Threads.@threads for group in groups
+    files = [joinpath(root,file) for (root,_,files) in walkdir(group) for file in files]
+    AllResults = vcat(SW.readResults.(files,binsize)...);
+    
 
-for projectionSteps in (1000,750,500)
-# for projectionSteps in (20,40)
-    SqsGFMC = stack(SW.getSqsGFMC(AllResults,projectionSteps),dims=3)
+    function getEns(results)
+        en = [SW.getEnergies(res.TotalWeights,res.energies,1,1000÷res.nBra) for res in results]
+    end
+    en  = stack(getEns(AllResults))
+    L = size(AllResults[1].SaveConfigs,1)
     h5open(outfile,"cw") do file
-        file["SqsGFMC/$projectionSteps"] = SqsGFMC
+        file["$L/energies"] = en
+        file["$L/nBra"] = AllResults[1].nBra
+        file["$L/L"] = L
+    end
+
+    Threads.@threads for projectionSteps in (50,100,200,500)
+    # for projectionSteps in (20,40)
+        println(L, " ",projectionSteps)
+        SqsGFMC = stack(SW.getSqsGFMC(AllResults,projectionSteps),dims=3)
+        h5open(outfile,"cw") do file
+            file["$L/SqsGFMC/$projectionSteps"] = SqsGFMC
+        end
     end
 end
 ##

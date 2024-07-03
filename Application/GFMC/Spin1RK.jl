@@ -1,12 +1,12 @@
 #!/bin/bash
 #=
 #!/bin/bash
-#SBATCH --job-name=GFMCS1
+#SBATCH --job-name=RKS1
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=1-10:00:00
+#SBATCH --time=4-10:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
 #SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMC/RK%a.out
 #SBATCH --partition=normal
@@ -26,11 +26,11 @@ i_arg = parse(Int, ARGS[1])
 
 L = 100
 
-nBra = 15
-NSteps = 4_000
-equilibration_steps = 10
-NWalkers = 128*2
-scatter_fraction = 0.9
+nBra = 120
+NSteps = 2000
+equilibration_steps = 300
+NWalkers = 128*1
+scatter_fraction = 0.99
 outfile = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataRK/L=$(L)/$i_arg/Spin1GFMC_L=$(L)_nBra=$(nBra)_NSteps=$(NSteps)_NW=$(NWalkers)_$(i_arg).h5"
 mkpath(dirname(outfile))
 @assert !isfile(outfile) "file already exists!"
@@ -53,4 +53,4 @@ DT = SW.ContinuousTimeMethod(1.,nBra,0.,SW.Hxx_RK(1))
 ##
 @info "starting run" L nBra NSteps NWalkers outfile
 
-@time results = SW.startManyWalkerGFMC(parentState,DT,NWalkers,NSteps,ψG;equilibration_steps,pre_equilibration_steps=500_000,scatter_fraction,outfile)
+@time results = SW.startManyWalkerGFMC(parentState,DT,NWalkers,NSteps,ψG;equilibration_steps,pre_equilibration_steps=5_000_000,scatter_fraction,outfile)

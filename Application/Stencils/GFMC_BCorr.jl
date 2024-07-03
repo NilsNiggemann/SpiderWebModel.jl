@@ -161,7 +161,7 @@ resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,1,BBOp,Ï
 
 
 ##
-Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,1) for res in results]
+Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,20) for res in results]
 
 BBVals = [[SW.get_observables_sfw(Gnp,res[:,j,:]',mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resBB,results) ]
 BVals = [SW.get_observables_sfw(Gnp,res[:,begin,:]',mean(result.TotalWeights)) for (Gnp,res,result) in zip(Gnps,resB,results) ]
@@ -220,7 +220,7 @@ let
     fig
 end
 
-
+##
 function FTPlaq(rPlaq,Vals,k)
     res = 0.
     for (r,Val) in zip(rPlaq,Vals)
@@ -245,7 +245,7 @@ with_theme(theme_PiTicks()) do
     # rPlaq = [mapToPlaquetteBasis(r) for r in ri]
     capfilter(x) = min(abs(x),30)
 
-    # return scatter(Point.(ri),color = capfilter.(200 .*BBCorrelator./maximum(BBCorrelator)),markersize = capfilter.(400 * BBCorrelator./maximum(BBCorrelator)),axis =(;aspect=1,xticks=SimpleTicks(-6:6), yticks=SimpleTicks(-6:6)))
+    return scatter(Point.(ri),color = capfilter.(200 .*BBCorrelator./maximum(BBCorrelator)),markersize = capfilter.(400 * BBCorrelator./maximum(BBCorrelator)),axis =(;aspect=1,xticks=SimpleTicks(-6:6), yticks=SimpleTicks(-6:6)))
 
     # return scatter(Point.(ri),color = BBCorrelator,markersize = 150 * abs.(BBCorrelator))
     k = LinRange(-pi,pi,200)

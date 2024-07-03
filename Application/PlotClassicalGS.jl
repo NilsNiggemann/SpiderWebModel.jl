@@ -53,8 +53,19 @@ Spin1Configs = let
     c1
 end
 ##
+function trueMomenta(kmin,kmax,L)
+    nmin = floor(Int,L*kmin/(2pi))
+    nmax = ceil(Int,L*kmax/(2pi))
+    # return 1/(2pi*L*100) .* nmin:nmax
+    return (nmin : nmax) .* 2pi/L
+end
+##
 Sq = SW.getEqualWeightStructureFac(Configs)
-SqSpin1 = SW.getEqualWeightStructureFac(Spin1Configs)
+
+resRK = SW.readResults(first(readdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataRK/L=100/2/",join=true)),1000);
+
+SqSpin1 = SW.getSqGFMC(resRK[end],1) ./4
+
 ##
 with_theme(theme_PiTicks()) do
     fig = Figure(size = 0.8 .*(750,300))
@@ -66,26 +77,26 @@ with_theme(theme_PiTicks()) do
 
     SqFunc = SW.getSqCont(real(Sq.Sq))
 
-    Sq1Func = SW.getSqCont(real(SqSpin1.Sq) ./2) # normalize by S(S+1)
+    Sq1Func = SW.getSqCont(real(SqSpin1) ./2) # normalize by S(S+1)
     
-    kx = collect(LinRange(-0.5pi,1.5pi,700))
+    kx = collect(trueMomenta(-0.5pi,1.5pi,size(Sq.Sq,1)-1))
     # kx = kx
     ky = kx
-    kxSpin1 = SqSpin1.kx .-0.5pi# .+pi/size(SqSpin1.Sq,1)
+    kxSpin1 = collect(trueMomenta(-0.5pi,1.5pi,size(SqSpin1,1)-1))
     # kxSpin1 = 2pi .* (0.5:1)
     kySpin1 = kxSpin1
 
-    SqLN = [SqLargeN(kx,ky)/4 for kx in kx , ky in ky]
+    SqLN = [SqLargeN(kx,ky)/4 for kx in kxSpin1 , ky in kySpin1]
     SqPlot = [SqFunc(kx,ky) for kx in kx , ky in kx]
-    SqSpin1Plot = [Sq1Func(kx,ky) for kx in ky , ky in ky]
-    @info "" sum(SqLN)/length(SqLN) sum(SqPlot)/length(SqPlot) sum(SqSpin1.Sq)/length(SqSpin1.Sq) length(kxSpin1)
+    SqSpin1Plot = [Sq1Func(kx,ky) for kx in kxSpin1 , ky in kySpin1]
+    @info "" sum(SqLN)/length(SqLN) sum(SqPlot)/length(SqPlot) sum(SqSpin1)/length(SqSpin1) length(kxSpin1)
     cRange = extrema(SqPlot)
 
     hm = heatmap!(ax,kx,ky,SqLN,colorrange = cRange)
     hm2 = heatmap!(ax2,kx,ky,SqPlot,colorrange = cRange)
-    hm3 = heatmap!(ax3,kx,ky,SqSpin1Plot)
+    hm3 = heatmap!(ax3,kx,ky,SqSpin1Plot ,colorrange = cRange)
     # hm = halfhalfheatmap!(ax,kx,ky,SqFunc,SqLargeN,x->-x+3pi,normalize = true)
-    Colorbar(fig[1, 4], hm2,ticks = [0,0.2,0.4,0.6],height = Relative(0.9),label = L"\mathcal{S}(q)")
+    Colorbar(fig[1, 4], hm2,ticks = [0,0.2,0.4,0.6],height = Relative(0.9),label = L"\mathcal{S}(q)/S(S+1)")
     save("../Application/figs/Sq_comparison.png", fig,px_per_unit=3)
     # Colorbar(fig[1, 2], hm)
     fig
@@ -201,21 +212,22 @@ with_theme(theme_PiTicks()) do
     axkwargs...
     )
 
-    SqFunc = SW.getSqCont(real(Sq.Sq))
+    SqFunc = SW.getSqCont(real(Sq.Sq) ./ (1/2*(1/2+1)))
 
-    Sq1Func = SW.getSqCont(real(SqSpin1.Sq) ./2) # normalize by S(S+1)
+    Sq1Func = SW.getSqCont(real(SqSpin1) ./2) # normalize by S(S+1)
     
-    kx = collect(LinRange(-0.5pi,1.5pi,700))
+    kx = collect(trueMomenta(-0.5pi,1.5pi,size(Sq.Sq,1)-1))
     # kx = kx
     ky = kx
-    kxSpin1 = SqSpin1.kx .-0.5pi# .+pi/size(SqSpin1.Sq,1)
+    kxSpin1 = collect(trueMomenta(-0.5pi,1.5pi,size(SqSpin1,1)-1))
     # kxSpin1 = 2pi .* (0.5:1)
     kySpin1 = kxSpin1
 
-    SqLN = [SqLargeN(kx,ky)/4 for kx in kx , ky in ky]
+    SqLN = [SqLargeN(kx,ky)/4 for kx in kxSpin1 , ky in kySpin1]
     SqPlot = [SqFunc(kx,ky) for kx in kx , ky in kx]
-    SqSpin1Plot = [Sq1Func(kx,ky) for kx in ky , ky in ky]
-    @info "" sum(SqLN)/length(SqLN) sum(SqPlot)/length(SqPlot) sum(SqSpin1.Sq)/length(SqSpin1.Sq) length(kxSpin1)
+    SqSpin1Plot = [Sq1Func(kx,ky) for kx in kxSpin1 , ky in kySpin1]
+
+    @info "" sum(SqLN)/length(SqLN) sum(SqPlot)/length(SqPlot) sum(SqSpin1)/length(SqSpin1) length(kxSpin1)
     # cRange = extrema(SqPlot)
     cRange = (0,maximum(SqPlot))
     hm = heatmap!(ax,kx,ky,SqLN,colorrange = cRange)
@@ -231,15 +243,12 @@ with_theme(theme_PiTicks()) do
     # axkwargs...,
     # xtickcolor = :white,ytickcolor = :white,xminortickcolor = :white,yminortickcolor = :white
     )
-    kx = collect(SqED.kx)
-    ky = collect(SqED.ky)
-    kx .-= pi/2
-    ky .-= pi/2
-    SqFunc = SW.getSqCont(SqED.Sq[1:end-1,1:end-1])
-    SqMat = [real(SqFunc(x,y)) for x in kx, y in ky]
+    kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqED.Sq,1)-1)
+    SqFunc = SW.getSqCont(SqED.Sq  ./ (1/2*(1/2+1)))
+    SqMat = [real(SqFunc(x,y)) for x in kx, y in ky] 
 
     colorrange = extrema(SqMat)
-    SqRKFunc = SW.getSqCont(SqRK.Sq[1:end-1,1:end-1])
+    SqRKFunc = SW.getSqCont(SqRK.Sq  ./ (1/2*(1/2+1)))
     SqRKMat = [real(SqRKFunc(x,y)) for x in kx, y in ky]
     hmED1 = heatmap!(axED1, kx, ky, SqMat;colorrange )
     colorrange = extrema(SqRKMat)
@@ -256,8 +265,8 @@ with_theme(theme_PiTicks()) do
     textpos = Point(-pi/2,3pi/2)
 
 
-    Colorbar(subgl_top[1,4], hm2,height = Relative(1),width = Relative(0.8),label = L"\mathcal{S}(q)",ticks = SimpleTicks([0,0.2,0.4,0.6]))
-    Colorbar(subgl_bot[1,3], hmED2,height = Relative(1),width = Relative(0.8),label = L"\mathcal{S}(q)",ticks = SimpleTicks())
+    Colorbar(subgl_top[1,4], hm2,height = Relative(1),width = Relative(0.8),label = L"\mathcal{S}(q)/S(S+1)",ticks = SimpleTicks([0,0.2,0.4,0.6]))
+    Colorbar(subgl_bot[1,3], hmED2,height = Relative(1),width = Relative(0.8),label = L"\mathcal{S}(q)/S(S+1)",ticks = SimpleTicks())
 
 
     text!(ax, textpos ,text = L"a)",color = :black,align = (:left,:top),fontsize = 18)
