@@ -14,7 +14,7 @@ function getPeriodic(parent)
     SW.SpinConfig(SW.PeriodicMatrix(state), parent.S)
 end
 
-S = SW.stencilConfig(parent(SW.getStairCase(8)),1/2;
+S = SW.stencilConfig(parent(SW.getStairCase(10)),1/2;
 # boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 # S_ED = getPeriodic(SW.getStairCase(size(S,1)))
@@ -45,7 +45,7 @@ nBra = 3
 ##
 # ψG(N) = 1
 CT = SW.ContinuousTimeMethod(0.2,1,-E0)
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,800,20000,ψG,equilibration_steps=500,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:12])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,1000,120000,ψG,equilibration_steps=500,pre_equilibration_steps=1_000,scatter_fraction=0.5,outfile = "temp/$(i)_2.h5") for i in 1:12])
 @time println("done")
 ##
 # plotEnergies(results,CT,E0,nThermal=10,dense=true)
@@ -56,9 +56,7 @@ function getSStau(res,p,mtau,O)
     Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights,1,p)
     ObsFunc = SW.constructSWF_operator(res.SaveConfigs,O)
     
-    Gnp2 = SW.precomputeNormalizedAccWeight(res.TotalWeights,1,mtau)
-
-    GSObs = SW.getObs(Gnp2,res.SaveConfigs,res.reconfigurationTable,O)
+    GSObs = SW.getObs(Gnp,res.SaveConfigs,res.reconfigurationTable,O)
 
     # O = SW.PlaquetteNumberOperator_1(I)
     # function ObsFunc(α,n)
@@ -84,7 +82,7 @@ obs(x,normalization=1) = x[2,3]*normalization^2*x[2,4] + x[2,3]*normalization
 
 #  AllCorrs = getSStau.(results,20,x->obs(x),0.5)
 # @profview getSStau.(results,20,x->obs(x,0.5))
-AllCorrs = fetch.([Threads.@spawn getSStau(res,60,20,x->obs(x,0.5)) for res in results])
+AllCorrs = fetch.([Threads.@spawn getSStau(res,400,20,x->obs(x,0.5)) for res in results])
 # AllCorrs = getSStau.(results,200,x->x[1,2]*0.5 + x[2,3]*0.5)
 meanSStau = mean(AllCorrs)
 ##
@@ -94,7 +92,7 @@ S_tau_exact = SW.getTauCorr(HConfs,ExSol,tau,obs) .- SW.getGSObsED(HConfs,v0,obs
 function fitExp(tau,O_tau,numTerms=1;verbose=false)
 
     function model(A_n,En,tau)
-        return sum(a^2 * exp(-e * tau) for (a,e) in zip(A_n,En))
+        return sum(a^2 * exp(-abs(e) * tau) for (a,e) in zip(A_n,En))
     end
     model(v,tau) = @views model(v[1,:],v[2,:],tau)
 
@@ -120,6 +118,11 @@ function fitExp(tau,O_tau,numTerms=1;verbose=false)
 end
 ##
 with_theme(theme_SimpleTicks()) do 
+    nfit = 4
+        
+    firstInd = findfirst(>(0.0),tau)
+    lastInd = findfirst(>=(2.9),tau)
+
     fig = Figure(size = 0.7 .*(800, 1000))
     ax = Axis(fig[1, 1], xlabel = L"τ", ylabel = L"\mathcal{O}(τ)",
     # yscale = Makie.pseudolog10,
@@ -130,9 +133,7 @@ with_theme(theme_SimpleTicks()) do
     axfit = Axis(fig[2, 1], xlabel = L"τ", ylabel = L"|\mathcal{O}(τ) - \mathcal{O}_\textrm{fit}(τ)|",yscale = log10,xlabelvisible = false, xticklabelsvisible=false)
 
     axdelta = Axis(fig[3, 1], xlabel = L"τ", ylabel = L"\Delta")
-    
-    firstInd = findfirst(>(0.5),tau)
-    lastInd = findfirst(>=(3.8),tau)
+
     if isnothing(lastInd)
         lastInd = lastindex(tau)
     end
@@ -143,7 +144,10 @@ with_theme(theme_SimpleTicks()) do
     taufit = tau[firstInd:lastInd]
     meanSStaufit = meanSStau[firstInd:lastInd]
 
-    (;A_i,Δ_i,sol,model) = fitExp(taufit,meanSStaufit,2)
+    (;A_i,Δ_i,sol,model) = fitExp(taufit,meanSStaufit,nfit)
+    
+    println(sort(Δ_i))
+    
     Delta = minimum(Δ_i)
     cutoff = 1e-10
 
@@ -173,7 +177,7 @@ with_theme(theme_SimpleTicks()) do
     lowerlim = minimum(filter(x->x >cutoff+1e-6, yGFMC))
 
     ylims!(ax,lowerlim,maximum(yGFMC))
-    lines!(ax,taufit,normalizeVals.(model.(Ref(sol),taufit)),label = L"fit $$",color = :blue,linestyle = :solid,linewidth = 3)
+    lines!(ax,taufit,normalizeVals.(model.(Ref(sol),taufit)),label = L"fit $\sum_n^{%$nfit} |A_n|^2 e^{-\Delta_n \tau}$",color = :blue,linestyle = :solid,linewidth = 3)
 
     Δs = [log.(normalizeVals.(O_GFMC[1])./normalizeVals.(O_GFMC)) ./ tau for O_GFMC in AllCorrs]
     Δ = mean(Δs)
@@ -189,7 +193,7 @@ with_theme(theme_SimpleTicks()) do
     Δex = log.(yExact[1]./yExact) ./ tau
     lines!(axdelta,tau,Δex,label = L"\Delta_\textrm{exact}(τ)",color = :red,linestyle = :dash)
     hlines!(axdelta,[gap],color = :red,label = L"Δ_\textrm{exact} = %$(strd(gap))")
-    hlines!(axdelta,[Delta],color = :blue,label = L"Δ_\textrm{GFMC} = %$(strd(Delta))")
+    hlines!(axdelta,[Delta],color = :blue,label = L"Δ_\textrm{fit} = %$(strd(Delta))")
     axislegend(ax)
     axislegend(axdelta,position=:rt)
     

@@ -43,8 +43,8 @@ function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0
     
     proj = _getscaling(method) .*eachindex(en)
     if dense
-        l = lines!(ax,proj,en,label = L"GFMC$$",color = :black,kwargs...)
-        band!(ax,proj,en .- err,en .+ err,color = (l.color[],0.3),kwargs...)
+        l = lines!(ax,proj,en,label = L"GFMC$$";color = :black,kwargs...)
+        band!(ax,proj,en .- err,en .+ err;kwargs...,color = (l.color[],0.3))
     else
         scatterlines!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5;kwargs...)
         errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black;kwargs...)
