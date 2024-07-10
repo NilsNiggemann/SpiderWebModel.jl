@@ -23,24 +23,19 @@ SqRK = let
 end
 
 ##
-
-
-##
-with_theme(theme_PiTicks()) do
-    Sq = SW.getSqCont(SqRK)
-    kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqRK,1)-1)
-    heatmap(kx,ky,Sq.(Iterators.product(kx,ky)))
-end
-##
 res = h5open("../Data/Spin1GFMC_Eval_periodic.h5") do f
     read(f)
 end
 
+resOld = h5open("../Data/Spin1GFMC_Eval_open.h5") do f
+    read(f)
+end
+
 projectionSteps = 500
-SqsGFMC = eachslice(res["30"]["SqsGFMC"][string(projectionSteps)],dims=3)
+SqsGFMC = eachslice(resOld["SqsGFMC"][string(projectionSteps)],dims=3)
 
 SqMat = mean(real(SqsGFMC)) ./4
-errMat = sqrt.(var(real(SqsGFMC))) ./4
+errMat = std(real(SqsGFMC)) ./4
 SqFunc = SW.getSqCont(SqMat)
 
 errFunc = SW.getSqCont(errMat)
@@ -98,24 +93,40 @@ SqFieldTheory(k) = SqFieldTheory(k[1],k[2])
 #     (sqrt(2)*sqrt(4 - 4*cos(kx)*cos(ky) - cos(2*ky) + cos(2*kx)*(-1 + 2*cos(2*ky)))*(-cos(kx) + cos(ky) + 2*sin(kx)*sin(ky))^2)/(sqrt(v + 8*w + 2*w*(-4*cos(kx)*cos(ky) - cos(2*ky) + cos(2*kx)*(-1 + 2*cos(2*ky))))*((cos(kx) - cos(ky))^2 + 4*sin(kx)^2*sin(ky)^2) +1e-20)
 # end
 
-function SqFieldTheory2(kx,ky,k,b2,)
-    (sqrt(2)*sqrt(-((-4 + 4*cos(kx)*cos(ky) + cos(2*kx)*(1 - 2*cos(2*ky)) + cos(2*ky))*(40*b2 + k + 8*b2*(cos(2*kx) + 2*cos(kx)*(-4*cos(ky) + cos(kx)*cos(2*ky))))))*   (cos(kx) - cos(ky) + 2*sin(kx)*sin(ky))^2)/((cos(kx) - cos(ky))^2 + 4*sin(kx)^2*sin(ky)^2+1e-30)
+# function SqFieldTheory2(kx,ky,k,b2,)
+#     (sqrt(2)*sqrt(-((-4 + 4*cos(kx)*cos(ky) + cos(2*kx)*(1 - 2*cos(2*ky)) + cos(2*ky))*(40*b2 + k + 8*b2*(cos(2*kx) + 2*cos(kx)*(-4*cos(ky) + cos(kx)*cos(2*ky))))))*   (cos(kx) - cos(ky) + 2*sin(kx)*sin(ky))^2)/((cos(kx) - cos(ky))^2 + 4*sin(kx)^2*sin(ky)^2+1e-30)
+# end
+
+# function SqFieldTheory2(kx,ky,k,b2,)
+#     (sqrt(2)*(cos(kx) - cos(ky) + 2*sin(kx)*sin(ky))^2*sqrt((-4 + 4*cos(kx)*cos(ky) + cos(2*kx)*(1 - 2*cos(2*ky)) + cos(2*ky))*(-80*b2 - k - 4*b2*(cos(4*kx) - 16*cos(kx)*cos(ky) - 6*cos(2*ky) + cos(4*ky) - 12*cos(2*kx)*sin(ky)^2))))/((cos(kx) - cos(ky))^2 + 4*sin(kx)^2*sin(ky)^2+1e-30)
+# end
+
+function SqFieldTheory2(kx,ky,k,b2,b3,A=1)
+    A*(sqrt(2)*sqrt(-((-4 + 4*cos(kx)*cos(ky) + cos(2*kx)*(1 - 2*cos(2*ky)) + cos(2*ky))*(40*(b2 + b3) + k + 8*b2*(-8*cos(kx)*cos(ky) + cos(2*ky)) + 8*cos(2*kx)*(b2 - 4*b3 + (b2 + 2*b3)*cos(2*ky)) + 4*b3*(cos(4*kx) - 8*cos(2*ky) + cos(4*ky)))))*(cos(kx) - cos(ky) + 2*sin(kx)*sin(ky))^2)/((cos(kx) - cos(ky))^2 + 4*sin(kx)^2*sin(ky)^2+1e-30)
 end
 
-SqFieldTheory2(k,v,w) = SqFieldTheory2(k[1],k[2],v,w)
+SqFieldTheory2(k::AbstractVector,a,b,c,A=1) = SqFieldTheory2(k[1],k[2],a,b,c,A)
+##
 
+##
 function optimizeCoeffs(SqMat)
     k = 2pi .* LinRange(0,1,size(SqMat,1))
 
     # SqFT = [SqFieldTheory2(x,y,0,0) for x in kx, y in ky]
-    function loss(v,w)
+    function loss(b1,b2,b3,A)
         l = 0.
-        v = abs(v)
-        w = abs(w)
+        b1 = abs(b1)
+        b2 = abs(b2)
+        b3 = abs(b3)
+        A = abs(A)
         for (i,kx) in enumerate(k), (j,ky) in enumerate(k)
+        # for (i,kx) in enumerate(k)
+            # ky = 0
+            # j = 1
             # l += abs2(SqMat[i,j] - SqFieldTheory2(kx,ky,v,w))#/(SqMat[i,j]+1e-5)
             # if (kx^2 +ky^2) < (0.8pi)^2
-            l += abs2(SqMat[i,j] - SqFieldTheory2(kx,ky,v,w))#/(SqMat[i,j]+1e-5)
+            # l += abs2(SqMat[i,j] - SqFieldTheory2(kx,ky,b1,b2,b3))*(1/(SqMat[i,j]+1e-10) + 1)
+            l += abs2(SqMat[i,j] - SqFieldTheory2(kx,ky,b1,b2,b3,A))#*(0.7/(kx^2 +ky^2 +1e-2) + 1)
             # end
         end
         # for (i,kx) in enumerate(kx)
@@ -123,27 +134,46 @@ function optimizeCoeffs(SqMat)
         # end
         return l
     end
-    loss(v) = loss(v[1],v[2])
+    loss(v) = loss(v[1],v[2],v[3],v[4])
 
     # inner_optimizer = GradientDescent()
     # v0 = 0.08125
     # w0 = 0.025
-    v0 = 1.
-    w0 = 1.
-    println(loss(v0,w0))
-    x0 = [v0, w0]
+    # v0 = 1.
+    # w0 = 1.
+    # println(loss(v0,w0))
+    x0 = [1, 1,1.,1.]
+
     # (;v,w) = optimize(loss, [1e-10,1e-10],[Inf,Inf],Fminbox(inner_optimizer))
     res = optimize(loss, x0)
     @info res
-    (v,w) = abs.(Optim.minimizer(res))
-    @info "" loss(v0,w0) loss(v,w)
-    return (;v,w)
+    coefs = abs.(Optim.minimizer(res))
+
+    coefs2 = copy(coefs)
+    coefs2[end] = 1
+
+    coefsTuple = (coefs[1],coefs[2],coefs[3])
+
+    loss2(amplitude) = loss((coefsTuple ./amplitude[1])...,1.)
+
+    res_ampli = Optim.minimizer(optimize(loss2, [1.]))
+    
+    coefsFull = coefsTuple ./res_ampli
+    return coefsFull
+    # return (coefs[1],coefs[2],coefs[3],coefs[4])
 end
-fittingCoeffs::NamedTuple{(:v, :w), Tuple{Float64, Float64}} = optimizeCoeffs(SqMat)
+
+fittingCoefs = optimizeCoeffs(SqMat)
 ##
-SqFieldTheory(k) = SqFieldTheory2(k,fittingCoeffs...)
-SqFieldTheory(kx,ky) = SqFieldTheory2(kx,ky,fittingCoeffs...)
+function getFittedSq(coefs)
+    SqFit(kx,ky) = SqFieldTheory2(kx,ky,coefs...)
+    SqFit(k::Union{AbstractVector,Tuple}) = SqFieldTheory2(k[1],k[2],coefs...)
+    SqFit
+end
+SqFieldTheoryFit = getFittedSq(fittingCoefs)
+# fittingCoeffs::NamedTuple{(:v, :w), Tuple{Float64, Float64}} = optimizeCoeffs(SqMat)
 ##
+
 # SqFieldTheory(k) = SqFieldTheory2(k,1/850,0.2/850)
 # SqFieldTheory(kx,ky) = SqFieldTheory2(kx,ky,1/850,0.2/850)
 
@@ -161,9 +191,9 @@ with_theme(theme_PiTicks()) do
     projectionSteps = 500
 
     for (L,resL) in res
-        SqsGFMC = eachslice(resL["SqsGFMC"][string(projectionSteps)],dims=3)
+        SqsGFMC_L = eachslice(resL["SqsGFMC"][string(projectionSteps)],dims=3)
 
-        SqMat = mean(real(SqsGFMC)) ./4
+        SqMat = mean(real(SqsGFMC_L)) ./4
 
         minval = min(minval,minimum(SqMat))
         maxval = max(maxval,maximum(SqMat))
@@ -172,9 +202,9 @@ with_theme(theme_PiTicks()) do
     for (i,Lstr) in enumerate(Ls)
         resL = res[Lstr]
         L = parse(Int,Lstr)
-        SqsGFMC = eachslice(resL["SqsGFMC"][string(projectionSteps)],dims=3)
+        SqsGFMC_L = eachslice(resL["SqsGFMC"][string(projectionSteps)],dims=3)
 
-        SqMat = mean(real(SqsGFMC)) ./4
+        SqMat = mean(real(SqsGFMC_L)) ./4
         SqMat ./= maxval
 
         # errMat = sqrt.(var(real(SqsGFMC))) ./4
@@ -206,12 +236,12 @@ with_theme(theme_SimpleTicks()) do
     fig = Figure()
     ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"\mathcal{S}(\mathbf{q})",xticks = PiTicks())
     
-    colors = (:lightblue,:darkblue,:black)
+    colors = (:black,:lightblue,:darkblue,)
     for (color,p) in zip(colors,(100,200,500))
-        SqsGFMC = eachslice(res["30"]["SqsGFMC"][string(p)],dims=3)
+        SqsGFMC_p = eachslice(res["30"]["SqsGFMC"][string(p)],dims=3)
 
-        SqMat = mean(real(SqsGFMC)) ./4
-        errMat = sqrt.(var(real(SqsGFMC))) ./4
+        SqMat = mean(real(SqsGFMC_p)) ./4
+        errMat = std(real(SqsGFMC_p)) ./4
         SqFunc = SW.getSqCont(SqMat)
 
         errFunc = SW.getSqCont(errMat)
@@ -220,14 +250,16 @@ with_theme(theme_SimpleTicks()) do
         SqVec = [SqFunc(x,0) for x in kx]
         # SqVec = SqMat[1,:]
         # Sqerr = errMat[1,:]
-        SqVec ./= maximum(SqVec)
-        Sqerr ./= maximum(SqVec)
+        # SqVec ./= maximum(SqVec)
+        # Sqerr ./= maximum(SqVec)
 
         scatterlines!(kx,SqVec;color)
         errorbars!(kx,SqVec,Sqerr;color,whiskerwidth = 8)
     end
-    SqFT = [SqFieldTheory(x,0) for x in kx]
-    SqFT ./= maximum(SqFT)
+    fittingCoefs2 = (fittingCoefs[1:end-1]./350000...,1) #./ last(fittingCoefs) #./630 
+    SqFTfunc = getFittedSq(fittingCoefs)
+    SqFT = [SqFTfunc(x,0) for x in kx]
+    # SqFT ./= maximum(SqFT)
 
     lines!(kx,SqFT,color = :red)
     fig
@@ -236,7 +268,7 @@ end
 
 with_theme(theme_PiTicks()) do 
     # Sq = sqrt.(var(real(SqsGFMC))) ./4
-    kx = ky = trueMomenta(-0.5pi,1.5pi,30)
+    kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
     # kxSmall = kySmall = filter(x->abs(x) < pi/2,kx)
     kxSmall = kySmall = kx
 
@@ -283,6 +315,28 @@ function rasterCurve(curvePoints,grid,t)
     return tnew,posnew
 end
 
+using StaticArrays
+function pointPath(p1::StaticArray,p2::StaticArray,res)
+    Path = Vector{typeof(p1)}(undef,res)
+    for i in eachindex(Path)
+        Path[i] = p1 + i/res*(p2 -p1)
+    end
+    return Path
+end
+"""res contains the number of points along -pi,pi"""
+function fetchKPath(points,res = 100)
+    Path = Vector{typeof(points[begin])}(undef,0)
+    # Path = []
+    PointIndices = [1]
+    for i in eachindex(points[begin:end-1])
+        p1 = points[i]
+        p2 = points[i+1]
+        append!(Path,pointPath(p1,p2,round(Int,SW.norm(p1-p2)/2pi * res)))
+        append!(PointIndices,length(Path)) # get indices corresponding to points
+    end
+    return PointIndices,Path
+end
+##
 with_theme(theme_PiTicks()) do 
 
     kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
@@ -301,7 +355,7 @@ with_theme(theme_PiTicks()) do
     axpath = Axis(fig[2,1:3],xlabel = L"t",ylabel = L"\tilde{\mathcal{S}}(\mathbf{q})",yticks = SimpleTicks(),yminorticksvisible = true,xminorticksvisible = true)
 
     hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
-    SqFT = [SqFieldTheory(x,y) for x in kx, y in ky]
+    SqFT = [SqFieldTheoryFit(x,y) for x in kx, y in ky]
 
     hmFT = heatmap!(axFT,kx,ky,SqFT ./maximum(SqFT),colormap = :viridis)
     # hmerr = heatmap!(axerr,kx,ky,err,colormap = :viridis,colorrange = extrema(Sq))
@@ -341,6 +395,7 @@ with_theme(theme_PiTicks()) do
     kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
     
     Sq = [SqFunc(x,y) for x in kx, y in ky]
+    # Sq ./= maximum(Sq)
     err = [errFunc(x,y) for x in kx, y in ky]
 
     fig = Figure(fontsize = 20,size = 1.1 .*(480,450))
@@ -370,8 +425,13 @@ with_theme(theme_PiTicks()) do
     # xminorticksvisible=false
     ylabelvisible=false,
     )
+
+    # SqFTPl(x,y) = SqFieldTheoryFit(x,y)
+    SqFTPl = getFittedSq(fittingCoefs)
+
     hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
-    SqFT = [SqFieldTheory(x,y) for x in kx, y in ky]
+    SqFT = [SqFTPl(x,y) for x in kx, y in ky]
+    # SqFT ./= maximum(SqFT)
 
     hmFT = heatmap!(axFT,kx,ky,SqFT ,colorrange = extrema(Sq),colormap = :viridis)
     # hmerr = heatmap!(axerr,kx,ky,err,colormap = :viridis,colorrange = extrema(Sq))
@@ -402,7 +462,7 @@ with_theme(theme_PiTicks()) do
         # xlims!(axpath1,-0.1,0.85pi)
     end
     axislegend(axpath1,merge=true,position=:lt)
-    SqFTp = [SqFieldTheory(x,y) for (x,y) in (xygrid[p1_discrete])]
+    SqFTp = [SqFTPl(x,y) for (x,y) in (xygrid[p1_discrete])]
 
     lines!(axpath2,tRange²,SqFTp;color=:red,linewidth = 2,linestyle = :dash)
     # lines!(axpath1,tRange²,tRange.^4*0.04/(0.03pi);color=:blue,linewidth = 2,linestyle = :solid)
@@ -418,24 +478,51 @@ with_theme(theme_PiTicks()) do
     save("../exactFig/Spin1/Sq_L40_comp.pdf",fig)
     fig
 end
-
 ##
+with_theme(theme_PiTicks()) do
+    fig = Figure(size = (350,300))
+    ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect = 1)
+    res40 = h5open("../Data/Spin1GFMC_Eval_open.h5") do f
+        read(f)
+    end
 
+
+
+    # SqFT = [SqFieldTheory(x,y) for x in kx, y in ky]
+
+    SqsGFMC = mean(res40["SqsGFMC"]["750"],dims=3)./4
+
+    kx =ky= collect(trueMomenta(-0.5pi,1.5pi,size(SqsGFMC,1)-1))
+
+    SqFunc = SW.getSqCont(real(SqsGFMC))
+
+    SqPlot = [SqFunc(kx,ky) for kx in kx , ky in kx]
+
+    # kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqRK,1)-1)
+    hm = heatmap!(kx,ky,SqPlot)
+    Colorbar(fig[1,2],hm,ticks = SimpleTicks())
+    save("../figs/TalkFigs/SqL40.pdf",fig)
+    fig
+end
+##
 
 with_theme(theme_PiTicks()) do 
     # Sq = sqrt.(var(real(SqsGFMC))) ./4
-    kx = ky = 2pi .* LinRange(0,1,500) .- 0.5pi
+    kx =ky= collect(trueMomenta(-0.5pi,1.5pi,40))
     
-    fig = Figure(fontsize = 20,size = (450,400))
-    
-    ticks = PiTicks([0,pi,])
-    axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",title = L"U(1) theory$$",aspect = 1,xticks = ticks,yticks = ticks)
+    fig = Figure(size = (350,300))
+    ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect = 1)
 
-    SqFT = [SqFieldTheory2(x,y,5,1) for x in kx, y in ky]
-    hmFT = heatmap!(axFT,kx,ky,SqFT ./maximum(SqFT),colormap = :viridis)
+    SqFTfunc = getFittedSq(fittingCoefs)
+    # SqFTfunc = getFittedSq(fittingCoefs)
+    SqFT = [SqFTfunc(x,y) for x in kx, y in ky]
+    hmFT = heatmap!(ax,kx,ky,SqFT,colormap = :viridis)
     
-    Colorbar(fig[1,2],hmFT,label = L"\mathcal{S}(\textbf{q})",height = Relative(0.95),vertical=true,ticks = SimpleTicks(),flipaxis=true)
-    # save("../Application/exactFig/Sq_fieldTheory.png",fig)
+    Colorbar(fig[1,2],hmFT,
+    # label = L"\mathcal{S}(\textbf{q})",
+    height = Relative(0.95),vertical=true,ticks = SimpleTicks(),flipaxis=true)
+    save("../figs/TalkFigs/SqFT_b2_b3_fit.pdf",fig)
+    # save("../figs/TalkFigs/SqFT_B_0_0.pdf",fig)
     fig
 end
 
@@ -467,13 +554,14 @@ end
 BBCorrsFile = "../Data/BBCorr2/BBCorr_L=20.h5"
 BBCorrs = h5read(BBCorrsFile,"BBCorrelator")
 L = h5read(BBCorrsFile,"L")
+S = SW.stencilConfig(zeros(L,L),1;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
+
 nBra = only(unique!(h5read(BBCorrsFile,"nBra")))
 
 BBCorrelator_p = mean(BBCorrs,dims=1)[1,:,:]
 BBCorrelator_err_p = sqrt.(var(BBCorrs,dims=1))[1,:,:]
 refPlaq = SW.getCentralPlaquette(S)
 ##
-S = SW.stencilConfig(zeros(L,L),1;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
 AllPlaqs = collect(SW.plaquetteIterator(S))
 AllPlaqsDict = Dict(AllPlaqs[i] => i for i in eachindex(AllPlaqs))
 
@@ -543,7 +631,8 @@ with_theme(theme_PiTicks()) do
         1 1;
         -1 1
     ]/2
-    ri = [T * SW.SVector(r .- refPlaq) for r in AllPlaqs]
+    # ri = [T * SW.SVector(r .- refPlaq) for r in AllPlaqs]
+    ri = [SW.SVector(r .- refPlaq) for r in AllPlaqs]
     # rPlaq = [mapToPlaquetteBasis(r) for r in ri]
     capfilter(x) = min(abs(x),30)
 
@@ -594,33 +683,213 @@ with_theme(theme_PiTicks()) do
 end
 
 ##
-
-with_theme(theme_PiTicks()) do
+BBMat,BBerr = let 
     T = SW.SA[
         1 1;
         -1 1
     ]/2
-    ri = [T * SW.SVector(r .- refPlaq) for r in AllPlaqs]
+    ri = [ SW.SVector(r .- refPlaq) for r in AllPlaqs]
+    # ri = [T * SW.SVector(r .- refPlaq) for r in AllPlaqs]
     # rPlaq = [mapToPlaquetteBasis(r) for r in ri]
-    capfilter(x) = min(abs(x),30)
 
 
     k = LinRange(-pi,pi,200)
 
     FTgen(BBCorrelator) = [FTPlaq(ri,BBCorrelator,SW.SA[kx,ky]) for (kx,ky) in Iterators.product(k,k)]
     hm = nothing
-    fig = Figure(size = 1. .*(400,320))
     p = 5
     FTs = FTgen.(eachslice(BBCorrs[:,:,p],dims=1))
     FT = mean(FTs)
-    FTerr = sqrt.(var(FTs))#
+    FTerr = std(FTs)
+    FT,FTerr
+end
+BBfunc = SW.getSqCont(BBMat)
+BBerrfunc = SW.getSqCont(BBerr)
+##
+with_theme(theme_PiTicks()) do
+    
+    capfilter(x) = min(abs(x),30)
+
+
+    k = LinRange(-pi,pi,200)
+
+    hm = nothing
+    fig = Figure(size = 1. .*(400,320))
+    p = 5
 
     ax = Axis(fig[1,1];aspect = 1,ylabel = L"q_y",xlabel = L"q_x")
     # ax3 = Axis(fig[1,3];aspect = 1)
     
-    hm = heatmap!(ax,k,k,FT)
+    hm = heatmap!(ax,k,k,BBMat)
 
     Colorbar(fig[1,2],hm,label = L"\mathcal{B}^2(\mathbf{q})",ticks = SimpleTicks())
     save("Application/exactFig/Spin1/BCorrFT_L20.pdf",fig)
+    fig
+end
+##
+
+with_theme(theme_PiTicks()) do 
+
+    kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
+    
+    Sq = [SqFunc(x,y) for x in kx, y in ky]
+    # Sq ./= maximum(Sq)
+    err = [errFunc(x,y) for x in kx, y in ky]
+
+    fig = Figure(fontsize = 20,size = 1.1 .*(580,450))
+    
+    fig_top = fig[1,1] = GridLayout()
+    fig_bottom = fig[2,1] = GridLayout()
+    fig_bottom_left = fig_bottom[1,1:4] = GridLayout()
+    fig_bottom_right = fig_bottom[1,5:6] = GridLayout()
+
+    ticks = PiTicks([0,pi,])
+
+    pointlabels,p1 = fetchKPath([SA[0,0.],SA[pi,0],SA[0,pi],SA[0,0.]],500)
+    # pointlabels,p1 = fetchKPath([SA[0,0],SA[pi,0],SA[pi,pi],SA[0.0,0.0]],500)
+    # pointlabels,p1 = fetchKPath([SA[0,0.],SA[1,1.]],500)
+    tRange = eachindex(p1)
+
+    axFT = Axis(fig_top[1,1],xlabel = L"q_x",ylabel = L"q_y",
+    # title = L"U(1) theory$$",
+    aspect = 1,
+    xticks = ticks,yticks = ticks,yminorticksvisible = true,xminorticksvisible = true,
+    xlabelpadding = -10,
+    )    
+
+    axFTB = Axis(fig_top[1,2],xlabel = L"q_x",ylabel = L"q_y",
+    # title = L"U(1) theory$$",
+    aspect = 1,
+    xticks = ticks,yticks = ticks,yminorticksvisible = true,xminorticksvisible = true,
+    xlabelpadding = -10,
+    ylabelvisible = false,yticklabelsvisible=false,
+    )   
+    
+    axMC = Axis(fig_top[1,3],xlabel = L"q_x",ylabel = L"q_y",
+    # title = L"spin model$$",
+    aspect = 1,xticks = ticks,yticks = ticks,yminorticksvisible = true,xminorticksvisible = true,
+    xlabelpadding = -10,
+    ylabelvisible = false,yticklabelsvisible=false,
+    )
+    axBB = Axis(fig_bottom_right[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect = 1,
+    xticks = PiTicks([-pi,0,pi]),yticks = PiTicks([-pi,0,pi]),yminorticksvisible = true,xminorticksvisible = true,
+    xlabelpadding = -5,
+    ylabelpadding = -10,
+    title = L"\mathcal{B}^2(\mathbf{q})",
+    )
+    
+    axpath1 = Axis(fig_bottom_left[:,1:3],ylabel = L"\mathcal{S}(\mathbf{q})",yticks = SimpleTicks(),
+    # xticks = (tRange[pointlabels],[L"Γ",L"X",L"M",L"Γ"],)
+    xticks = (tRange[pointlabels],[L"Γ",L"X",L"X'",L"Γ"],),
+    # xticks = (tRange[pointlabels],[L"Γ",L"X"],),
+    yminorticksvisible = true,xminorticksvisible = true,xminorgridvisible =true,yminorgridvisible=true,yaxisposition=:left,
+
+    )
+    # axpath2 = Axis(fig[2,2:4],
+    # yaxisposition=:right,yticklabelcolor=:red,
+    # yticks = SimpleTicks(),
+    # xlabelvisible = false,
+    # ygridvisible=false,
+    # xgridvisible=false,
+    # xticklabelsvisible= false,
+    # xticksvisible= false,
+    # # xminorticksvisible=false
+    # ylabelvisible=false,
+    # )
+
+    # SqFTPl(x,y) = SqFieldTheory2(x,y,0/280,0.05/280)
+    # fittingCoefs2 = fittingCoefs .* (10,0.5,0.5)
+    SqFTPl = getFittedSq(fittingCoefs)
+    SqFT_0(x,y) = SqFieldTheory(x,y)
+
+    SqFT0 = [SqFT_0(x,y) for x in kx, y in ky]
+    SqFT = [SqFTPl(x,y) for x in kx, y in ky]
+    normalizationFT0 = maximum(Sq)/maximum(SqFT0)
+    SqFT0 .*= normalizationFT0
+    # SqFT0 ./= maximum(SqFT0)
+    # SqFT ./= maximum(SqFT)
+
+    hmFT0 = heatmap!(axFT,kx,ky,SqFT0 ,colorrange = extrema(Sq),colormap = :viridis)
+
+    hmFT = heatmap!(axFTB,kx,ky,SqFT ,colorrange = extrema(Sq),colormap = :viridis)
+    # hmerr = heatmap!(axerr,kx,ky,err,colormap = :viridis,colorrange = extrema(Sq))
+
+    hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
+
+    kxB = kyB = LinRange(-pi,pi,200)
+    BBPl = heatmap!(axBB,kxB,kyB,BBMat,colormap = Makie.cgrad(:GnBu,rev=true))
+
+
+    # path(t,angle) = t .*(cos(angle),sin(angle)) #.+ (pi,pi)
+    
+    
+    # tRange = LinRange(0,.2pi,500)
+    # angle = deg2rad(45)
+    angle = pi/4
+    # p1 = [path(t,angle) for t in tRange]
+
+    
+    xygrid = [(x,y) for x in kx, y in ky]
+
+    tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
+    # filter!(x -> x[1] in kx && x[2] in ky,p1)
+    lines!(axFT,Point.(xygrid[p1_discrete]);color=:blue,linewidth = 1,linestyle = :dash)
+    lines!(axFTB,Point.(xygrid[p1_discrete]);color=:red,linewidth = 1,linestyle = :solid)
+    scatter!(axMC,Point.(xygrid[p1_discrete]);color=:black,markersize = 3)
+    
+    # lines!(axFT,Point.(p1);color=:red,linewidth = 2,linestyle = :dash)
+    # lines!(axMC,Point.(p1);color=:black,linewidth = 2)
+
+    colors = (:green,:black,:darkblue)
+    markersizes = (6,4,4)
+    # for (color,p) in zip(colors,(500,200))
+
+    # axislegend(axpath1,merge=true,position=:lt)
+    SqFTp = [SqFT_0(x,y) for (x,y) in (xygrid[p1_discrete])]
+    SqFTp .*= normalizationFT0
+
+    # SqFTp ./= maximum(SqFTp)
+    lines!(axpath1,tRange,SqFTp;color=:blue,linewidth = 1.4,linestyle = :dash)    
+
+    SqFTp2 = [SqFTPl(x,y) for (x,y) in (xygrid[p1_discrete])]
+    # SqFTp2 ./= maximum(SqFTp2)
+    lines!(axpath1,tRange,SqFTp2;color=:red,linewidth = 1.6,linestyle = :solid)
+    for (color,p,markersize) in zip(colors,(500,750),markersizes)
+        SqsGFMC_ps = eachslice(resOld["SqsGFMC"][string(p)],dims=3)./4
+        SqsGFMC_p = mean(SqsGFMC_ps)
+        # SqsGFMC = eachslice(res["30"]["SqsGFMC"][string(p)],dims=3)./4
+        SqsGFMC_p_err = std(SqsGFMC_ps)
+        
+        Sf = SW.getSqCont(real(SqsGFMC_p))
+        Sferr = SW.getSqCont(real(SqsGFMC_p_err))
+
+        Sqp = [Sf(x,y) for (x,y) in (xygrid[p1_discrete])]
+    
+        Sqerr = [Sferr(x,y) for (x,y) in (xygrid[p1_discrete])]
+
+        scatter!(axpath1,tRange,Sqp;color,markersize,label = L"\mathcal{P} = %$p")
+        errorbars!(axpath1,tRange,Sqp,Sqerr;color,whiskerwidth = 4)
+        # xlims!(axpath1,-0.1,0.85pi)
+    end
+    axislegend(axpath1,merge=true,position=:lt)
+    # lines!(axpath1,tRange²,tRange.^4*0.04/(0.03pi);color=:blue,linewidth = 2,linestyle = :solid)
+    
+    Colorbar(fig_top[1,4],hmMC,label = L"\mathcal{S}(\textbf{q})",height = Relative(0.8),ticks = SimpleTicks())
+    Colorbar(fig_bottom_right[1,2],BBPl,height = Relative(0.8),ticks = SimpleTicks(),
+    # label = L"\mathcal{B}^2(\textbf{q})",
+    #vertical=false,#flip_vertical_label=false,flipaxis = false,
+    )
+    Label(fig_top[1,1, TopLeft()],L"a)$$",padding =(-45,0,-30,0))
+    Label(fig_top[1,2, TopLeft()],L"b)$$",padding =(-20,0,-30,0))
+    Label(fig_top[1,3, TopLeft()],L"c)$$",padding =(-20,0,-30,0))
+    Label(fig_bottom_left[1,1, TopLeft()],L"d)$$",padding =(-45,10,10,0))
+    Label(fig_bottom_right[1,1, TopLeft()],L"e)$$",padding =(-45,10,10,0))
+
+    # colgap!(fig_bottom,3,Relative(-0.05))
+    rowgap!(fig.layout,1,Relative(-0.1))
+    # (fig.layout,1,Relative(-0.1))
+    colsize!(fig_bottom_right,2,Relative(-0.2))
+    # Box(fig_bottom_right[1,1])
+    save("../exactFig/Spin1/Sq_L40_comp.pdf",fig)
     fig
 end

@@ -25,7 +25,7 @@ exit
 cd(@__DIR__)
 
 i_arg = parse(Int, ARGS[1])
-L = [40,30,28,24,20][i_arg]
+L = [40,30,28,24,20,16,14,12][i_arg]
 nBra = 8
 equilibration_steps = 1_000
 Nwalkers = 128*7

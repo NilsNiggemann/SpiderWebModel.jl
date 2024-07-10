@@ -103,6 +103,46 @@ with_theme(theme_PiTicks()) do
     
 end
 ##
+with_theme(theme_PiTicks()) do
+    fig = Figure(size = (350,300))
+    ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect = 1)
+    kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqRK,1)-1)
+    SqLN = [SqLargeN(kx,ky) for kx in kx , ky in ky]
+    
+    hm = heatmap!(kx,ky,SqLN)
+    Colorbar(fig[1,2],hm)
+    save("Application/TalkFigs/SqLN.pdf",fig)
+    fig
+end
+##
+with_theme(theme_PiTicks()) do
+    fig = Figure(size = (350,300))
+    ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect = 1)
+    SqFunc = SW.getSqCont(real(Sq.Sq))
+
+    kx =ky= collect(trueMomenta(-0.5pi,1.5pi,size(Sq.Sq,1)-1))
+
+    SqPlot = [SqFunc(kx,ky) for kx in kx , ky in kx]
+
+    # kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqRK,1)-1)
+    hm = heatmap!(kx,ky,SqPlot)
+    Colorbar(fig[1,2],hm)
+    save("Application/TalkFigs/SqIsing.pdf",fig)
+    fig
+end
+##
+with_theme(theme_PiTicks()) do
+    fig = Figure(size = (350,300))
+    ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect = 1)
+    Sq = SW.getSqCont(SqRK)
+    kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqRK,1)-1)
+    hm = heatmap!(kx,ky,Sq.(Iterators.product(kx,ky)))
+    Colorbar(fig[1,2],hm)
+    save("Application/TalkFigs/SqRK.pdf",fig)
+    fig
+end
+
+##
 import SpiderWebModel as SW
 using CairoMakie
 using MakieHelpers

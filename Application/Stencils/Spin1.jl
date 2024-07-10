@@ -40,9 +40,9 @@ using HDF5
 
 binsize=6_000
 
-groups = readdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_small",join=true)
+groups = readdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1/",join=true)
 
-outfile = "../Data/Spin1GFMC_Eval_periodic.h5"
+outfile = "../Data/Spin1GFMC_Eval_periodic_L40.h5"
 mkpath(dirname(outfile))
 
 Threads.@threads for group in groups
@@ -61,7 +61,7 @@ Threads.@threads for group in groups
         file["$L/L"] = L
     end
 
-    Threads.@threads for projectionSteps in (50,100,200,500)
+    Threads.@threads for projectionSteps in (50,250,500,750,1000)
     # for projectionSteps in (20,40)
         println(L, " ",projectionSteps)
         SqsGFMC = stack(SW.getSqsGFMC(AllResults,projectionSteps),dims=3)
@@ -71,33 +71,33 @@ Threads.@threads for group in groups
     end
 end
 ##
-@views function getMagnetization(res,p)
-    Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights,1,p)    # Gnp = ones(length(res.TotalWeights[nThermal:end]),p)
+# @views function getMagnetization(res,p)
+#     Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights,1,p)    # Gnp = ones(length(res.TotalWeights[nThermal:end]),p)
 
-    Conf = res.SaveConfigs[:,:,begin,begin]
-    Si = zeros(size(Conf))
+#     Conf = res.SaveConfigs[:,:,begin,begin]
+#     Si = zeros(size(Conf))
 
-    function magFunc(Conf)
-        Si .= Conf ./2
-    end
-    SaveConfs = res.SaveConfigs
-    reconfTable = res.reconfTable
-    res = SW.getObs(Gnp,SaveConfs,reconfTable,magFunc,p÷2)
-end
-function get_mags(Results,p)
-    m = Vector{Matrix{Float64}}(undef,length(Results))
-    Threads.@threads for i in eachindex(Results,m)
-        res = Results[i]
-        nBra = res.nBra
-        Sq = getMagnetization(res,p÷nBra)
-        m[i] = Sq
-    end
-    return m
-end
-##
-for projectionSteps in (1000,750,500,250)
-    m_GFMC = stack(get_mags(AllResults,projectionSteps),dims=3)
-    h5open(outfile,"cw") do file
-        file["magnetization/$projectionSteps"] = m_GFMC
-    end
-end
+#     function magFunc(Conf)
+#         Si .= Conf ./2
+#     end
+#     SaveConfs = res.SaveConfigs
+#     reconfTable = res.reconfTable
+#     res = SW.getObs(Gnp,SaveConfs,reconfTable,magFunc,p÷2)
+# end
+# function get_mags(Results,p)
+#     m = Vector{Matrix{Float64}}(undef,length(Results))
+#     Threads.@threads for i in eachindex(Results,m)
+#         res = Results[i]
+#         nBra = res.nBra
+#         Sq = getMagnetization(res,p÷nBra)
+#         m[i] = Sq
+#     end
+#     return m
+# end
+# ##
+# for projectionSteps in (1000,750,500,250)
+#     m_GFMC = stack(get_mags(AllResults,projectionSteps),dims=3)
+#     h5open(outfile,"cw") do file
+#         file["magnetization/$projectionSteps"] = m_GFMC
+#     end
+# end

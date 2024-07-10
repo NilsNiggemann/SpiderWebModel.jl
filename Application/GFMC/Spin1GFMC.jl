@@ -2,44 +2,44 @@
 #=
 #!/bin/bash
 
-#SBATCH --account=pmfrg
-
 #SBATCH --job-name=S1GFMC                 # replace name
-#SBATCH --export=ALL,JULIA_EXCLUSIVE=1
+# SBATCH --export=ALL,JULIA_EXCLUSIVE=1
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de  # replace email address
 # SBATCH --nodes=1
 # SBATCH --ntasks-per-node=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=48
-#SBATCH --mem=90GB         # memory , more means less gc time
-#SBATCH --time=0-24:00:00          # total run time limit (HH:MM:SS)
+#SBATCH --cpus-per-task=128
+#SBATCH --time=3-00:00:00          # total run time limit (HH:MM:SS)
 #SBATCH --mail-type=END
-#SBATCH --output=/p/project/pmfrg/niggemann1/JobsOutput/Spiderweb/GFMC/Spin1_%a.out    # File to which standard Out- will be written
-
-jutil env activate -p pmfrg
-cd $PROJECT/niggemann1
-module --force purge
-module load Stages/2024  
-module load GCCcore/.12.3.0
-
-module load Julia/1.9.3
-export JULIA_DEPOT_PATH=/p/scratch/pmfrg/niggemann1/.julia/
-
-julia -O3 -t $SLURM_CPUS_PER_TASK /p/project/pmfrg/niggemann1/Jobs/SpiderWebModel.jl/Application/GFMC/Spin1GFMC.jl ${SLURM_ARRAY_TASK_ID}
+#SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
+#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMC/%a.out
+#SBATCH --partition=normal
+#SBATCH --ntasks=1
+#SBATCH --mem=220GB
+# SBATCH --qos=cont
+#SBATCH --ntasks-per-node=1
+~/.bashrc
+julia -O3 -t $SLURM_CPUS_PER_TASK /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/Spin1GFMC.jl ${SLURM_ARRAY_TASK_ID}
 exit
 =#
 
 cd(@__DIR__)
 
+
 i_arg = parse(Int, ARGS[1])
+
+
 L = 40
-nBra = 8
-NSteps = 120_000
-equilibration_steps = 50_000
-NWalkers = 48*100
-w_avg_estimate = 9*L #estimated average weight for each iteration, to reduce floating point errors
-λ = 1
-outfile = "/p/scratch/pmfrg/niggemann1/Spiderweb/Data3/Spin1GFMC_L=$(L)_nBra=$(nBra)_NSteps=$(NSteps)_NW=$(NWalkers)_Lam=$(λ)_$(i_arg).h5"
+
+infile = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataStochRec_periodic/StochRec_L=40_nBra=12_NW=6400.h5"
+##
+NSteps = 15_000
+equilibration_steps = 2_000
+NWalkers = 128*80
+λ = 0
+nBra = 14
+scatter_fraction = 0.7
+outfile = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_2/L=$(L)/$i_arg/Spin1GFMC_L=$(L)_NSteps=$(NSteps)_NW=$(NWalkers)_$(i_arg).h5"
 mkpath(dirname(outfile))
 @assert !isfile(outfile) "file already exists!"
 
@@ -50,13 +50,19 @@ import SpiderWebModel as SW
 using HDF5
 #___________Spin-1_______________________
 ##
+optim_params = h5read(infile,"params_steps")[:,:,23]
+@assert !iszero(optim_params)
+ψG = SW.FullVariationalGuidingFunction(optim_params)
+##
 
 parentState = SW.stencilConfig(zeros(L,L),1;
-# boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
+w_avg_estimate = 0.266*prod(size(parentState))
+DT = SW.DiscreteTimeMethod(0,nBra,w_avg_estimate)
 
-gfuncparams = h5read("/p/scratch/pmfrg/niggemann1/Spiderweb/DataStochRec_open/StochRec_L=40_nBra=8_NW=4800_Lam=1.h5","2/params")
-ψG = SW.LocalPlaquetteGuidingFunction(gfuncparams)
 ##
-@info "starting run"  
-@time results = SW.startManyWalkerGFMC(parentState,NWalkers,NSteps,nBra,ψG,λ;outfile,equilibration_steps,w_avg_estimate,pre_equilibration_steps=60*equilibration_steps)
+@info "starting run" L λ nBra NSteps NWalkers outfile
+
+flush(stdout)
+@time results = SW.startManyWalkerGFMC(parentState,DT,NWalkers,NSteps,ψG;equilibration_steps,pre_equilibration_steps=500_000,scatter_fraction,outfile)
