@@ -44,31 +44,6 @@ end
 ContinuousTimeMethod(τ,nBranch,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(τ,nBranch,w_avg_estimate,Hxx)
 ContinuousTimeMethod(;τ,nBranch,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(τ,nBranch,w_avg_estimate,Hxx)
 
-abstract type AbstractDiagonalOperator end
-(Hxx::AbstractDiagonalOperator)(x::SpiderWebWalker) = Hxx(get_config(x))
-
-struct Hxx_zero <: AbstractDiagonalOperator end
-(Hxx::Hxx_zero)(x::StencilSpinConfig) = 0.
-
-struct Hxx_RK <: AbstractDiagonalOperator
-    μ::Float64
-end
-(Hxx::Hxx_RK)(Walker::SpiderWebWalker) = Hxx.μ * length(Walker.moves)
-
-
-struct Hxx_SIA <: AbstractDiagonalOperator
-    U::Float64
-end
-(Hxx::Hxx_SIA)(Walker::SpiderWebWalker) = Hxx.U * sum(abs2, get_config(Walker))
-
-struct CombinedOperator{F1,F2} <: AbstractDiagonalOperator
-    Hxx1::F1
-    Hxx2::F2
-end
-Base.:+(Hxx1::AbstractDiagonalOperator,Hxx2::AbstractDiagonalOperator) = CombinedOperator(Hxx1,Hxx2)
-
-(Hxx::CombinedOperator)(Walker::SpiderWebWalker) = Hxx.Hxx1(Walker) + Hxx.Hxx2(Walker)
-
 abstract type AbstractGFMCProblem end
 struct SpiderwebGFMCProblem{MethodType<:AbstractGFMCMethod,T<:AbstractFloat,C,F,W,O} <: AbstractGFMCProblem
     method::MethodType
@@ -682,5 +657,69 @@ function random_init_walkers!(Walkers::AbstractVector{<:SpiderWebWalker},equilib
             P_applicable(Walker.Config, movepos)[movesgn] || continue
             applyPlaquette!(Walker.Config, movepos[1], movepos[2], (1,-1)[movesgn])
         end
+    end
+end
+
+
+function getImagTimeCorr(Gnp,reconfigurationTable,ObsFunc::T,mtau=size(Gnp,2)÷4, m=size(Gnp,2)÷2) where {T}
+    N = lastindex(reconfigurationTable,2)
+    Obs = [zero(ObsFunc(1,2m)) for i in 1:mtau]
+
+    # num = zero(Obs)
+    denom = zero(Obs[1])
+
+    Nw = size(reconfigurationTable,1)
+    p = size(Gnp,2)
+
+    BranchingMatrix = zeros(Int,Nw,m+1)
+
+    WalkerMultiplicities = zeros(Int,Nw,m+1)
+    for n in m+1:N
+        Gn = Gnp[n,p]
+        denom += Gn*Nw
+        
+        getBranchingMatrix!(BranchingMatrix,WalkerMultiplicities,reconfigurationTable,n,m)
+        for α in 1:Nw
+            O0 = ObsFunc(BranchingMatrix[α,m],n-m)
+            for ntau in 0:mtau-1
+                mult = WalkerMultiplicities[α,m-ntau]
+                mult == 0 && continue
+                Otau = ObsFunc(BranchingMatrix[α,m-ntau],n-m+ntau)
+                Obs[ntau+1] += Gn*mult*O0*Otau
+            end
+        end
+    end
+    
+    for i in eachindex(Obs)
+        Obs[i] /= denom
+    end
+    return (Obs)
+end
+
+function getBranchingMatrix!(BranchingMatrix::AbstractMatrix,PopulationMatrix,reconfigurationTable::AbstractMatrix,n,projectionLength)
+    # BranchingMatrix[:,begin] .= @view reconfigurationTable[:,begin]
+    PopulationMatrix .= 0 
+    for α in axes(reconfigurationTable,1)
+        α´ = α
+        for i_m in 0:projectionLength
+            α´ = reconfigurationTable[α´,n-i_m]
+            # println((; α,α´,i_m))
+            BranchingMatrix[α,i_m+1] = α´
+            PopulationMatrix[α´,i_m+1] += 1
+        end
+    end
+    return (;BranchingMatrix,PopulationMatrix)
+end
+
+function getBranchingMatrix(reconfigurationTable,n,projectionLength) 
+    BranchingMatrix = zeros(Int,size(reconfigurationTable,1),projectionLength+1)
+    PopulationMatrix = zeros(Int,size(reconfigurationTable,1),projectionLength+1)
+    getBranchingMatrix!(BranchingMatrix,PopulationMatrix,reconfigurationTable,n,projectionLength)
+end
+
+function constructSWF_operator(AllConfigs,OpFunc::T) where T
+    function Obsfunc(α,n)
+        conf = @view AllConfigs[:,:,α,n]
+        return OpFunc(conf)
     end
 end

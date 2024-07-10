@@ -177,21 +177,25 @@ function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::T,
     isempty(weights) && isempty(moves) || return weights #return if weights are already computed
     
     getMoves!(Walker)
-    getNPlaq!(Walker)
+    # getNPlaq!(Walker)
+    
+    psix_inv = 1/ψG(get_config(Walker))
     
     for operator in moves
         i,j,opNum = operator
         indices = AffectedPlaquetteList[i,j]
         applyPlaquette!(Config, i, j, opNum)
         
-        getNPlaq!(Walker,indices)
+        # getNPlaq!(Walker,indices)
         
-        N□ = getNPlaq_difference(n_x,n_x´,indices) 
-        weight = ψG(N□)
+        # N□ = getNPlaq_difference(n_x,n_x´,indices) 
+        weight = ψG(get_config(Walker)) * psix_inv
 
         push!(weights,weight)
         applyPlaquette!(Config, i, j, -opNum)
     end
+
+    
     if Λ != 0
         push!(moves, DIAGONAL_MOVE_ID)
         push!(weights,Λ)

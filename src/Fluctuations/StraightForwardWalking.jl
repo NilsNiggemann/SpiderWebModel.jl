@@ -225,3 +225,25 @@ function get_observables_sfw(Gnp,sfw_weights,meanweight,m = size(sfw_weights,2))
     end
     return num./denom
 end
+
+struct RandomPlaquetteFlipOperator <: AbstractOperator 
+    AffectedPlaquettes::Matrix{OrderedCollections.OrderedSet{Int}}
+end
+operatorname(X::RandomPlaquetteFlipOperator) = "RandomPlaquetteFlipOperator"
+
+function RandomPlaquetteFlipOperator(S::StencilSpinConfig)
+    AffectedPlaquettes = precomputeAffectedPlaquettes(S)
+    return RandomPlaquetteFlipOperator(AffectedPlaquettes)
+end
+
+function apply_operator!(Walker::SpiderWebWalker,O::RandomPlaquetteFlipOperator,ψG::T,::Any) where T
+    
+    weights = updateWeightList!(Walker,O.AffectedPlaquettes,ψG)
+    moves = Walker.moves
+    moveidx = StatsBase.sample(StatsBase.Weights(weights))
+    move = moves[moveidx]
+    w = sum(weights)
+    applyPlaquette!(Walker.Config, move[1], move[2], move[3])
+    return w
+end
+
