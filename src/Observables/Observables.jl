@@ -163,24 +163,28 @@ function getTauCorr(AllStates,eigen,tau,O::T) where T
     v0 = vectors[:,1]
     # S_I = getindex.(AllStates,I_Cart)
 
-    res = zeros(length(tau))
+    # res = zeros(length(tau))
+    res = [zero(O(AllStates[1])) for _ in tau]
     e0 = values[1]
 
     for n in eachindex(values)
         vn = @view vectors[:,n]
-        S_0n = 0. +0im
+        S_0n = complex(zero(res[1]))
         for (i,Conf) in enumerate(AllStates)
             S_0n += O(Conf) * vn[i]*v0[i]
         end
         for (ti,t) in enumerate(tau)
-            res[ti] += abs2(S_0n) * exp(-(values[n]-e0)*t)
+            res[ti] = _add_res_ED!(res[ti],S_0n, exp(-(values[n]-e0)*t))
+            # res[ti] += abs2(S_0n) * exp(-(values[n]-e0)*t)
         end
     end
     return res
 end
+_add_res_ED!(res_i::AbstractArray,S_0n::AbstractArray,expB) = (@. res_i += abs2(S_0n) * expB)
+_add_res_ED!(res_i::Number,S_0n::Number,expB) = (res_i += abs2(S_0n) * expB)
 
 function getGSObsED(AllStates,v0,O::T) where T
-    res = 0.
+    res = zero(O(first(AllStates)))
     for (i,Conf) in enumerate(AllStates)
         res += O(Conf) * abs2(v0[i])
     end
