@@ -29,9 +29,9 @@ i_arg = parse(Int, ARGS[1])
 L = 30
 τ = 0.1
 equilibration_steps = 1_000
-Nwalkers = 128*5
+Nwalkers = 128*10
 λ = 0
-outfile = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataStochRec_periodic_RK_2/L=($L)/StochRec_L=$(L)_tau=$(τ)_NW=$(Nwalkers)_mu=$(μ).h5"
+outfile = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataStochRec_periodic_RK_3/L=($L)/StochRec_L=$(L)_tau=$(τ)_NW=$(Nwalkers)_mu=$(μ).h5"
 
 mkpath(dirname(outfile))
 @assert !isfile(outfile) "file already exists!"
@@ -46,13 +46,13 @@ using HDF5
 parentState = SW.stencilConfig(zeros(L,L),1,
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
-αstart = 0.14 * (1-μ)
+αstart = 0.1 * (1-μ)
 ψG = SW.fullVariationalFunction(parentState,αstart)
 CT = SW.ContinuousTimeMethod(τ,1,prod(size(parentState))*0.266*(1-μ),SW.Hxx_RK(μ))
 
 ##
 @info "starting run"  
-NSteps = 500
-NBins = 200
+NStepsstart = 500
+NBins = 500
 
-stochReconfRes = SW.stochastic_reconfiguration(parentState,CT,i->min(NSteps + 50*i,3000),ψG,NBins,i -> min(0.5 + i,3.),SW.IterativeSRSolver();Nwalkers,rel_tolerance=1e-8,equilibration_steps,pre_equilibration_steps=50_000,scatter_fraction=0.5,outfile)
+stochReconfRes = SW.stochastic_reconfiguration(parentState,CT,i->min(NStepsstart + 50*i,3000),ψG,NBins,i -> min(3,1. +0.05i),SW.IterativeSRSolver();Nwalkers,rel_tolerance=1e-8,equilibration_steps,pre_equilibration_steps=50_000,scatter_fraction=0.5,outfile)

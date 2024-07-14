@@ -2,30 +2,23 @@
 #=
 #!/bin/bash
 
-#SBATCH --account=pmfrg
 
 #SBATCH --job-name=Spin1eval                 # replace name
-#SBATCH --export=ALL,JULIA_EXCLUSIVE=1
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de  # replace email address
-# SBATCH --nodes=1
-# SBATCH --ntasks-per-node=1
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=128
+# SBATCH --export=ALL,JULIA_EXCLUSIVE=1
+#SBATCH --time=0-20:00:00
+#SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
+#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/eval%a.out
+#SBATCH --partition=normal
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=48
-#SBATCH --mem=90GB         # memory , more means less gc time
-#SBATCH --time=0-24:00:00          # total run time limit (HH:MM:SS)
-#SBATCH --mail-type=END
-#SBATCH --output=/p/project/pmfrg/niggemann1/JobsOutput/Spiderweb/GFMC/Spin1eval_%a.out    # File to which standard Out- will be written
-
-jutil env activate -p pmfrg
-cd $PROJECT/niggemann1
-module --force purge
-module load Stages/2024  
-module load GCCcore/.12.3.0
-
-module load Julia/1.9.3
-export JULIA_DEPOT_PATH=/p/scratch/pmfrg/niggemann1/.julia/
-
-julia -O3 -t $SLURM_CPUS_PER_TASK /p/project/pmfrg/niggemann1/Jobs/SpiderWebModel.jl/Application/Stencils/Spin1.jl ${SLURM_ARRAY_TASK_ID}
+#SBATCH --mem=220GB
+# SBATCH --qos=cont
+#SBATCH --mail-type=ALL
+#SBATCH --ntasks-per-node=1
+~/.bashrc
+julia -O3 -t $SLURM_CPUS_PER_TASK /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/Stencils/Spin1.jl ${SLURM_ARRAY_TASK_ID}
 exit
 =#
 cd(@__DIR__)
@@ -38,21 +31,22 @@ using SpiderWebModel
 using HDF5
 ##
 
-binsize=6_000
+binsize=100
 
-groups = readdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1/",join=true)
+groups = readdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_2/",join=true)
 
-outfile = "../Data/Spin1GFMC_Eval_periodic_L40.h5"
+# outfile = "../Data/Spin1GFMC_Eval_periodic_L40.h5"
+outfile = "/scratch/hpc-prf-pm2frg/niggeni/tmp/Data/Spin1GFMC_Eval_periodic_L40.h5"
 mkpath(dirname(outfile))
-
+function getEns(results)
+    en = [SW.getEnergies(res.TotalWeights,res.energies,1,1000÷res.nBra) for res in results]
+end
+##
 Threads.@threads for group in groups
-    files = [joinpath(root,file) for (root,_,files) in walkdir(group) for file in files]
-    AllResults = vcat(SW.readResults.(files,binsize)...);
-    
+    files = [joinpath(root,file) for (root,_,files) in walkdir(group) for file in files][1:1]
+    @time AllResults = vcat(SW.readResults.(files,binsize)...);    
 
-    function getEns(results)
-        en = [SW.getEnergies(res.TotalWeights,res.energies,1,1000÷res.nBra) for res in results]
-    end
+
     en  = stack(getEns(AllResults))
     L = size(AllResults[1].SaveConfigs,1)
     h5open(outfile,"cw") do file

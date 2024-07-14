@@ -95,3 +95,59 @@ for (L,BBCorrelators) in BB_Vec
     h5write(outfileFinal,"L",L)
 end
 
+##
+parentState = SW.stencilConfig(zeros(30,30),1;
+    boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+)
+
+B_Vec = Dict{Float64,Vector{Vector{Float64}}}()
+
+for i_arg in 1:32
+    μs = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
+    μ = μs[(i_arg-1)%length(μs)+1]
+    L = 30
+    τ = 0.2
+    nBra = 1
+    
+    mProj = round(Int,150 ÷ τ)
+    NSteps = 2_000
+    equilibration_steps = 3_000
+    NWalkers = 128*16
+    scatter_fraction = 0.6
+
+    outfile = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK/L=$(L)/$i_arg/Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(i_arg).h5"
+    TotalWeights = h5read(outfile,"TotalWeights")
+
+    Gnp = SW.precomputeNormalizedAccWeight(TotalWeights,1,mProj)
+    energies = h5read(outfile,"energies")
+
+    enproj = SW.getEnergies(TotalWeights,energies,1,100)
+    
+    outfileSFW = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_SFW/$i_arg/Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(i_arg).h5"
+
+    resB = h5read(outfileSFW,"WeightsRandomPlaquetteFlipOperator")
+    BVals = SW.get_observables_sfw(Gnp,resB[:,1,:]',SW.mean(TotalWeights)) ./length(collect(SW.plaquetteIterator(parentState)))
+
+    # outfileSFW2 = "../Data/BBCorrRK/BBCorrRK.h5"
+    if haskey(B_Vec,μ)
+        push!(B_Vec[μ],BVals)
+    else
+        B_Vec[μ] = [BVals]
+    end
+    # h5write(outfileSFW2,"mu=$μ/B",BVals)
+
+end
+##
+outfileFinal = "../Data/BBCorrRK/BBCorrRK.h5"
+mkpath(dirname(outfileFinal))
+rm(outfileFinal,force=true)
+h5write(outfileFinal,"L",30)
+h5write(outfileFinal,"τ",0.2)
+h5write(outfileFinal,"nBra",1)
+
+for (μ,BVals) in B_Vec
+
+    h5write(outfileFinal,"BVals/mu=$μ/B",stack(BVals,dims=2))
+    h5write(outfileFinal,"BVals/mu=$μ/mu",μ)
+
+end

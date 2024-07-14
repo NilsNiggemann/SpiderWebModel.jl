@@ -200,7 +200,8 @@ copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
 
     function SqFunc(Conf)
         # Si .= Conf
-        copytont!(Si,Conf)
+        # copytont!(Si,Conf)
+        copyto!(Si,Conf)
         mul!(Sq, plan, Si)
         for i in eachindex(Sq)
             Sq[i] = abs2(Sq[i])
@@ -219,14 +220,15 @@ copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
     return real(newRes ./NSites)
     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
+_getNbra(res,::Nothing) = res.nBra
+_getNbra(res,nBra) = nBra
 
 function getSqsGFMC(Results,p,nBra=nothing)
-    getNbra(res,::Nothing) = res.nBra
-    getNbra(res,nBra) = nBra
+
     Sqs = Vector{Matrix{Float64}}(undef,length(Results))
     Threads.@threads for i in eachindex(Results,Sqs)
         res = Results[i]
-        _nBra = getNbra(res,nBra)
+        _nBra = _getNbra(res,nBra)
         Sq = getSqGFMC(res,p÷_nBra)
         Sqs[i] = Sq
     end
