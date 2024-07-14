@@ -256,12 +256,13 @@ function precomputeNormalizedAccWeight(weights,nThermal,PMax)
     
     Gnp = zeros(length(bn),PMax)
     for n in axes(Gnp,1)
-        Gnp[n,1] = bn[n]/meanweight 
+        Gnp[n,1] = 1 #zero projection order
+        Gnp[n,2] = bn[n]/meanweight # first projection order
     end
-    for p in 2:PMax
+    for p in 3:PMax
         for n in p:length(bn)
             # Gnp[n,p] = Gnp[n,p-1]*bn[n-p]/meanweight
-            Gnp[n,p] = Gnp[n-1,p-1]*Gnp[n,1]
+            Gnp[n,p] = Gnp[n-1,p-1]*Gnp[n,2]
         end
     end
     return Gnp
@@ -276,23 +277,6 @@ function iterateProjector!(Gnp_new,Gnp,Gn1,p)
     return Gnp_new
 end
 
-
-function getEnergy(weights,localEnergies,p,nthermalization)
-    meanweight = mean(weights)
-    num = 0.
-    denom = 0.
-    
-    for n in nthermalization:length(localEnergies)
-        Gnp = 1.
-        for j in 1:p
-            Gnp *= weights[n-j]/meanweight
-        end
-        num += Gnp*localEnergies[n]
-        denom += Gnp
-    end
-    return num/denom
-end
-
 function getEnergies(weights,localEnergies,nthermalization,PMax;
     Gnp = precomputeNormalizedAccWeight(weights,nthermalization,PMax)
     )
@@ -302,7 +286,8 @@ function getEnergies(weights,localEnergies,nthermalization,PMax;
     num = zeros(PMax)
     denom = zeros(PMax)
     for p in 1:PMax
-        for n in p:N
+        for n in p+1:N
+            # G_np = p != 0 ? Gnp[n,p] : 1
             num[p] += Gnp[n,p]*EL_thermalized[n]
             denom[p] += Gnp[n,p]
         end
@@ -330,14 +315,15 @@ function mult_elementwise!(x::AbstractArray,y::Number)
 end
 
 divide_elementwise!(x::Number,y::Number) = x / y
-divide_elementwise!(x::AbstractArray,y::AbstractArray) = (x ./= y)
+divide_elementwise!(x::AbstractArray,y) = (x ./= y)
 
 function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m=size(Gnp,2)÷2)
     N = lastindex(AllConfigs,4)
     exampleConf = @view AllConfigs[:,:,begin,begin]
     Obs = ObsFunc(exampleConf)
-    num = zero(Obs)
-    denom = zero(Obs)
+    num = float(zero(Obs))
+    denom = 0.
+    GnO = float(zero(Obs))
     # fill!(Obs,zero(eltype(Obs)))
 
     Nw = size(reconfigurationTable,1)
@@ -347,7 +333,7 @@ function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m=size(Gnp,2)÷2)
     for n in m+1:N
         Gn = Gnp[n,p]
         # denom += Gn*Nw
-        denom = add_elementwise!(denom,Gn*Nw)
+        denom += Gn*Nw
         # reconfigList = @view reconfigurationTable[:,n-m]
         # surviving_walker_mapping!(surviving_walker_mapping_list,reconfigList)
         WalkerMultiplicities .= 0
@@ -366,12 +352,17 @@ function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m=size(Gnp,2)÷2)
             O = ObsFunc(conf)
             # surviving_index = surviving_walker_mapping_list[α´]
             # O = ObsFunc(AllConfigs[n-m][surviving_index])
-            GnO = mult_elementwise!(O,Gn*mult)
+            GnO = _set_to!(GnO,O)
+            GnO = mult_elementwise!(GnO,Gn*mult)
             # @. num += Gn*O
             num = add_elementwise!(num,GnO)
         end
     end
     return divide_elementwise!(num,denom)
+end
+function getObs(result,ObsFunc,p)
+    Gnp = precomputeNormalizedAccWeight(result.TotalWeights,1,p)
+    return getObs(Gnp,result.SaveConfigs,result.reconfigurationTable,ObsFunc,p÷2)
 end
 
 function surviving_walker_mapping!(mappingarr,reconfigList)
@@ -663,10 +654,10 @@ end
 
 function getImagTimeCorr(Gnp,reconfigurationTable,ObsFunc::T,mtau=size(Gnp,2)÷4, m=size(Gnp,2)÷2) where {T}
     N = lastindex(reconfigurationTable,2)
-    Obs = [zero(ObsFunc(1,2m)) for i in 1:mtau]
-
+    Obs = [float(zero(ObsFunc(1,2m))) for i in 1:mtau]
+    O0 = float(zero(ObsFunc(1,2m)))
     # num = zero(Obs)
-    denom = zero(Obs[1])
+    denom = 0.
 
     Nw = size(reconfigurationTable,1)
     p = size(Gnp,2)
@@ -680,12 +671,14 @@ function getImagTimeCorr(Gnp,reconfigurationTable,ObsFunc::T,mtau=size(Gnp,2)÷4
         
         getBranchingMatrix!(BranchingMatrix,WalkerMultiplicities,reconfigurationTable,n,m)
         for α in 1:Nw
-            O0 = ObsFunc(BranchingMatrix[α,m],n-m)
+            # O0 = ObsFunc(BranchingMatrix[α,m],n-m)
+            O0 = _set_to!(O0,ObsFunc(BranchingMatrix[α,m],n-m))
             for ntau in 0:mtau-1
                 mult = WalkerMultiplicities[α,m-ntau]
                 mult == 0 && continue
                 Otau = ObsFunc(BranchingMatrix[α,m-ntau],n-m+ntau)
-                Obs[ntau+1] += Gn*mult*O0*Otau
+                Obs[ntau+1] = _add_numerator!(Obs[ntau+1],Gn*mult,O0,Otau)
+                # Obs[ntau+1] += Gn*mult*O0*Otau
             end
         end
     end
@@ -695,6 +688,10 @@ function getImagTimeCorr(Gnp,reconfigurationTable,ObsFunc::T,mtau=size(Gnp,2)÷4
     end
     return (Obs)
 end
+_add_numerator!(Obsn::AbstractArray,Gnmult,O0::AbstractArray,Otau::AbstractArray) = (@. Obsn += Gnmult*O0*Otau)
+_add_numerator!(Obsn::Number,Gnmult,O0::Number,Otau::Number) = (Obsn += Gnmult*O0*Otau)
+_set_to!(a,b) = (a=b)
+_set_to!(a::AbstractArray,b::AbstractArray) = (a.=b)
 
 function getBranchingMatrix!(BranchingMatrix::AbstractMatrix,PopulationMatrix,reconfigurationTable::AbstractMatrix,n,projectionLength)
     # BranchingMatrix[:,begin] .= @view reconfigurationTable[:,begin]
