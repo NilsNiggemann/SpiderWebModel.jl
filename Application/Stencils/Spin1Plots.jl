@@ -27,7 +27,7 @@ res = h5open("../Data/Spin1GFMC_Eval_periodic.h5") do f
     read(f)
 end
 
-resOld = h5open("../Data/Spin1GFMC_Eval_open.h5") do f
+resOld = h5open("../Data/Spin1GFMC_Eval_periodic_L40.h5") do f
     read(f)
 end
 
@@ -919,6 +919,6 @@ with_theme(theme_SimpleTicks()) do
     fig = Figure(size = (350,300))
     ax = Axis(fig[1,1],xlabel = L"μ",ylabel = L"B",aspect = 1)
     scatter!(ax,mus,BValsVec)
-    errorbars!(ax,mus,BValsVec.-BValsErr,BValsVec.+BValsErr,whiskerwidth = 8)
+    errorbars!(ax,mus,BValsVec,BValsErr,whiskerwidth = 8)
     fig
 end

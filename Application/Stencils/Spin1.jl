@@ -8,7 +8,7 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=0-20:00:00
+#SBATCH --time=0-10:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
 #SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/eval%a.out
 #SBATCH --partition=normal
@@ -31,7 +31,7 @@ using SpiderWebModel
 using HDF5
 ##
 
-binsize=100
+binsize=15000
 
 groups = readdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_2/",join=true)
 

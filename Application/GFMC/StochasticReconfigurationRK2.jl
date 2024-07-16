@@ -6,9 +6,9 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=2-10:00:00
+#SBATCH --time=1-10:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
-#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/SR/SR_RK_%a.out
+#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/SR/SR_RK_simpl%a.out
 #SBATCH --partition=normal
 #SBATCH --ntasks=1
 #SBATCH --mem=220GB
@@ -18,20 +18,19 @@
 module load lang/JuliaHPC/1.10.1-foss-2022a-CUDA-11.7.0
 ~/.bashrc
 export JULIA_DEPOT_PATH="$SCRATCH/.julia"
-julia -O3 -t $SLURM_CPUS_PER_TASK /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/StochasticReconfigurationRK.jl $SLURM_ARRAY_TASK_ID
+julia -O3 -t $SLURM_CPUS_PER_TASK /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/StochasticReconfigurationRK2.jl $SLURM_ARRAY_TASK_ID
 exit
 =#
 
 cd(@__DIR__)
 
 i_arg = parse(Int, ARGS[1])
-μ = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9][i_arg]
+μ = LinRange(-0.2,1.2,20)[i_arg]
 L = 30
 τ = 0.1
 equilibration_steps = 1_000
-Nwalkers = 128*10
-λ = 0
-outfile = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataStochRec_periodic_RK_3/L=($L)/StochRec_L=$(L)_tau=$(τ)_NW=$(Nwalkers)_mu=$(μ).h5"
+Nwalkers = 128*1
+outfile = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataStochRec_periodic_RK_simpl/L=($L)/StochRec_L=$(L)_tau=$(τ)_NW=$(Nwalkers)_mu=$(μ).h5"
 
 mkpath(dirname(outfile))
 @assert !isfile(outfile) "file already exists!"
@@ -47,7 +46,7 @@ parentState = SW.stencilConfig(zeros(L,L),1,
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 αstart = 0.1 * (1-μ)
-ψG = SW.fullVariationalFunction(parentState,αstart)
+ψG = SW.localPlaquetteGuidingFunction(parentState,αstart)
 CT = SW.ContinuousTimeMethod(τ,1,prod(size(parentState))*0.266*(1-μ),SW.Hxx_RK(μ))
 
 ##
@@ -55,4 +54,4 @@ CT = SW.ContinuousTimeMethod(τ,1,prod(size(parentState))*0.266*(1-μ),SW.Hxx_RK
 NStepsstart = 5000
 NBins = 500
 
-stochReconfRes = SW.stochastic_reconfiguration(parentState,CT,i->min(NStepsstart + 50*i,20000),ψG,NBins,i -> min(5,1. +0.05i),SW.IterativeSRSolver();Nwalkers,rel_tolerance=1e-8,equilibration_steps,pre_equilibration_steps=50_000,scatter_fraction=0.5,outfile)
+stochReconfRes = SW.stochastic_reconfiguration(parentState,CT,i->min(NStepsstart + 50*i,10000),ψG,NBins,i -> 20*min(5,1. +0.05i),SW.IterativeSRSolver();Nwalkers,reconfigure = true,rel_tolerance=1e-8,equilibration_steps,pre_equilibration_steps=50_000,scatter_fraction=0.5,outfile)

@@ -7,7 +7,7 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=4-10:00:00
+#SBATCH --time=2-00:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
 #SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK/%a.out
 #SBATCH --partition=normal
@@ -22,83 +22,136 @@ exit
 =#
 
 cd(@__DIR__)
-
-i_arg = parse(Int, ARGS[1])
-
-μs = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
-μ = μs[(i_arg-1)%length(μs)+1]
-L = 30
-τ = 0.1
-nBra = 1
-NSteps = 2_000
-equilibration_steps = 3_000
-NWalkers = 128*16
-scatter_fraction = 0.6
-
-infiles = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataStochRec_periodic_RK_2/") for file in files]
-filter!(contains("L=$L"),infiles)
-filter!(contains("mu=$(μ)"),infiles)
-infile = only(infiles)
-##
-outfile = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK/L=$(L)/$i_arg/Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(i_arg).h5"
-
-mkpath(dirname(outfile))
-
-
-
-##
-
 using Pkg
 Pkg.activate(@__DIR__)
 import SpiderWebModel as SW
 using HDF5
+using SpiderWebModel.Statistics
+i_arg = parse(Int, ARGS[1])
+
+μs = -0.2:0.02:1.2
+# μs = μs[1:2:end]
+# μs = μs[2:2:end]
+
+μ = μs[i_arg]
+L = 30
+τ = 0.1
+nBra = 1
+NSteps = 21_000
+NBins = 3
+NRuns = 10
+equilibration_steps = 3_000
+pre_equilibration_steps=100_000
+NWalkers = 128*80
+scatter_fraction = 0.5
+
+NStepsstart = 800
+NStepsEnd = 2000
+NBins = 400
+##
+# L = 8
+# nBra = 1
+# NSteps = 1000
+# equilibration_steps = 10
+# pre_equilibration_steps=100
+# NWalkers = 120
+# scatter_fraction = 0.6
+# NRuns = 1
+
+# NStepsstart = 100
+# NBins = 10
+##
+NWalkers_stochRec = NWalkers ÷ 5
+equilibration_steps_stochRec = 100
+
+outfileSR = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataStochRec_periodic_RK_simpl/L=($L)/mu=$(μ)/StochRec_L=$(L)_tau=$(τ)_NW=$(NWalkers)_mu=$(μ).h5"
+mkpath(dirname(outfileSR))
+
+parentState = SW.stencilConfig(zeros(L,L),1,
+boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+)
+αstart = 0.13 * (1-μ)
+ψG = SW.localPlaquetteGuidingFunction(parentState,αstart)
+CT = SW.ContinuousTimeMethod(τ,1,prod(size(parentState))*0.266*(1-μ),SW.Hxx_RK(μ))
+
+##
+if !isfile(outfileSR) && μ != 1.0
+    @info "starting run" L τ nBra NSteps NWalkers outfileSR
+    stochReconfRes = SW.stochastic_reconfiguration(parentState,CT,i->min(NStepsstart + 20*i,NStepsEnd),ψG,NBins,i -> 10*min(4,1. +0.02i),SW.IterativeSRSolver();Nwalkers = NWalkers_stochRec,reconfigure = true,rel_tolerance=0.,equilibration_steps=equilibration_steps_stochRec,pre_equilibration_steps=100_000,scatter_fraction,outfile=outfileSR,)
+end
+
+println("stochastic reconf done")
+flush(stdout)
+
 #___________Spin-1_______________________
 ##
 
-optim_params = h5read(infile,"params_steps")[:,:,end]
+optim_params = h5read(outfileSR,"params_steps")[:,end]
+# optim_params = h5read(infile,"params_steps")[:,:,end]
 @assert !iszero(optim_params)
 # ψG = SW.FullVariationalGuidingFunction(optim_params)
-ψG = SW.PlaquetteNumberGuidingFunction(0.1)
-w_avg_estimate = -h5read(infile,"E0")[end]
+if μ != 1.0
+    ψG = SW.PlaquetteNumberGuidingFunction(only(unique(optim_params[1])))
+    w_avg_estimate = -h5read(outfileSR,"E0")[end]
+else
+    ψG = SW.RKFunction()
+    w_avg_estimate = 0.
+end
+
 parentState = SW.stencilConfig(zeros(L,L),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 CT = SW.ContinuousTimeMethod(τ,nBra,w_avg_estimate,SW.Hxx_RK(μ))
 
 
-##
-if !isfile(outfile)
+outfileDIR = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK/L=$(L)/$i_arg/"
 
-    @info "starting run" L τ nBra NSteps NWalkers outfile
+for run in 1:NRuns
+    outfile = joinpath(outfileDIR,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run).h5")
+    mkpath(dirname(outfile))
 
-    @time results = SW.startManyWalkerGFMC(parentState,CT,NWalkers,NSteps,ψG;equilibration_steps,pre_equilibration_steps=200_000,scatter_fraction,outfile)
+    if !isfile(outfile)
+        @info "starting run $run of $NRuns" L τ nBra NSteps NWalkers outfile
+
+        @time results = SW.startManyWalkerGFMC(parentState,CT,NWalkers,NSteps,ψG;equilibration_steps,pre_equilibration_steps,scatter_fraction,outfile)
+    end
+    flush(stdout)
+
 end
-results = SW.readResults(outfile,NSteps)[1]
+##
+println("GFMC done")
+flush(stdout)
+resFiles = [joinpath(root,file) for (root,_,files) in walkdir(outfileDIR) for file in files]
+
+AllResults = vcat(SW.readResults.(resFiles,NSteps÷NBins)...);
+## 
+outfileTotal = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK/eval/L=$(L)/mu=$(μ)/Spin1GFMC_Eval_periodic_mu$(μ)_L$(L)_$(i_arg).h5"
+mkpath(dirname(outfileTotal))
+@assert !isfile(outfileTotal) "file already exists!"
+function getEns(results)
+    en = [SW.getEnergies(res.TotalWeights,res.energies,1,1000÷res.nBra) for res in results]
+end
 ##
 
-@info "starting straight forward walking"
-##
-# binnumber,fileindex =  i_arg %NumBins +1  , i_arg ÷ NumBins +1
-##
-outfileSFW = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_SFW/$i_arg/Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(i_arg).h5"
-mkpath(dirname(outfileSFW))
-@assert !isfile(outfileSFW) "file already exists!"
-
-
-GFMCPlaqs = collect(SW.plaquetteIterator(parentState))
-
-mProj = round(Int,15 ÷ τ)
-
-BOp = SW.RandomPlaquetteFlipOperator(parentState)
-##
-@info "starting run" L τ  mProj nBra NSteps NWalkers outfileSFW
-
-resB = SW.measure_operator(parentState,CT,results.SaveConfigs,mProj,BOp,ψG,[first(GFMCPlaqs)];outfile = outfileSFW)
-##
-Gnp = SW.precomputeNormalizedAccWeight(results.TotalWeights,1,mProj)
-
-BVals = SW.get_observables_sfw(Gnp,resB[:,1,:]',SW.mean(results.TotalWeights)) ./length(collect(SW.plaquetteIterator(parentState)))
-
-outfileSFW2 = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_SFW/$i_arg/Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(i_arg)_result.h5"
-
-h5write(outfileSFW2,"B",BVals)
+let 
+    en  = stack(getEns(AllResults))
+    L = size(AllResults[1].SaveConfigs,1)
+    h5open(outfileTotal,"cw") do file
+        file["energies"] = en
+        file["nBra"] = AllResults[1].nBra
+        file["L"] = L
+        file["mu"] = μ
+        file["tau"] = τ
+    end
+    
+    Threads.@threads for projectionSteps in (50,250,500,750,1000,1250)
+    # for projectionSteps in (20,40)
+        SqsGFMC = stack(SW.getSqsGFMC(AllResults,projectionSteps),dims=3)
+        h5open(outfileTotal,"cw") do file
+            file["SqsGFMC/$projectionSteps"] = SqsGFMC
+        end
+        println(L, " ",projectionSteps)
+        flush(stdout)
+    
+    end
+end
