@@ -264,7 +264,7 @@ function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatri
 end
 stochastic_reconfiguration_step(E_i,Ok_i,::AbstractSRSolver) = error("solver not implemented")
 
-function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,ψG,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps,scatter_fraction = 0.8,reconfigure=true,verbose=true;report_steps=1)
+function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,ψG,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps,scatter_fraction = 0.8,reconfigure=true;verbose=true,report_steps=1,reset = true)
     
     ψG = deepcopy(ψG)
     params = ψG.params
@@ -287,7 +287,7 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
         # for w in prob.Walkers
         #     get_config(w) .= InitialState
         # end
-        initializeGFMC!(prob,equilibration_steps,pre_equilibration_steps,scatter_fraction)
+        reset && initializeGFMC!(prob,equilibration_steps,pre_equilibration_steps,scatter_fraction)
 
         # @time res = runGFMC!(prob,range,reconfigure)
         res = runGFMC!(prob,range,reconfigure)

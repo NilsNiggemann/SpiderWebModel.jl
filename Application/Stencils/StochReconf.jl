@@ -7,44 +7,63 @@ using MakieHelpers
 using MKL
 include("plottingUtils.jl")
 ##
-S = SW.stencilConfig(zeros(18,18),1;
+S = SW.stencilConfig(zeros(10,10),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 # S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 
-ψG = SW.fullVariationalFunction(S,0.15)
-# ψG = SW.localPlaquetteGuidingFunction(S,0.15)
+ψG = SW.fullVariationalFunction(S,0.12)
 # SW.get_beta_ij(ψG) .= 0.0001
 nThermal = 300
 ##
 SW.Random.seed!(1234)
-DT = SW.DiscreteTimeMethod(0.,10,prod(size(S)))
+# DT = SW.DiscreteTimeMethod(0.,2,0.266*length(S))
+DT = SW.ContinuousTimeMethod(0.05,1,0.266*length(S))
+ψGPlaq = SW.localPlaquetteGuidingFunction(S,0.12)
 
-stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,10+ 2*i),ψG,50,0.03,SW.IterativeSRSolver();Nwalkers = 6*20,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
+stochReconfResLoc = SW.stochastic_reconfiguration(S,DT,3000,ψGPlaq,200,1000,SW.IterativeSRSolver();Nwalkers = 90,reconfigure=true,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+report_steps = 5,
+reset = true,
+# outfile = "tempSR/SR2.h5"
+)
+plotVarEn(stochReconfResLoc)
 ##
 
+stochReconfRes = SW.stochastic_reconfiguration(S,DT,3000,ψG,400,30,SW.IterativeSRSolver();Nwalkers = 120,reconfigure=true,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+report_steps = 10,
+reset = true,
+# outfile = "tempSR/SR2.h5"
+)
 plotVarEn(stochReconfRes)
 ##
-SW.Random.seed!(12322)
-nThermal = 0
-DT = SW.DiscreteTimeMethod(0.,5,prod(size(S))/4)
+
+SW.Random.seed!(1234)
+nThermal = 100
+# DT = SW.DiscreteTimeMethod(0.,4,0.266 * length(S))
+DT = SW.ContinuousTimeMethod(0.1,1,0.266*length(S))
+
 ψGnew = typeof(ψG)(stochReconfRes.params)
 
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,80,1_000,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,10_000,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:12])
 ##
-SW.Random.seed!(1232)
+ψnewPlaq = typeof(ψGPlaq)(stochReconfResLoc.params)
+SW.Random.seed!(1234)
+@time resultsPlaq = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,10_000,ψnewPlaq;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:12])
+##
+SW.Random.seed!(1234)
 
 # @time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,2*80,750,nBraOld,ψGold,1;equilibration_steps=nThermal,pre_equilibration_steps=nBra*nThermal,w_avg_estimate = 8.) for _ in 1:32])
-@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,80,1_000,ψG;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:6])
+@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,10_000,ψG;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:12])
 ##
+
 # plotEnergies(results,nBra,-20.35;Emin=-20.5,Emax=-19.8) # L=10
-plotEnergies(resultsOld,DT.nBranch,nThermal=100,p=400,normalize=true)
-plotEnergies!(results,DT.nBranch;nThermal=100,p=400,color=:red,normalize=true) # L=15
+plotEnergies(resultsOld,DT,nThermal=100,p=30,normalize=false,dense=true)
+plotEnergies!(results,DT;nThermal=100,p=30,color=:red,normalize=false,dense=true) # L=15
+plotEnergies!(resultsPlaq,DT;nThermal=100,p=30,color=:blue,normalize=false,dense=true) # L=15
 # plotEnergies(results,DT.nBranch;nThermal=1,p=1000,color=:red) # L=15
 current_figure()
 # plotEnergies(results,nBra,-49.7;Emin=-50.5,Emax=-46)
 ## 
-
 SqsGFMC = SW.getSqsGFMC(results,350,DT.nBranch)
 ##
 function SqFieldTheory(x,y)

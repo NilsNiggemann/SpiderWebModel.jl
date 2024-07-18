@@ -295,6 +295,10 @@ function getEnergies(weights,localEnergies,nthermalization,PMax;
     return num ./denom
 end
 
+function getEnergies(results,nthermalization,PMax);
+    return getEnergies(results.TotalWeights,results.energies,nthermalization,PMax)
+end
+
 
 function setupProjector(weights,nThermal)
     bn = @view weights[nThermal:end]

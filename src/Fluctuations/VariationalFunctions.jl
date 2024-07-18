@@ -84,6 +84,9 @@ function guidingfuncRatio_exponent(ψG::FullVariationalGuidingFunction,n::Abstra
         end
         exponent += exp_i*Δn
     end
+    # exponent1 = α' *  n + dot(n,β,n)
+    # exponent2 = α' *  n´ + dot(n´,β,n´)
+    # exponent = exponent2 - exponent1
 
     return exponent
 end
