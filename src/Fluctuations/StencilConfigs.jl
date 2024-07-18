@@ -32,16 +32,16 @@ allSpinsInBounds(S::StencilSpinConfig; kwargs...) = allSpinsInBounds(S,S.M; kwar
 plotSpinConfig!(ax, S::StencilSpinConfig; kwargs...) = plotSpinConfig!(ax, SpinConfig(S); kwargs...)
 plotSpinConfig(S::StencilSpinConfig; kwargs...) = plotSpinConfig(SpinConfig(S); kwargs...)
 
-function plaquetteIterator(S::Stencils.StencilArray)
+function plaquetteIterator(S::Stencils.StencilArray,shift=false)
     bound = Stencils.boundary(S)
-    return stencil_plaquetteIterator(S,bound)
+    return stencil_plaquetteIterator(S,bound,shift)
 end
 
-function stencil_plaquetteIterator(S,::Stencils.Wrap)
+function stencil_plaquetteIterator(S,::Stencils.Wrap,shift=false)
     inboundsInds = Base.Iterators.product(axes(S, 1), axes(S, 2))
-    filterInds = Iterators.filter(ind -> isodd(sum(ind)), inboundsInds)
+    filterInds = Iterators.filter(ind -> isodd(sum(ind)+shift), inboundsInds)
 end
-stencil_plaquetteIterator(S,::Any) = plaquetteIterator(parent(S))    
+stencil_plaquetteIterator(S,::Any,shift=false) = plaquetteIterator(parent(S),shift)    
 
 
 @inline Base.@propagate_inbounds getPlaquetteStencil(

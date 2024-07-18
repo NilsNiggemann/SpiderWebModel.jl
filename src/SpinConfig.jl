@@ -18,13 +18,13 @@ Base.@propagate_inbounds @inline Base.setindex!(S::AbstractSpinConfig, x, i, j) 
 @inline Base.size(S::AbstractSpinConfig) = size(parent(S))
 @inline Base.copy(S::SpinConfig) = SpinConfig(copy(parent(S)), getSpin(S))
 
-@inline function plaquetteIterator(S::AbstractMatrix)
+@inline function plaquetteIterator(S::AbstractMatrix, shift = false)
     inboundsInds = Base.Iterators.product(axes(S, 1)[begin+1:end-1], axes(S, 2)[begin+1:end-1])
-    filterInds = Iterators.filter(ind -> isodd(sum(ind)), inboundsInds)
+    filterInds = Iterators.filter(ind -> isodd(sum(ind)+shift), inboundsInds)
 end
 
-@inline function plaquetteIterator(S::AbstractSpinConfig)
-    return plaquetteIterator(parent(S))
+@inline function plaquetteIterator(S::AbstractSpinConfig,shift=false)
+    return plaquetteIterator(parent(S),shift)
 end
 
 function booleanSpinConfig(Conf::AbstractMatrix, S::Real = 1 / 2)
