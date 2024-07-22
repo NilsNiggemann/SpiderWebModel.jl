@@ -572,7 +572,8 @@ function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::Con
                 end
             end
         end
-        w = exp(log_w - nBranch*τ* w_avg_estimate)
+        w = exp(log_w + nBranch*τ* w_avg_estimate)
+        # w = exp(log_w)
         weights[α] = w
     end
 end
