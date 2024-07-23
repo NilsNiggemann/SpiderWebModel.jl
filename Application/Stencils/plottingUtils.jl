@@ -184,3 +184,9 @@ function plotVarEn(stochReconfRes;normalization=1)
     lines!(ax2,x,stochReconfRes.params_steps[1,1,:])
     fig
 end
+function trueMomenta(kmin,kmax,L)
+    nmin = floor(Int,L*kmin/(2pi))
+    nmax = ceil(Int,L*kmax/(2pi))
+    # return 1/(2pi*L*100) .* nmin:nmax
+    return (nmin : nmax) .* 2pi/L
+end
