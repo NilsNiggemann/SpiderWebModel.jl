@@ -94,7 +94,7 @@ function trackWalkerPath(reconfigTable,InitialWalkers,NSteps)
     return walkerPopulation
 end
 
-function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p = 50)
+function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p = 50,plotPopulation=false)
     fig = Figure(size = 0.8 .*(1000, 1200),theme = theme_SimpleTicks())
     initWalkers = collect(round(Int,scatter_fraction*size(results[1].reconfigurationTable,1)):size(results[1].reconfigurationTable,1))
     function getkw(i,title)
@@ -143,10 +143,14 @@ function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p =
 
 
         # WP = trackWalkerPath(res.reconfigurationTable,initWalkers,Ntrack)'
-        WP = reverse(SW.getBranchingMatrix(res.reconfigurationTable,Ntrack,Ntrack-1).PopulationMatrix',dims= 1)
-        heatmap!(axreconf[i],WP,colormap = :jet)
+        WP = SW.getBranchingMatrix(res.reconfigurationTable,Ntrack,Ntrack-1)
+        if plotPopulation
+            heatmap!(axreconf[i],WP.PopulationMatrix',colormap = :jet)
+        else
+            heatmap!(axreconf[i],WP.BranchingMatrix',colormap = :jet)
+        end
         hlines!(axreconf[i],minimum(initWalkers)-0.5,color = :black,linewidth = 1,linestyle = :dash)
-        Sq = SW.getSqGFMC(res,p÷nBra)
+        Sq = SW.getSqGFMC(res,p)
         heatmap!(axSq[i],kx,ky,Sq)
     end
 

@@ -10,39 +10,101 @@ include("plottingUtils.jl")
 meanstd(x) = (mean(x),std(x))
 ##
 
-S = SW.stencilConfig(zeros(14,14),1;
+S = SW.stencilConfig(zeros(18,18),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 
-μ = 1.2
-CT = SW.ContinuousTimeMethod(0.3,1,(1-μ)* 0.266*prod(size(S)),SW.Hxx_RK(μ))
-# ψG = SW.fullVariationalFunction(S,0.15)
-ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
+μ = 0.3
+CT = SW.ContinuousTimeMethod(0.6,1,(1-μ)* 0.266*length(S)*(1-μ),SW.Hxx_RK(μ))
+ψG = SW.fullVariationalFunction(S,0.15*(1-μ))
+# ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
 ##
-stochReconfRes = SW.stochastic_reconfiguration(S,CT,i->round(Int,2000+ 20i)÷10,ψG,200,i -> 80.,SW.IterativeSRSolver();Nwalkers = 
-6*80,reconfigure=true,reset = false,rel_tolerance=0,equilibration_steps=100,pre_equilibration_steps=5_000)
+stochReconfRes = SW.stochastic_reconfiguration(S,CT,i->round(Int,1000+ 2i),ψG,300,1e-4,SW.IterativeSRSolver();Nwalkers = 
+6,reconfigure=false,reset = false,rel_tolerance=0,equilibration_steps=100,pre_equilibration_steps=5_000, 
+report_steps = 10,
+)
 plotVarEn(stochReconfRes)
 ##
 # ψG = SW.fullVariationalFunction(S,0.1)
 # ψG = SW.RKFunction()
-CT = SW.ContinuousTimeMethod(0.3,1,stochReconfRes.E0[end],SW.Hxx_RK(μ))
+CT = SW.ContinuousTimeMethod(0.1,1,stochReconfRes.E0[end],SW.Hxx_RK(μ))
 ##
-ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
-@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,50,10000,ψG,equilibration_steps=2000,pre_equilibration_steps=5_000,scatter_fraction=0.5) for i in 1:12])
+# ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
+ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
+
+@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,80,1000,ψG,equilibration_steps=1000,pre_equilibration_steps=10_000,scatter_fraction=0.0) for i in 1:6])
 ##
 
 # ψG = SW.RKFunction()
-ψG = SW.PlaquetteNumberGuidingFunction(only(unique(stochReconfRes.params)))
+# ψG = SW.PlaquetteNumberGuidingFunction(only(unique(stochReconfRes.params)))
+# ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
 # ψG = typeof(ψG)(stochReconfRes.params)
+ψG = SW.FullVariationalGuidingFunction(stochReconfRes.params)
 # ψG = SW.fullVariationalFunction(S,0.1)
-
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,50,10000,ψG,equilibration_steps=2000,pre_equilibration_steps=5_000,scatter_fraction=0.5) for i in 1:12])
+scatter_fraction=0.5
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,200,5000,ψG;equilibration_steps=500,pre_equilibration_steps=10_000,scatter_fraction) for i in 1:6])
 ##
 # plotEnergies(results,CT,p=100;normalize=true,dense=true,τ = 30,Emax = stochReconfRes.E0[end]+stochReconfRes.ΔE[end]/1.5,Emin = stochReconfRes.E0[end]-stochReconfRes.ΔE[end]/1.5)
-plotEnergies(results,CT;normalize=false,dense=true,τ = 150,color = :red)
-plotEnergies!(resultsOld,CT;normalize=false,dense=true,τ = 150)
+plotEnergies(results,CT;normalize=false,dense=true,τ = 10,color = :red)
+plotEnergies!(resultsOld,CT;normalize=false,dense=true,τ = 10)
 current_figure()
+##
+equilib_plots(results;scatter_fraction,averageSteps=10,Ntrack=30,p = round(Int,10÷CT.τ),plotPopulation=false)
 
+##
+SqsGFMC = fetch.([Threads.@spawn SW.getSqGFMC(res,round(Int,5÷CT.τ)+2) for res in results])
+
+function SqFieldTheory(x,y)
+    num = cos(x) - cos(y) +2sin(x)sin(y) 
+    denom = (cos(x) - cos(y))^2 + (2sin(x)sin(y))^2
+    return num^2/(sqrt(denom)+1e-30)
+end
+
+function SqFieldTheory2(kx,ky,k,b2)
+    (sqrt(2)*sqrt(-((-4 + 4*cos(kx)*cos(ky) + cos(2*kx)*(1 - 2*cos(2*ky)) + cos(2*ky))*(40*b2 + k + 8*b2*(cos(2*kx) + 2*cos(kx)*(-4*cos(ky) + cos(kx)*cos(2*ky))))))*   (cos(kx) - cos(ky) + 2*sin(kx)*sin(ky))^2)/((cos(kx) - cos(ky))^2 + 4*sin(kx)^2*sin(ky)^2+1e-30)
+end
+
+function makeSqFTPlots(SqsGFMC,k=1,b2=0)
+    SqFT_func(x,y)  = SqFieldTheory2(x,y,k,b2)
+    with_theme(theme_PiTicks()) do 
+        # Sq = sqrt.(var(real(SqsGFMC))) ./4
+        Sq = mean(SqsGFMC) ./4
+        kx = ky = 2pi .* LinRange(0,1,size(Sq,1))
+        fig = Figure(fontsize = 22,size = (800,400))
+        axMC = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"k_y",title = L"GFMC$$",aspect = 1)
+        axerr = Axis(fig[1,2],xlabel = L"k_x",ylabel = L"k_y",title = L"std error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
+
+        axFT = Axis(fig[1,3],xlabel = L"k_x",ylabel = L"k_y",title = L"U(1) theory$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
+
+        # axDiff = Axis(fig[1,4],xlabel = L"k_x",ylabel = L"k_y",title = L"Difference$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
+
+        # err = abs.(Sq .- SqFieldTheory.(kx,kx'))
+        err = sqrt.(var(SqsGFMC)) ./4
+        hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
+        SqFT = [SqFT_func(x,y) for x in kx, y in ky]
+        hmFT = heatmap!(axFT,kx,ky,SqFT,colormap = :viridis)
+        # heatmap!(axerr,kx,ky,err,colormap = :viridis,colorrange = extrema(!isnan,Sq))
+        hmerr = heatmap!(axerr,kx,ky,err,colormap = :viridis)
+        # heatmap!(axDiff,kx,ky,(Sq ./maximum(Sq)) .- (SqFT ./maximum(SqFT)),colormap = :viridis)
+
+        Colorbar(fig[2,1],hmMC,label = L" \mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
+        Colorbar(fig[2,2],hmerr,label = L"\sigma( \mathcal{S}^{zz}(\textbf{q}))",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
+        Colorbar(fig[2,3],hmFT,label = L" \mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8), width = Relative(0.8),vertical=false,ticks = SimpleTicks())
+
+        rowsize!(fig.layout,2,Relative(0.1))
+        fig
+    end
+end
+makeSqFTPlots(SqsGFMC,1,0.1)
+
+##
+function plotReconfStats(reconfigurationTable)
+    survWalkers = SW.StatsBase.countmap(length.(unique.(eachcol(reconfigurationTable))))
+    surv = sort(collect(keys(survWalkers)))
+    counts = [survWalkers[s] for s in surv] ./ size(reconfigurationTable,2)
+    barplot(surv,counts;axis = (;xlabel = "Surviving walkers",ylabel = "Count"),color = :black)
+end
+plotReconfStats(results[3].reconfigurationTable[:,1000:end])
 ##
 mProj = round(Int,2 ÷ CT.τ)
 Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,mProj) for res in results]
