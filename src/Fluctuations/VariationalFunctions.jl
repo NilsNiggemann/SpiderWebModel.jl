@@ -2,6 +2,7 @@ abstract type AbstractGuidingFunction end
 
 struct RKFunction <: AbstractGuidingFunction end
 
+(ψG::AbstractGuidingFunction)(x::AbstractWalker) = ψG(get_config(x))
 struct PlaquetteNumberGuidingFunction <: AbstractGuidingFunction
     α::Float64
 end
@@ -23,8 +24,7 @@ function guidingfuncRatio_exponent(ψG::PlaquetteNumberGuidingFunction,n::Abstra
     α = ψG.α
     exponent = zero(α)
 
-    for ind in eachindex(affectedPlaquettes)
-        i = affectedPlaquettes[ind]
+    for i in affectedPlaquettes
         Δn = n´[i] - n[i]
         exponent += Δn
     end
@@ -65,8 +65,8 @@ function guidingfunc_exponent(ψG::FullVariationalGuidingFunction,N□::Abstract
     return exponent
 end
 
-guidingfuncRatio(ψG::AbstractGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes) = exp(guidingfuncRatio_exponent(ψG,n,n´,affectedPlaquettes))
-guidingfuncRatio(ψG::FullVariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) = exp(guidingfuncRatio_exponent(ψG,n,n´))
+@inline guidingfuncRatio(ψG::AbstractGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes) = exp(guidingfuncRatio_exponent(ψG,n,n´,affectedPlaquettes))
+@inline guidingfuncRatio(ψG::FullVariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) = exp(guidingfuncRatio_exponent(ψG,n,n´))
 
 function guidingfuncRatio_exponent(ψG::FullVariationalGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes)
     α = get_alpha_i(ψG)
@@ -76,7 +76,7 @@ function guidingfuncRatio_exponent(ψG::FullVariationalGuidingFunction,n::Abstra
 
     for i in affectedPlaquettes
         Δn = n´[i] - n[i]
-        Δn == 0 && continue
+        iszero(Δn) && continue
         
         exp_i = α[i]
         LoopVectorization.@turbo for j in eachindex(n,n´)
@@ -93,8 +93,29 @@ end
 
 guidingfuncRatio_exponent(ψG::AbstractGuidingFunction,n::AbstractArray,n´::AbstractArray) = guidingfuncRatio_exponent(ψG,n,n´,eachindex(n,n´))
 
-
 function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::AbstractGuidingFunction,Λ=0)
+    (;Config,weights) = Walker
+    empty!(weights)
+    moves = getMoves!(Walker)
+    ψx = ψG(Walker)
+    for operator in moves
+        i,j,opNum = operator
+        applyPlaquette!(Config, i, j, opNum)
+        
+        ψx´ = ψG(Walker)
+        
+        weight = ψx´/ψx
+        push!(weights,weight)
+        applyPlaquette!(Config, i, j, -opNum)
+    end
+    if Λ != 0
+        push!(moves, (0,0,0))
+        push!(weights,Λ)
+    end
+    return weights
+end
+
+function updateWeightList_plaqs!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::AbstractGuidingFunction,Λ=0)
     (;Config,weights) = Walker
     empty!(weights)
     moves = getMoves!(Walker)
@@ -118,6 +139,9 @@ function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::Ab
     return weights
 end
 
+@inline updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::FullVariationalGuidingFunction,Λ=0) = updateWeightList_plaqs!(Walker,AffectedPlaquetteList,ψG,Λ)
+@inline updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::PlaquetteNumberGuidingFunction,Λ=0) = updateWeightList_plaqs!(Walker,AffectedPlaquetteList,ψG,Λ)
+
 struct LocalPlaquetteGuidingFunction{A<:AbstractVector} <: AbstractGuidingFunction
     params::A
 end
@@ -132,6 +156,7 @@ function localPlaquetteGuidingFunction(State,α::Real=0.1)
     get_alpha_i(ψ) .= α
     return ψ
 end
+@inline updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::LocalPlaquetteGuidingFunction,Λ=0) = updateWeightList_plaqs!(Walker,AffectedPlaquetteList,ψG,Λ)
 
 function get_alpha_i(ψG::LocalPlaquetteGuidingFunction)
     return ψG.params
@@ -204,4 +229,83 @@ function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::T,
         push!(weights,Λ)
     end
     return weights
+end
+
+struct RBM{A<:AbstractArray} <: AbstractGuidingFunction
+    params::A
+    N::Int
+    hidden_density::Int
+end
+
+function RBM(x::AbstractMatrix,hidden_density::Int)
+    N = length(x)
+    M = N*hidden_density
+    NParams = N + M + N*M
+
+    params = zeros(NParams)
+    # params = zeros(Float32,NParams)
+    ψ = RBM(params,N,hidden_density)
+    return ψ
+end
+
+function get_alpha_i(ψG::RBM)
+    N = ψG.N
+    return @view ψG.params[1:N]
+end
+
+function get_b_j(ψG::RBM)
+    N = ψG.N
+    M = N * ψG.hidden_density
+    bparams = @view ψG.params[N+1:N+M,:]
+    return reshape(bparams,M)
+end
+
+function get_W_ij(ψG::RBM)
+    N = ψG.N
+    M = N * ψG.hidden_density
+    Wparams = @view ψG.params[N+M+1:end]
+    return reshape(Wparams,N,M)
+end
+
+function getParameterType(ψG::RBM,k)
+    N = ψG.N
+    M = N * ψG.hidden_density
+    if k <= N
+        return 1 # α
+    elseif k <= N+M
+        return 2 # b
+    else
+        return 3 # W
+    end
+end
+
+guidingfunc_name(F::RBM) = "RBM"
+function (ψG::RBM)(x::AbstractMatrix)
+    a = get_alpha_i(ψG)
+    b = get_b_j(ψG)
+    W = get_W_ij(ψG)
+
+    xlist = reshape(x, length(x))
+    aiσi = a' * xlist
+    exp_term = exp(aiσi)
+
+    coshprod = 1.
+    # cosh1inv = 1/cosh(1.)
+
+    for j in axes(W,2)
+        θj = get_theta_j(x,j,b,W)
+        # θj = 1.
+        coshprod *= 2cosh(θj)
+        # coshprod *= cosh(θj)*cosh1inv # get rid of factor 2 since it is just a global rescaling
+    end
+
+    return exp_term * coshprod
+end
+
+function get_theta_j(x::AbstractMatrix,j,b,W)
+    θj = b[j]
+    for i in axes(W,1)
+        θj += W[i,j]*x[i]
+    end
+    return θj
 end
