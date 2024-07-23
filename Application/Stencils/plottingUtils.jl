@@ -3,7 +3,12 @@ _getkwargs(m::SW.ContinuousTimeMethod) = (;xlabel = L"\tau")
 _getscaling(m::SW.DiscreteTimeMethod) = m.nBranch
 _getscaling(i::Integer) = i
 _getscaling(m::SW.ContinuousTimeMethod) = m.nBranch*m.τ
-
+function trueMomenta(kmin,kmax,L)
+    nmin = floor(Int,L*kmin/(2pi))
+    nmax = ceil(Int,L*kmax/(2pi))
+    # return 1/(2pi*L*100) .* nmin:nmax
+    return (nmin : nmax) .* 2pi/L
+end
 function plotEnergies(results,method,E0=NaN;normalize=false,kwargs...)
     ylabel = normalize ? L"E_0/L^2" : L"E_0"
     with_theme(theme_SimpleTicks()) do
@@ -15,7 +20,7 @@ function plotEnergies(results,method,E0=NaN;normalize=false,kwargs...)
     end
 end
 
-function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,τ=nothing, nThermal=1,normalize=false,dense = false,kwargs...)
+function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,τ=nothing, nThermal=1,normalize=false,dense = false,legend = true,marker = '●',markersize = 5,label = L"GFMC$$",kwargs...)
     
     getnBra(i::Integer) = i
     getnBra(m::SW.AbstractGFMCMethod) = m.nBranch
@@ -41,17 +46,19 @@ function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0
         !isnan(Emax) && (Emax = Emax /NSpins)
     end
     
-    proj = _getscaling(method) .*eachindex(en)
+    proj = _getscaling(method) .*(eachindex(en) .-1)
     if dense
-        l = lines!(ax,proj,en,label = L"GFMC$$";color = :black,kwargs...)
+        l = lines!(ax,proj,en,;label,color = :black,kwargs...)
         band!(ax,proj,en .- err,en .+ err;kwargs...,color = (l.color[],0.3))
     else
-        scatterlines!(ax,proj,en,label = L"GFMC$$",color = :black, marker = '●',markersize = 5;kwargs...)
+        scatterlines!(ax,proj,en;label,color = :black, marker,markersize ,kwargs...)
         errorbars!(ax,proj,en,err,whiskerwidth = 3.5,color = :black;kwargs...)
     end
-    !isnan(E0)&& hlines!([E0],color = :red,label = L"exact $$")
-    axislegend(ax,merge=true)
-    xlims!(ax,0,last(proj))
+    !isnan(E0)&& hlines!(ax,[E0],color = :red,label = L"exact $$")
+    if legend
+        axislegend(ax,merge=true,unique=true)
+    end
+    xlims!(ax,-0.5,last(proj))
     !isnan(Emin)&& !isnan(Emax) && ylims!(ax,Emin,Emax)
     return ax
 end
@@ -87,7 +94,7 @@ function trackWalkerPath(reconfigTable,InitialWalkers,NSteps)
     return walkerPopulation
 end
 
-function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p = 50)
+function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p = 50,plotPopulation=false)
     fig = Figure(size = 0.8 .*(1000, 1200),theme = theme_SimpleTicks())
     initWalkers = collect(round(Int,scatter_fraction*size(results[1].reconfigurationTable,1)):size(results[1].reconfigurationTable,1))
     function getkw(i,title)
@@ -136,10 +143,14 @@ function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p =
 
 
         # WP = trackWalkerPath(res.reconfigurationTable,initWalkers,Ntrack)'
-        WP = reverse(SW.getBranchingMatrix(res.reconfigurationTable,Ntrack,Ntrack-1).PopulationMatrix',dims= 1)
-        heatmap!(axreconf[i],WP,colormap = :jet)
+        WP = SW.getBranchingMatrix(res.reconfigurationTable,Ntrack,Ntrack-1)
+        if plotPopulation
+            heatmap!(axreconf[i],WP.PopulationMatrix',colormap = :jet)
+        else
+            heatmap!(axreconf[i],WP.BranchingMatrix',colormap = :jet)
+        end
         hlines!(axreconf[i],minimum(initWalkers)-0.5,color = :black,linewidth = 1,linestyle = :dash)
-        Sq = SW.getSqGFMC(res,p÷nBra)
+        Sq = SW.getSqGFMC(res,p)
         heatmap!(axSq[i],kx,ky,Sq)
     end
 
@@ -181,7 +192,10 @@ function plotVarEn(stochReconfRes;normalization=1)
     x = eachindex(Epl)
     errorbars!(ax,x,Epl,stochReconfRes.ΔE./ normalization,whiskerwidth=5)
     lines!(ax,x,Epl)
-    lines!(ax2,x,stochReconfRes.params_steps[1,1,:])
+    parsteps = stochReconfRes.params_steps
+    parslice = getLastSlice(parsteps)
+
+    lines!(ax2,x,parslice)
     fig
 end
 function trueMomenta(kmin,kmax,L)
@@ -189,4 +203,8 @@ function trueMomenta(kmin,kmax,L)
     nmax = ceil(Int,L*kmax/(2pi))
     # return 1/(2pi*L*100) .* nmin:nmax
     return (nmin : nmax) .* 2pi/L
+
+function getLastSlice(arr::AbstractArray{T,N}) where {T,N}
+    slicedims = tuple(collect(1 for i in 1:N-1)...)
+    return view(arr,slicedims...,:)
 end

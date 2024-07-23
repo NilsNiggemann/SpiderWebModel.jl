@@ -46,7 +46,15 @@ function LinearMaps._unsafe_mul!(y, S::QuantumMetric, v::AbstractVector)
 
 end
 
-function getOx_k(ψG::FullVariationalGuidingFunction,n::AbstractArray,k)
+function getOx_k(ψG,Walker::SpiderWebWalker,k)
+    return getOx_k(ψG,get_config(Walker),k)
+end
+
+function getOx_k(ψG::Union{FullVariationalGuidingFunction,LocalPlaquetteGuidingFunction},Walker::SpiderWebWalker,k)
+    return getOx_k_plaqs(ψG,Walker.n_x,k)
+end
+
+function getOx_k_plaqs(ψG::FullVariationalGuidingFunction,n::AbstractArray,k)
     par = ψG.params
 
     α = get_alpha_i(ψG)
@@ -63,7 +71,30 @@ function getOx_k(ψG::FullVariationalGuidingFunction,n::AbstractArray,k)
     return Ok
 end
 
-getOx_k(::LocalPlaquetteGuidingFunction,n::AbstractArray,k) = n[k]
+getOx_k_plaqs(::LocalPlaquetteGuidingFunction,n::AbstractArray,k) = n[k]
+
+function getOx_k(ψG::RBM,x::AbstractMatrix,k)
+    par = ψG.params
+
+    paramtype = getParameterType(ψG,k)
+
+    if paramtype == 1 
+        return x[k]
+    end
+    bj = get_b_j(ψG)
+    Wij = get_W_ij(ψG)
+    
+    if paramtype == 2
+        j = k - ψG.N
+        θj = get_theta_j(x,j,bj,Wij)
+        return tanh(θj)
+    elseif paramtype == 3
+        i,j = Tuple(CartesianIndices(Wij)[k-ψG.N-length(bj)])
+        θj = get_theta_j(x,j,bj,Wij)
+        return x[i] * tanh(θj)
+    end
+    return Ok
+end
 
 function nearbyInt(x1,x2,x_size)
     x_rsize = 1.0 / x_size
@@ -74,6 +105,13 @@ end
 
 isperiodic(S::Stencils.StencilArray) = Stencils.boundary(S) == Stencils.Wrap()
 isperiodic(S::StencilSpinConfig) = isperiodic(parent(S))
+
+function getDistReduction(S,ψG::AbstractGuidingFunction) 
+    AllDists = Dict{SVector{2,Int},Int}()
+    indicesMapping = collect(eachindex(ψG.params))
+    uniqueInds = collect(indicesMapping)
+    return (;AllDists,indicesMapping,uniqueInds)
+end
 
 function getDistReduction(S,ψG::FullVariationalGuidingFunction)
     
@@ -212,7 +250,7 @@ function reconf_obs(InitialState::ConfType,method::AbstractGFMCMethod,configs,ψ
             updateWeightList!(Walker,AffectedPlaquetteList,ψG)
             elocal = getLocalEnergy(Walker,method)
             @inbounds for (ik,k) in enumerate(inequivParams)
-                O_xk = getOx_k(ψG,Walker.n_x,k)
+                O_xk = getOx_k(ψG,Walker,k)
                 Ok_i[iconf,ik] = O_xk
             end
             E_i[iconf] = elocal
@@ -222,7 +260,7 @@ function reconf_obs(InitialState::ConfType,method::AbstractGFMCMethod,configs,ψ
     N = length(configs)
 
     EL_avg = mean(E_i)
-    EL_err = sqrt(var(E_i))
+    EL_err = std(E_i)
 
     return (;EL_avg,EL_err,E_i,Ok_i)
 end
@@ -248,7 +286,7 @@ function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatri
     if !issuccess(SChol)
         @warn "Cholesky factorization failed"
         SChol = cholesky!(Symmetric(S+1e-3I),check = false)
-        !issuccess(SChol) && return zeros(length(ψG.params))
+        !issuccess(SChol) && return zeros(length(F))
     end
     @time δα = SChol \ F
     for i in axes(δα,1)
@@ -264,7 +302,7 @@ function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatri
 end
 stochastic_reconfiguration_step(E_i,Ok_i,::AbstractSRSolver) = error("solver not implemented")
 
-function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,ψG,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps,scatter_fraction = 0.8,reconfigure=true,verbose=true;report_steps=1)
+function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,ψG,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,pre_equilibration_steps=5*equilibration_steps,scatter_fraction = 0.8,reconfigure=true;verbose=true,report_steps=1,reset = true)
     
     ψG = deepcopy(ψG)
     params = ψG.params
@@ -287,7 +325,7 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
         # for w in prob.Walkers
         #     get_config(w) .= InitialState
         # end
-        initializeGFMC!(prob,equilibration_steps,pre_equilibration_steps,scatter_fraction)
+        reset && initializeGFMC!(prob,equilibration_steps,pre_equilibration_steps,scatter_fraction)
 
         # @time res = runGFMC!(prob,range,reconfigure)
         res = runGFMC!(prob,range,reconfigure)

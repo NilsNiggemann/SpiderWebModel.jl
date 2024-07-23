@@ -1,5 +1,6 @@
 import Pkg
-# Pkg.activate("../Application/")
+cd(@__DIR__)
+Pkg.activate("../.")
 import SpiderWebModel as SW
 using CairoMakie
 using Statistics
@@ -15,10 +16,10 @@ function getPeriodic(parent)
 end
 
 S = SW.stencilConfig(parent(SW.getStairCase(10)),1/2;
-# boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
-# S_ED = getPeriodic(SW.getStairCase(size(S,1)))
-S_ED = SW.getStairCase(size(S,1))
+S_ED = getPeriodic(SW.getStairCase(size(S,1)))
+# S_ED = SW.getStairCase(size(S,1))
 # S = SW.stencilConfig(parent(SW.getStairCase(7)),1/2)
 # S_ED = SW.getStairCase(size(S,1))
 HStair = SW.generateHilbertSpace(S_ED)
@@ -44,10 +45,13 @@ nBra = 3
 # ψG = constructExactGuidingFunc(v0,HConfs)
 ##
 # ψG(N) = 1
-CT = SW.ContinuousTimeMethod(0.2,1,-E0)
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,1000,120000,ψG,equilibration_steps=500,pre_equilibration_steps=1_000,scatter_fraction=0.5,outfile = "temp/$(i)_2.h5") for i in 1:12])
+CT = SW.ContinuousTimeMethod(0.025,1,-E0)
+# @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,2000,52000,ψG,equilibration_steps=500,pre_equilibration_steps=1_000,scatter_fraction=0.5,
+# outfile = "../../temp/$(i)_4.h5"
+# ) for i in 1:24])
 @time println("done")
 ##
+results = vcat(SW.readResults.(filter(contains("_4.h5"),readdir("../../temp",join=true)),32000)...)
 # plotEnergies(results,CT,E0,nThermal=10,dense=true)
 plotEnergies(results,CT,E0,nThermal=10,dense = true,Emin = E0-2e-3,Emax = E0+1e-3,τ = 50)
 # plotEnergies(results,CT,E0,nThermal=10,normalize=true,Emin=E0-2e-2,Emax = E0+2e-2,dense = true)
@@ -71,7 +75,11 @@ function getSStau(res,p,mtau,O)
 
     # end
 
-    SW.getImagTimeCorr(Gnp,res.reconfigurationTable,ObsFunc,mtau) .- GSObs.^2
+    corrs = SW.getImagTimeCorr(Gnp,res.reconfigurationTable,ObsFunc,mtau) 
+    for i in eachindex(corrs)
+        corrs[i] .-= GSObs.^2
+    end
+    meancorrs = mean.(corrs) 
 end
 plaqs = collect(SW.plaquetteIterator(S))
 
@@ -79,15 +87,37 @@ plaqs = collect(SW.plaquetteIterator(S))
 # @profview getSStau.(results[1:4],10,Ref((2,3)))
 # obs(x) = x[2,3]+x[3,3]#*x[2,3]
 obs(x,normalization=1) = x[2,3]*normalization^2*x[2,4] + x[2,3]*normalization
-
+function ConstructObsMat(S,normalization=1.)
+    # normConv = convert(Float32,normalization)
+    # xFl = zeros(Float32,size(S))
+    # # x -> x .*normalization
+    # x -> xFl .= x.*normConv
+    # identity
+    c = copy(S)
+    function obs(x)
+        c .= x
+        SW.NPlaquettes(x)
+    end
+end
 #  AllCorrs = getSStau.(results,20,x->obs(x),0.5)
 # @profview getSStau.(results,20,x->obs(x,0.5))
-AllCorrs = fetch.([Threads.@spawn getSStau(res,400,20,x->obs(x,0.5)) for res in results])
+# AllCorrs = fetch.([Threads.@spawn getSStau(res,200,30,ConstructObsMat(S,0.5)) for res in results])
+@time AllCorrs = fetch.([Threads.@spawn getSStau(res,650,160,identity) for res in results])
+# AllCorrs = fetch.([Threads.@spawn getSStau(res,200,30,x->obs(x,0.5)) for res in results])
 # AllCorrs = getSStau.(results,200,x->x[1,2]*0.5 + x[2,3]*0.5)
-meanSStau = mean(AllCorrs)
+meanSStau = mean(AllCorrs) .*0.25 #1/4 since we compute <S_i(tau) S_i(0)> and spins are rescaled by a factor of 2
 ##
 tau = CT.τ .* (eachindex(meanSStau) .-1)
-S_tau_exact = SW.getTauCorr(HConfs,ExSol,tau,obs) .- SW.getGSObsED(HConfs,v0,obs)^2
+# S_tau_exact = SW.getTauCorr(HConfs,ExSol,tau,obs) .- SW.getGSObsED(HConfs,v0,obs)^2
+
+S_tau_exact =  let
+    S_tau_exact_Mat = SW.getTauCorr(HConfs,ExSol,tau,identity)
+    a = SW.getGSObsED(HConfs,v0,identity).^2
+    for i in eachindex(S_tau_exact_Mat)
+        S_tau_exact_Mat[i] .-= a
+    end
+    mean.(S_tau_exact_Mat)
+end
 ##
 function fitExp(tau,O_tau,numTerms=1;verbose=false)
 
@@ -120,8 +150,8 @@ end
 with_theme(theme_SimpleTicks()) do 
     nfit = 4
         
-    firstInd = findfirst(>(0.0),tau)
-    lastInd = findfirst(>=(2.9),tau)
+    firstInd = findfirst(>(0.),tau)
+    lastInd = findfirst(>=(4.8),tau)
 
     fig = Figure(size = 0.7 .*(800, 1000))
     ax = Axis(fig[1, 1], xlabel = L"τ", ylabel = L"\mathcal{O}(τ)",
@@ -164,6 +194,7 @@ with_theme(theme_SimpleTicks()) do
     gap = (ExSol.values[2] - ExSol.values[1])
 
     y0 = lastval * exp(gap * lastval_tau)
+    lines!(ax,taufit,normalizeVals.(model.(Ref(sol),taufit)),label = L"fit $\sum_n^{%$nfit} |A_n|^2 e^{-\Delta_n \tau}$",color = :blue,linestyle = :solid,linewidth = 3)
 
     lines!(ax,tau,yExact,label = L"exact $$",color = :red,linestyle = :dash)
 
@@ -177,7 +208,6 @@ with_theme(theme_SimpleTicks()) do
     lowerlim = minimum(filter(x->x >cutoff+1e-6, yGFMC))
 
     ylims!(ax,lowerlim,maximum(yGFMC))
-    lines!(ax,taufit,normalizeVals.(model.(Ref(sol),taufit)),label = L"fit $\sum_n^{%$nfit} |A_n|^2 e^{-\Delta_n \tau}$",color = :blue,linestyle = :solid,linewidth = 3)
 
     Δs = [log.(normalizeVals.(O_GFMC[1])./normalizeVals.(O_GFMC)) ./ tau for O_GFMC in AllCorrs]
     Δ = mean(Δs)
@@ -201,6 +231,7 @@ with_theme(theme_SimpleTicks()) do
     rowsize!(fig.layout, 2, Relative(0.2))
     rowsize!(fig.layout, 3, Relative(0.4))
     linkxaxes!(ax, axfit, axdelta)
+    save("Otau4.pdf", fig)
     fig
 end
 

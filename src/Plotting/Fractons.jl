@@ -1,10 +1,12 @@
-function getCharges(Conf::AbstractSpinConfig, flipParity = false)
+function getCharges(Conf::StencilSpinConfig, flipParity = false)
     Charges = zeros(size(Conf.Mat))
 
-    for i in axes(Conf.Mat, 1), j in axes(Conf.Mat, 2)
-        iseven(i + j + flipParity) || continue
-        plaquetteIsInBounds(Conf, i, j) || continue
-        P = getPlaquette(Conf, i, j)
+    # for i in axes(Conf.Mat, 1), j in axes(Conf.Mat, 2)
+    for (i,j) in plaquetteIterator(Conf.Mat, !flipParity)
+        # iseven(i + j + flipParity) || continue
+        # plaquetteIsInBounds(Conf, i, j) || continue
+        P = getPlaquetteSites(Conf, i, j)
+        # P = getPlaquette(Conf, i, j)
         any(isnan, P) && continue
 
         c = constraint(P)
