@@ -506,6 +506,16 @@ function initialize!(Walkers::AbstractVector{<:SpiderWebWalker},I::WeightedConfi
     end
 end
 
+struct CombinedInitializer{I1 <: AbstractGFMCInitializer,I2 <: AbstractGFMCInitializer} <: AbstractGFMCInitializer
+    I1::I1
+    I2::I2
+end
+
+function initialize!(Walkers::AbstractVector{<:SpiderWebWalker},I::CombinedInitializer)
+    initialize!(Walkers,I.I1)
+    initialize!(Walkers,I.I2)
+end
+
 function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8))
     
     (;AffectedPlaquetteList,Walkers,weights,reconfiguration_buffer,Observables,method,ψG) = prob
