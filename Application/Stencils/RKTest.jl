@@ -13,15 +13,24 @@ meanstd(x) = (mean(x),std(x))
 S = SW.stencilConfig(zeros(18,18),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
+# S .= SW.h5read("temp.h5","conf")
+μ = 0.8
+# ψG = SW.fullVariationalFunction(S,0.15*(1-μ))
+ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
 
-μ = 0.3
-CT = SW.ContinuousTimeMethod(0.6,1,(1-μ)* 0.266*length(S)*(1-μ),SW.Hxx_RK(μ))
-ψG = SW.fullVariationalFunction(S,0.15*(1-μ))
-# ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
 ##
-stochReconfRes = SW.stochastic_reconfiguration(S,CT,i->round(Int,1000+ 2i),ψG,300,1e-4,SW.IterativeSRSolver();Nwalkers = 
-6,reconfigure=false,reset = false,rel_tolerance=0,equilibration_steps=100,pre_equilibration_steps=5_000, 
-report_steps = 10,
+CTFindOpt = SW.ContinuousTimeMethod(10.,1,(1-μ)* 0.2*0.266*length(S),SW.Hxx_RK(μ))
+
+@time OptimStart = SW.startManyWalkerGFMC(S,CTFindOpt,30,100,ψG;equilibration_steps=1,pre_equilibration_steps=50_000,scatter_fraction=0.5)
+OptimStart.TotalWeights
+ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
+##
+initializer = SW.WeightedConfigsInitializers(OptimStart.SaveConfigs,OptimStart.TotalWeights)
+CT_SR = SW.ContinuousTimeMethod(0.05,1,(1-μ)* 0.266*length(S),SW.Hxx_RK(μ))
+
+stochReconfRes = SW.stochastic_reconfiguration(S,CT_SR,i->round(Int,100+ 2i),ψG,50,i->100*min(0.4,0.05+0.001*i),SW.IterativeSRSolver();Nwalkers = 
+60,reconfigure=true,reset = true,rel_tolerance=0,equilibration_steps=0,initializer,
+report_steps = 2,
 )
 plotVarEn(stochReconfRes)
 ##
@@ -29,30 +38,32 @@ plotVarEn(stochReconfRes)
 # ψG = SW.RKFunction()
 CT = SW.ContinuousTimeMethod(0.1,1,stochReconfRes.E0[end],SW.Hxx_RK(μ))
 ##
-# ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
-ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
+ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
+# ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
 
-@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,80,1000,ψG,equilibration_steps=1000,pre_equilibration_steps=10_000,scatter_fraction=0.0) for i in 1:6])
+@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,80,3000,ψG,equilibration_steps=1000,pre_equilibration_steps=10_000,scatter_fraction=0.0) for i in 1:12])
 ##
 
 # ψG = SW.RKFunction()
 # ψG = SW.PlaquetteNumberGuidingFunction(only(unique(stochReconfRes.params)))
 # ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
 # ψG = typeof(ψG)(stochReconfRes.params)
-ψG = SW.FullVariationalGuidingFunction(stochReconfRes.params)
+ψG = SW.LocalPlaquetteGuidingFunction(stochReconfRes.params)
+# ψG = SW.FullVariationalGuidingFunction(stochReconfRes.params)
 # ψG = SW.fullVariationalFunction(S,0.1)
-scatter_fraction=0.5
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,200,5000,ψG;equilibration_steps=500,pre_equilibration_steps=10_000,scatter_fraction) for i in 1:6])
+CT2 = SW.ContinuousTimeMethod(0.1,1,-stochReconfRes.E0[end],SW.Hxx_RK(μ))
+
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT2,80,3000,ψG;equilibration_steps=1000,initializer) for i in 1:12])
 ##
 # plotEnergies(results,CT,p=100;normalize=true,dense=true,τ = 30,Emax = stochReconfRes.E0[end]+stochReconfRes.ΔE[end]/1.5,Emin = stochReconfRes.E0[end]-stochReconfRes.ΔE[end]/1.5)
-plotEnergies(results,CT;normalize=false,dense=true,τ = 10,color = :red)
-plotEnergies!(resultsOld,CT;normalize=false,dense=true,τ = 10)
+plotEnergies(results,CT2;normalize=false,dense=true,τ = 30,color = :red)
+plotEnergies!(resultsOld,CT;normalize=false,dense=true,τ = 30)
 current_figure()
 ##
-equilib_plots(results;scatter_fraction,averageSteps=10,Ntrack=30,p = round(Int,10÷CT.τ),plotPopulation=false)
+equilib_plots(results;scatter_fraction=0,averageSteps=10,Ntrack=30,p = round(Int,20÷CT.τ),plotPopulation=true)
 
 ##
-SqsGFMC = fetch.([Threads.@spawn SW.getSqGFMC(res,round(Int,5÷CT.τ)+2) for res in results])
+SqsGFMC = fetch.([Threads.@spawn SW.getSqGFMC(res,round(Int,50÷CT.τ)+2) for res in results])
 
 function SqFieldTheory(x,y)
     num = cos(x) - cos(y) +2sin(x)sin(y) 
@@ -137,7 +148,7 @@ scatterlines(eachindex(BValsMean).* CT.τ,BValsMean,label="plaquette",color = (:
 band!(eachindex(BValsMean).* CT.τ,BValsMean - BValsStd , BValsMean + BValsStd,color = (:black,0.2))
 current_figure()
 ##
-Sqs = SW.getSqsGFMC(results[1:2],round(Int,10 ÷ CT.τ),CT.nBranch)
+Sqs = SW.getSqsGFMC(results,round(Int,5 ÷ CT.τ),CT.nBranch)
 with_theme(theme_PiTicks())  do 
     fig = Figure()
     ax = Axis(fig[1, 1], xlabel = L"q_x", ylabel = L"q_y")

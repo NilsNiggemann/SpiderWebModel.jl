@@ -41,8 +41,8 @@ struct ContinuousTimeMethod{F2} <: AbstractGFMCMethod
     w_avg_estimate::Float64
     Hxx::F2
 end
-ContinuousTimeMethod(τ,nBranch,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(τ,nBranch,w_avg_estimate,Hxx)
-ContinuousTimeMethod(;τ,nBranch,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(τ,nBranch,w_avg_estimate,Hxx)
+ContinuousTimeMethod(τ,nBranch::Integer,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(float(τ),nBranch,float(w_avg_estimate),Hxx)
+ContinuousTimeMethod(;τ,nBranch,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(τ,nBranch,float(w_avg_estimate),Hxx)
 
 abstract type AbstractGFMCProblem end
 struct SpiderwebGFMCProblem{MethodType<:AbstractGFMCMethod,T<:AbstractFloat,C,F,W,O} <: AbstractGFMCProblem
@@ -472,16 +472,49 @@ function saveVariationalParameter(file::HDF5.File,ψG)
     end
 end
 
-function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0, pre_equilibration_steps=equilibration_steps ÷ 5,scatter_fraction=0.8)
+abstract type AbstractGFMCInitializer end
+
+struct UnguidedWalkInitializer <: AbstractGFMCInitializer 
+    pre_equilibration_steps::Int
+    scatter_fraction::Float64
+end
+
+function initialize!(Walkers::AbstractVector{<:SpiderWebWalker},I::UnguidedWalkInitializer)
+    if I.pre_equilibration_steps > 0 && I.scatter_fraction > 0
+        random_init_walkers!(Walkers,I.pre_equilibration_steps,I.scatter_fraction)
+    end
+    return
+end
+
+"""draw random configurations with given pre-given weights to accelerate equilibration times"""
+struct WeightedConfigsInitializers{T1<:AbstractVector{<:AbstractMatrix},T2<:AbstractVector} <: AbstractGFMCInitializer
+    configs::T1
+    weights::T2
+end
+
+function WeightedConfigsInitializers(SaveConfigs::AbstractArray{<:Number,4},TotalWeights::AbstractVector)
+    configs = collect(eachslice(SaveConfigs,dims=(3,4)))
+    configsVec = reshape(configs,length(configs))
+    weights = [w for w in TotalWeights for _ in axes(SaveConfigs,3)]
+    return WeightedConfigsInitializers(configsVec,weights)
+end
+
+function initialize!(Walkers::AbstractVector{<:SpiderWebWalker},I::WeightedConfigsInitializers)
+    for Walker in Walkers
+        rand_conf = StatsBase.sample(I.configs,StatsBase.Weights(I.weights))
+        get_config(Walker) .= rand_conf
+    end
+end
+
+function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8))
     
     (;AffectedPlaquetteList,Walkers,weights,reconfiguration_buffer,Observables,method,ψG) = prob
     (;outfile,reconfigurationTable) = Observables
 
     saveParameters(outfile,equilibration_steps,method,ψG)
 
-    if pre_equilibration_steps > 0 # pre_equilibration_steps do not use have any reconfigurations or guiding wavefunctions. The idea is to initialize the walkers with fully uncorrelated configurations at the beginning so that the Hilbert space can be explored more efficiently.
-        random_init_walkers!(Walkers,pre_equilibration_steps,scatter_fraction)
-    end
+    initialize!(Walkers,initializer)
+
     #fill buffers for available steps and weights
     reconfigurationList = @view reconfigurationTable[:,1]
     for _ in 1:equilibration_steps
@@ -492,8 +525,8 @@ function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0, pre_eq
     return prob,Observables
 end
 
-function startManyWalkerGFMC(prob::AbstractGFMCProblem,equilibration_steps::Int,pre_equilibration_steps::Int,scatter_fraction::Real)
-    initializeGFMC!(prob,equilibration_steps,pre_equilibration_steps,scatter_fraction)
+function startManyWalkerGFMC(prob::AbstractGFMCProblem,equilibration_steps::Int,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8))
+    initializeGFMC!(prob,equilibration_steps,initializer)
     runGFMC!(prob)
 end
 
@@ -501,9 +534,9 @@ end
 #     startManyWalkerGFMC(InitialState,outfile,Nwalkers,NSteps,equilibration_steps,pre_equilibration_steps,G)
 # end
 
-function startManyWalkerGFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,ψG; equilibration_steps = 0,pre_equilibration_steps = 0,scatter_fraction=0.8,kwargs...)
+function startManyWalkerGFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,ψG; equilibration_steps = 0, pre_equilibration_steps = equilibration_steps ÷ 5, scatter_fraction = 0.8,initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),kwargs...)
     prob = setup_GFMC_problem(InitialState,method,Nwalkers,nSteps,ψG;kwargs...)
-    startManyWalkerGFMC(prob,equilibration_steps,pre_equilibration_steps,scatter_fraction)
+    startManyWalkerGFMC(prob,equilibration_steps,initializer)
 end
 
 function runGFMC!(prob::AbstractGFMCProblem,range,reconfigure::Bool=true)
@@ -572,7 +605,7 @@ function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::Con
                 end
             end
         end
-        w = exp(log_w + nBranch*τ* w_avg_estimate)
+        w = exp(log_w - nBranch*τ* w_avg_estimate)
         # w = exp(log_w)
         weights[α] = w
     end

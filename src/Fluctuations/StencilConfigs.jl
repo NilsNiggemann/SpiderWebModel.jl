@@ -1,11 +1,15 @@
-struct StencilSpinConfig{T,MatType<:AbstractMatrix{T}} <: AbstractSpinConfig{T}
+# struct StencilSpinConfig{T,MatType<:AbstractMatrix{T}} <: AbstractSpinConfig{T}
+#     Mat::MatType
+#     M::Int8
+# end
+struct StencilSpinConfig{MVal<:Val,T,MatType<:AbstractMatrix{T}} <: AbstractSpinConfig{T}
     Mat::MatType
-    M::Int8
+    M::MVal
 end
-@inline Base.parent(S::StencilSpinConfig) = S.Mat
-@inline getSpin(S::StencilSpinConfig) = S.M/2
-@inline Base.copy(S::StencilSpinConfig) = StencilSpinConfig(copy(parent(S)), S.M)
 
+@inline Base.parent(S::StencilSpinConfig) = S.Mat
+@inline getSpin(::StencilSpinConfig{Val{MVal}}) where {MVal} = MVal/2
+@inline Base.copy(S::StencilSpinConfig) = StencilSpinConfig(copy(parent(S)), S.M)
 function stencilConfig(A::AbstractMatrix{<:AbstractFloat}, S,paddingValue = Int8(typemax(Int8)); kwargs...)
     return stencilConfig(Int8.(2 .*A), S,paddingValue; kwargs...)
 end
@@ -17,17 +21,17 @@ function stencilConfig(A::AbstractMatrix{Int8}, S,paddingValue = Int8(typemax(In
         boundary = Stencils.Remove(paddingValue),
         kwargs...,
     )
-    M = Int8(2S)
+    M = Val(2S)
     return StencilSpinConfig(St, M)
 end
 
 stencilConfig(A::SpinConfig; kwargs...) = stencilConfig(parent(A), A.S; kwargs...)
 
 function SpinConfig(S::StencilSpinConfig)
-    return SpinConfig(parent(S)./2, S.M/2)
+    return SpinConfig(parent(S)./2, getSpin(S))
 end
 
-allSpinsInBounds(S::StencilSpinConfig; kwargs...) = allSpinsInBounds(S,S.M; kwargs...)
+allSpinsInBounds(S::StencilSpinConfig{Val{M}}; kwargs...) where M = allSpinsInBounds(S,M; kwargs...)
 
 plotSpinConfig!(ax, S::StencilSpinConfig; kwargs...) = plotSpinConfig!(ax, SpinConfig(S); kwargs...)
 plotSpinConfig(S::StencilSpinConfig; kwargs...) = plotSpinConfig(SpinConfig(S); kwargs...)
@@ -68,6 +72,8 @@ const P1_STENCIL = Int8.(SVector(-2, -2, 2, 2, 2, 2, -2, -2))
     S = getPlaquetteStencil(S, i, j)
     return getSitesFromStencil(S)
 end
+
+@inline getPlaquette(S::StencilSpinConfig, i, j) = getPlaquetteSites(S, i, j)
 
 @inline Base.@propagate_inbounds getPlaquetteSites(S::StencilSpinConfig, i::Int, j::Int) =
     getPlaquetteSites(parent(S), i, j)
@@ -126,6 +132,16 @@ end
     p = all(<(M), v)
     pdagger = all(>(-M), v)
     return p, pdagger
+end
+
+"""checks whether F or F† can be applied. Pij are 2S_i in counterclockwise order. M = 2S is twice the spin."""
+@inline Base.@propagate_inbounds function P_applicable(Pij::Union{SVector{8},Stencils.Moore}, ::Val{M}) where {M}
+    # more performant than above since (S1 - 1) * (S2 + 1) ... is zero only if S1 == 1 and S2 == -1 ...
+    # here we technically compute e.g. (2S1 - 2) * (2S2 + 2) ... with the same result
+    S1, S2, S3, S4, S5, S6, S7, S8 = Pij
+    p = !iszero((S1-M) * (S2+M) * (S3+M) * (S4-M) * (S5-M) * (S6+M) * (S7+M) * (S8-M))
+    pdag = !iszero((S1+M) * (S2-M) * (S3-M) * (S4+M) * (S5+M) * (S6-M) * (S7-M) * (S8+M))
+    return p, pdag
 end
 
 @inline Base.@propagate_inbounds function P_applicable(S::StencilSpinConfig, i::Int, j::Int)

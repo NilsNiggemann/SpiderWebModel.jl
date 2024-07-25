@@ -109,7 +109,7 @@ function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p =
     axen = [Axis(fig[i,1],xlabel = "Iteration";getkw(i,"Energy")...) for i in eachindex(results)]
     axws = [Axis(fig[i,2],xlabel = "Iteration";getkw(i,"weight")...) for i in eachindex(results)]
     axreconf = [Axis(fig[i,3],xlabel = "Iteration";getkw(i,"walker heritage")...) for i in eachindex(results)]
-    axSq = [Axis(fig[i,4],xlabel = L"q_x",aspect = 1,ylabel = L"q_y";xticks = PiTicks(),yticks = PiTicks(),getkw(i,L"\mathcal{S}(\mathbf{q})")...) for i in eachindex(results)]
+    axSq = [Axis(fig[i,4],xlabel = L"q_x",aspect = 1,ylabel = L"q_y";xticks = PiTicks([0,pi,2pi]),yticks = PiTicks([0,pi,2pi]),getkw(i,L"\mathcal{S}(\mathbf{q})")...) for i in eachindex(results)]
 
     minweight,maxweight = (Inf,-Inf)
     en_min,en_max = (Inf,-Inf)
@@ -203,7 +203,7 @@ function trueMomenta(kmin,kmax,L)
     nmax = ceil(Int,L*kmax/(2pi))
     # return 1/(2pi*L*100) .* nmin:nmax
     return (nmin : nmax) .* 2pi/L
-
+end
 function getLastSlice(arr::AbstractArray{T,N}) where {T,N}
     slicedims = tuple(collect(1 for i in 1:N-1)...)
     return view(arr,slicedims...,:)

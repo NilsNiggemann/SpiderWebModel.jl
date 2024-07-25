@@ -96,9 +96,8 @@ end
 
 """Assumes that constraint are only defined on every alternating site, starting from the first index"""
 function fulFillsConstraint_nonStrict(Conf::AbstractSpinConfig, flipParity = false; verbose = false)
-    for i in axes(Conf, 1), j in axes(Conf, 2)
-        iseven(i + j + flipParity) || continue
-        plaquetteIsInBounds(Conf, i, j) || continue
+    for I in plaquetteIterator(Conf,!flipParity)
+        i,j = Tuple(I)
         P = getPlaquette(Conf, i, j)
         any(isnan, P) && continue
 
