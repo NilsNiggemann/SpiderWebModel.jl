@@ -7,21 +7,34 @@ using MakieHelpers
 using MKL
 include("plottingUtils.jl")
 ##
-S = SW.stencilConfig(zeros(10,10),1;
-boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+S = SW.stencilConfig(zeros(8,8),1;
+# boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 # S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 
-ψG = SW.fullVariationalFunction(S,0.12)
+# ψG = SW.fullVariationalFunction(S,0.12)
+ψG = SW.RBM(S,2)
+SW.get_b_j(ψG) .= 0.01
+# SW.get_alpha_i(ψG) .= 1
+SW.get_W_ij(ψG) .= 0.01
 # SW.get_beta_ij(ψG) .= 0.0001
 nThermal = 300
+DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
+##
+stochReconfResRBM = SW.stochastic_reconfiguration(S,DT,1000,ψG,100,0.002,SW.IterativeSRSolver();Nwalkers = 6,reconfigure=false,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+report_steps = 10,
+scatter_fraction = 0.1,
+reset = true,
+# outfile = "tempSR/SR2.h5"
+)
+plotVarEn(stochReconfResRBM)
 ##
 SW.Random.seed!(1234)
-# DT = SW.DiscreteTimeMethod(0.,2,0.266*length(S))
-DT = SW.ContinuousTimeMethod(0.05,1,0.266*length(S))
+DT = SW.DiscreteTimeMethod(0.,2,0.266*length(S))
+# DT = SW.ContinuousTimeMethod(0.05,1,0.266*length(S))
 ψGPlaq = SW.localPlaquetteGuidingFunction(S,0.12)
 
-stochReconfResLoc = SW.stochastic_reconfiguration(S,DT,3000,ψGPlaq,200,1000,SW.IterativeSRSolver();Nwalkers = 90,reconfigure=true,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+stochReconfResLoc = SW.stochastic_reconfiguration(S,DT,1400,ψGPlaq,20,0.01,SW.IterativeSRSolver();Nwalkers = 30,reconfigure=true,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
 report_steps = 5,
 reset = true,
 # outfile = "tempSR/SR2.h5"
@@ -42,7 +55,7 @@ nThermal = 100
 # DT = SW.DiscreteTimeMethod(0.,4,0.266 * length(S))
 DT = SW.ContinuousTimeMethod(0.1,1,0.266*length(S))
 
-ψGnew = typeof(ψG)(stochReconfRes.params)
+ψGnew = typeof(ψG)(stochReconfResRBM.params[:],ψG.N,ψG.hidden_density)
 
 @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,10_000,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:12])
 ##

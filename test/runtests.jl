@@ -12,5 +12,6 @@ end
 
 include("ConstructionTest.jl")
 include("FluctuationTest.jl")
+include("StencilConfigsTest.jl")
 include("GFMCTest.jl")
 include("IO.jl")
