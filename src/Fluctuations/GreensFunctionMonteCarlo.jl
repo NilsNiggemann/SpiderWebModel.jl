@@ -321,47 +321,69 @@ end
 divide_elementwise!(x::Number,y::Number) = x / y
 divide_elementwise!(x::AbstractArray,y) = (x ./= y)
 
-function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m=size(Gnp,2)÷2)
+function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc::T,m=size(Gnp,2)÷2) where T
     N = lastindex(AllConfigs,4)
     exampleConf = @view AllConfigs[:,:,begin,begin]
-    Obs = ObsFunc(exampleConf)
-    num = float(zero(Obs))
-    denom = 0.
-    GnO = float(zero(Obs))
+
     # fill!(Obs,zero(eltype(Obs)))
+    denom = 0.
 
     Nw = size(reconfigurationTable,1)
     p = size(Gnp,2)
     # surviving_walker_mapping_list = zeros(Int,Nw)
-    WalkerMultiplicities = zeros(Int,Nw)
+
+    
+    ThreadsObsFuncs = [deepcopy(ObsFunc) for _ in 1:Threads.nthreads()]
+    
+    ObsEx = ObsFunc(exampleConf)
+    num_buffer = [zero(ObsEx) for _ in ThreadsObsFuncs]
+
     for n in m+1:N
         Gn = Gnp[n,p]
         # denom += Gn*Nw
         denom += Gn*Nw
-        # reconfigList = @view reconfigurationTable[:,n-m]
-        # surviving_walker_mapping!(surviving_walker_mapping_list,reconfigList)
-        WalkerMultiplicities .= 0
-        for α in 1:Nw
-            α´ = α
-            for i_m in 1:m
-                α´ = reconfigurationTable[α´,n-i_m]
-            end
-            WalkerMultiplicities[α´] += 1
-        end
+    end
+    NThreads = Threads.nthreads()
 
-        for α in 1:Nw
-            mult = WalkerMultiplicities[α]
-            mult == 0 && continue
-            conf = @view AllConfigs[:,:,α,n-m]
-            O = ObsFunc(conf)
-            # surviving_index = surviving_walker_mapping_list[α´]
-            # O = ObsFunc(AllConfigs[n-m][surviving_index])
-            GnO = _set_to!(GnO,O)
-            GnO = mult_elementwise!(GnO,Gn*mult)
-            # @. num += Gn*O
-            num = add_elementwise!(num,GnO)
+    summationIndices = m+1:N
+    WorkChunks = ChunkSplitters.chunks(m+1:N,n=NThreads,split = :scatter)
+    
+    Threads.@threads for (ichunk,chunkinds) in enumerate(WorkChunks)
+        WalkerMultiplicities = zeros(Int,Nw)
+        Obsfunc_i = ThreadsObsFuncs[ichunk]
+        num = num_buffer[ichunk]
+        GnO = float(zero(num))
+        for n in summationIndices[chunkinds]
+            Gn = Gnp[n,p]
+
+            WalkerMultiplicities .= 0
+            for α in 1:Nw
+                α´ = α
+                for i_m in 1:m
+                    α´ = reconfigurationTable[α´,n-i_m]
+                end
+                WalkerMultiplicities[α´] += 1
+            end
+                
+            for α in 1:Nw
+                mult = WalkerMultiplicities[α]
+                mult == 0 && continue
+                conf = @view AllConfigs[:,:,α,n-m]
+                O = Obsfunc_i(conf)
+                # surviving_index = surviving_walker_mapping_list[α´]
+                # O = ObsFunc(AllConfigs[n-m][surviving_index])
+                GnO = _set_to!(GnO,O)
+                GnO = mult_elementwise!(GnO,Gn*mult)
+                # @. num += Gn*O
+                num = add_elementwise!(num,GnO)
+            end
         end
     end
+    num = num_buffer[1]
+    for i in 2:NThreads
+        num = add_elementwise!(num,num_buffer[i])
+    end
+
     return divide_elementwise!(num,denom)
 end
 function getObs(result,ObsFunc,p)

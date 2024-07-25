@@ -230,7 +230,7 @@ _getNbra(res,nBra) = nBra
 function getSqsGFMC(Results,p,nBra=nothing)
 
     Sqs = Vector{Matrix{Float64}}(undef,length(Results))
-    Threads.@threads for i in eachindex(Results,Sqs)
+    for i in eachindex(Results,Sqs)
         res = Results[i]
         _nBra = _getNbra(res,nBra)
         Sq = getSqGFMC(res,p÷_nBra)
