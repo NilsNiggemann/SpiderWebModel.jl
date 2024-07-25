@@ -203,7 +203,7 @@ function trueMomenta(kmin,kmax,L)
     nmax = ceil(Int,L*kmax/(2pi))
     # return 1/(2pi*L*100) .* nmin:nmax
     return (nmin : nmax) .* 2pi/L
-
+end
 function getLastSlice(arr::AbstractArray{T,N}) where {T,N}
     slicedims = tuple(collect(1 for i in 1:N-1)...)
     return view(arr,slicedims...,:)
