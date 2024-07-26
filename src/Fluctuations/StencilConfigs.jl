@@ -21,7 +21,7 @@ function stencilConfig(A::AbstractMatrix{Int8}, S,paddingValue = Int8(typemax(In
         boundary = Stencils.Remove(paddingValue),
         kwargs...,
     )
-    M = Val(2S)
+    M = Val(Int(2S)) # do not chose Int8 to avoid overflows
     return StencilSpinConfig(St, M)
 end
 
