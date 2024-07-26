@@ -1,15 +1,15 @@
 #!/bin/bash
 #=
 #!/bin/bash
-# SBATCH --dependency=afterok:8745821
+# SBATCH --dependency=afterok:8813429
 #SBATCH --job-name=CTRKS1
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=2-00:00:00
+#SBATCH --time=1-20:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
-#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK/%a.out
+#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK/%a_L20.out
 #SBATCH --partition=normal
 #SBATCH --ntasks=1
 #SBATCH --mem=220GB
@@ -17,7 +17,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --ntasks-per-node=1
 ~/.bashrc
-julia -O3 -t $SLURM_CPUS_PER_TASK /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/Spin1GFMC_CT_RK.jl $SLURM_ARRAY_TASK_ID
+julia -O3 -t $SLURM_CPUS_PER_TASK /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/Spin1GFMC_CT_RKL20.jl $SLURM_ARRAY_TASK_ID
 exit
 =#
 
@@ -34,13 +34,13 @@ i_arg = parse(Int, ARGS[1])
 # μs = μs[2:2:end]
 
 μ = μs[i_arg]
-L = 30
+L = 20
 τ = 0.15
 nBra = 1
-NSteps = 21_000
-NBinsEval = 3
-NRuns = 10
-equilibration_steps = 3_000
+NSteps = 30_000
+NBinsEval = 1
+NRuns = 20
+equilibration_steps = 10_000
 pre_equilibration_steps=0
 NWalkers = 128*80
 scatter_fraction = 0.0
@@ -74,7 +74,7 @@ boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 αstart = 0.13 * (1-μ)
 ψG = SW.localPlaquetteGuidingFunction(parentState,αstart)
-CT = SW.ContinuousTimeMethod(τ,1,prod(size(parentState))*0.266*(1-μ),SW.Hxx_RK(μ))
+CT = SW.ContinuousTimeMethod(τ,1,length(parentState)*0.266*(1-μ),SW.Hxx_RK(μ))
 
 ##
 if !isfile(outfileSR) && μ != 1.0
@@ -146,7 +146,7 @@ let
         file["tau"] = τ
     end
     
-    Threads.@threads for projectionSteps in (50,250,500,750,1000,1250)
+    Threads.@threads for projectionSteps in (2,50,250,500,750,1000,1250)
     # for projectionSteps in (20,40)
         SqsGFMC = stack(SW.getSqsGFMC(AllResults,projectionSteps),dims=3)
         h5open(outfileTotal,"cw") do file
