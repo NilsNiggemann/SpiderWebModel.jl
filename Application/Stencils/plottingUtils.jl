@@ -9,11 +9,11 @@ function trueMomenta(kmin,kmax,L)
     # return 1/(2pi*L*100) .* nmin:nmax
     return (nmin : nmax) .* 2pi/L
 end
-function plotEnergies(results,method,E0=NaN;normalize=false,kwargs...)
+function plotEnergies(results,method,E0=NaN;normalize=false,axis=(;),kwargs...)
     ylabel = normalize ? L"E_0/L^2" : L"E_0"
     with_theme(theme_SimpleTicks()) do
         fig = Figure(fontsize = 22)
-        ax = Axis(fig[1,1];ylabel ,xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5),_getkwargs(method)...)
+        ax = Axis(fig[1,1];ylabel ,xminorticksvisible=true,yminorticksvisible=true,xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5),_getkwargs(method)...,axis...)
         plotEnergies!(ax,results,method,E0;normalize,kwargs...)
         # ens = getfield.(obs,:E0)
         return fig
