@@ -10,58 +10,94 @@ include("plottingUtils.jl")
 meanstd(x) = (mean(x),std(x))
 ##
 
-S = SW.stencilConfig(zeros(20,20),1;
+S = SW.stencilConfig(zeros(14,14),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
-# S .= SW.h5read("temp.h5","conf")
-μ = 0.2
-# S[11,1:2:end] .= 2
-# ψG = SW.fullVariationalFunction(S,0.15*(1-μ))
-ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
-
-# SW.plotFractons(S)
-# SW.plotApplPlaquettes!(current_axis(),S)
-# current_figure()
-##
-CTFindOpt = SW.ContinuousTimeMethod(3.,1,(1-μ)* 0.2*0.266*length(S),SW.Hxx_RK(μ))
-# CTFindOpt = SW.DiscreteTimeMethod(0,15,-mean(OptimStart.energies))
-
-@time OptimStart = SW.startManyWalkerGFMC(S,CTFindOpt,480,1000,ψG;equilibration_steps=1,pre_equilibration_steps=50_000,scatter_fraction=0.5)
-ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
-
-initializer = SW.WeightedConfigsInitializers(OptimStart.SaveConfigs,OptimStart.TotalWeights)
-##
-ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
-CT2 = SW.ContinuousTimeMethod(0.08,1,-mean(OptimStart.energies),SW.Hxx_RK(μ))
-
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT2,120,8000,ψG;equilibration_steps=0) for i in 1:6])
-##
 
 S_string = copy(S)
 # S .= SW.h5read("temp.h5","conf")
-S_string[end÷2+1,1:2:end] .= 2
+S_string[end÷2,1:2:end] .= 2
 # ψG = SW.fullVariationalFunction(S,0.15*(1-μ))
-ψG = SW.localPlaquetteGuidingFunction(S_string,0.15*(1-μ))
 @assert SW.fulFillsConstraint(S_string)
 SW.plotFractons(S_string)
 SW.plotApplPlaquettes!(current_axis(),S_string)
 current_figure()
 ##
 
-@time OptimStart_string = SW.startManyWalkerGFMC(S_string,CTFindOpt,480,1000,ψG;equilibration_steps=1,pre_equilibration_steps=50_000,scatter_fraction=0.5)
-##
-initializer_string = SW.WeightedConfigsInitializers(OptimStart_string.SaveConfigs,OptimStart_string.TotalWeights)
-results_string = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S_string,CT2,120,8000,ψG;equilibration_steps=0,initializer=initializer_string) for i in 1:6])
-##
+function makeRuns(S,muRange,folder)
+    for μ in muRange
+        ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
+        
+        files_folder = joinpath(folder,"μ=$(μ)")
+        
+        if !isdir(files_folder)
+            mkpath(files_folder)
+            CTFindOpt = SW.ContinuousTimeMethod(3.,1,(1-μ)* 0.2*0.266*length(S),SW.Hxx_RK(μ))
+            
+            @time OptimStart = SW.startManyWalkerGFMC(S,CTFindOpt,900,500,ψG;equilibration_steps=1,pre_equilibration_steps=30_000,scatter_fraction=0.5)
+            
+            initializer = SW.WeightedConfigsInitializers(OptimStart.SaveConfigs,OptimStart.TotalWeights)
 
-plotEnergies(results,CT2;normalize=true,dense=true,τ = 10,color = :red, label = L"no string$$",legend = false,axis = (;title = L"μ = %$μ"))
-plotEnergies!(results_string,CT2;normalize=true,dense=true,τ = 10,color = :blue, label = L"single string$$")
-current_figure()
-
+            CT2 = SW.ContinuousTimeMethod(0.08,1,-mean(OptimStart.energies),SW.Hxx_RK(μ))
+            
+            @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT2,120,8000,ψG;equilibration_steps=0,initializer,outfile = joinpath(files_folder,"$i.h5")) for i in 1:6])
+            
+            plotEnergies(results,CT2;normalize=true,dense=true,τ = 10,color = :red,legend = false,axis = (;title = L"μ = %$μ"))
+            display(current_figure())
+        end
+    end
+    GC.gc()
+end
+muRange = [0,0.02,0.025,0.03,0.035,0.05,0.08,0.1,0.15,0.2,0.3]
+folder = "temp/LoopSector2/L=$(size(S,1))/noString"
+makeRuns(S,muRange,folder)
 ##
-equilib_plots(results;scatter_fraction=0,averageSteps=10,Ntrack=30,p = 100,plotPopulation=false)
-# equilib_plots(results;scatter_fraction=0,averageSteps=10,Ntrack=30,p = round(Int,20÷CT.τ),plotPopulation=true)
+muRange = [0,0.02,0.025,0.03,0.035,0.05,0.15,0.2,0.3]
+folder = "temp/LoopSector2/L=$(size(S,1))/string"
+makeRuns(S_string,muRange,folder)
+##
+function getAllFilesInFolder(folder)
+    files = [joinpath(root,file) for (root,_,files) in walkdir(folder) for file in files]
+    return files
+end
 
+function getRes(folder)
+    files = getAllFilesInFolder(folder)
+    results = [SW.readResults(file)[1] for file in files]
+    return results
+end
+function getMuSweep(folder,N=100)
+    files = getAllFilesInFolder(folder)
+    mus = sort!(unique([parse(Float64,match(r"μ=(\d+\.\d+)",file).captures[1]) for file in files]))
+    E = zeros(N,length(mus))
+    Estd = zeros(N,length(mus))
+    for (i,mu) in enumerate(mus)
+        filesmu = filter(contains("μ=$mu/"),files)
+        results = [SW.readResults(file)[1] for file in filesmu]
+        en = SW.getEnergies.(results,1,N)
+        E[:,i] .= mean(en)
+        Estd[:,i] .= std(en)
+    end
+    return (;mus,E,Estd)
+end
+
+with_theme(theme_SimpleTicks()) do 
+    folder = "temp/LoopSector2/L=14"
+    res_noString = getMuSweep(folder*"/noString")
+    res_string = getMuSweep(folder*"/string")
+    fig = Figure()
+    ax = Axis(fig[1,1],xlabel = L"μ",ylabel = L"E_0/L^2")
+    Nsites = length(S)
+    scatterlines!(ax,res_noString.mus,res_noString.E[end,:] ./ Nsites,color = :red,label = L"no string$$")
+    errorbars!(ax,res_noString.mus,res_noString.E[end,:] ./ Nsites,res_noString.Estd[end,:] ./ Nsites,color = :red,whiskerwidth = 10)
+    scatterlines!(ax,res_string.mus,res_string.E[end,:] ./ Nsites,color = :blue,label = L"single string$$")
+    errorbars!(ax,res_string.mus,res_string.E[end,:] ./ Nsites,res_string.Estd[end,:] ./ Nsites,color = :blue,whiskerwidth = 10)
+    # band!(ax,res_noString.mus,res_noString.E[:,end] .- res_noString.Estd[:,end],res_noString.E[:,end] .+ res_noString.Estd[:,end],color = (:red,0.2))
+    axislegend(ax,position = :rb)
+    fig
+
+    
+end
 ##
 # SqsGFMC = fetch.([Threads.@spawn SW.getSqGFMC(res,round(Int,5÷CT.τ)+2) for res in resultsOld])
 SqsGFMC = fetch.([Threads.@spawn SW.getSqGFMC(res,50) for res in results_string])

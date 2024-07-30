@@ -224,21 +224,58 @@ copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
     return real(newRes ./NSites)
     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
+getSqGFMC(res,p,::Nothing) = getSqGFMC(res,p)
+@views function getSqGFMC(res,p,discardborder::Integer)
+    Gnp = precomputeNormalizedAccWeight(res.TotalWeights,1,p)    # Gnp = ones(length(res.TotalWeights[nThermal:end]),p)
+
+    Conf = res.SaveConfigs[begin+discardborder:end-discardborder,begin+discardborder:end-discardborder,begin,begin]
+
+    NSites = length(Conf)
+    Sq = similar(Conf, ComplexF32)
+    
+    Si = similar(Conf, ComplexF32)
+    plan = FFTW.plan_fft(Si)
+
+    function SqFunc(Conf)
+        # Si .= Conf
+        # copytont!(Si,Conf)
+        copyto!(Si,Conf[begin+discardborder:end-discardborder,begin+discardborder:end-discardborder])
+        mul!(Sq, plan, Si)
+        for i in eachindex(Sq)
+            Sq[i] = abs2(Sq[i])
+        end
+        Sq
+        # Sq .= abs2.(Sq)
+    end
+    SaveConfs = res.SaveConfigs
+    reconfTable = res.reconfigurationTable
+    res = getObs(Gnp,SaveConfs,reconfTable,SqFunc,p÷2)
+    newRes = similar(res,size(res).+1)
+    newRes[begin:end-1,begin:end-1] .= res
+
+    @views newRes[end,begin:end] .= newRes[begin,:]
+    @views newRes[begin:end,end] .= newRes[:,begin]
+    return real(newRes ./NSites)
+    # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
+end
+
 _getNbra(res,::Nothing) = res.nBra
 _getNbra(res,nBra) = nBra
 
-function getSqsGFMC(Results,p,nBra=nothing)
+function getSqsGFMC(Results,p;nBra=nothing,discardborder=nothing)
+    _getSqsGFMC(Results,p,nBra,discardborder)
+end
 
+function _getSqsGFMC(Results,p,nBra,discardborder)
     Sqs = Vector{Matrix{Float64}}(undef,length(Results))
     Threads.@threads for i in eachindex(Results,Sqs)
         res = Results[i]
         _nBra = _getNbra(res,nBra)
-        Sq = getSqGFMC(res,p÷_nBra)
+        Sq = getSqGFMC(res,p÷_nBra,discardborder)
         Sqs[i] = Sq
     end
     return Sqs
 end
-
 # struct SzOperator <: AbstractOperator
 #     I::CartesianIndex{2}
 # end
