@@ -499,6 +499,17 @@ function WeightedConfigsInitializers(SaveConfigs::AbstractArray{<:Number,4},Tota
     return WeightedConfigsInitializers(configsVec,weights)
 end
 
+function WeightedConfigsInitializers(resultsArr::AbstractVector,weight::Symbol=:TotalWeights)
+
+    w1 = WeightedConfigsInitializers(resultsArr[begin].SaveConfigs,getproperty(resultsArr[begin],weight))
+    for i in eachindex(resultsArr)[2:end]
+        w2 = WeightedConfigsInitializers(resultsArr[i].SaveConfigs,getproperty(resultsArr[i],weight))
+        append!(w1.configs,w2.configs)
+        append!(w1.weights,w2.weights)
+    end
+    return w1
+end
+
 function initialize!(Walkers::AbstractVector{<:SpiderWebWalker},I::WeightedConfigsInitializers)
     for Walker in Walkers
         rand_conf = StatsBase.sample(I.configs,StatsBase.Weights(I.weights))
