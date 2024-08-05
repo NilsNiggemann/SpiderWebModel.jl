@@ -8,9 +8,9 @@ struct Hxx_RK <: AbstractDiagonalOperator
     μ::Float64
 end
 (Hxx::Hxx_RK)(Walker::SpiderWebWalker) = Hxx.μ * length(Walker.moves)
-function (Hxx::Hxx_RK)(x::AbstractMatrix)
+function (Hxx::Hxx_RK)(Config::StencilSpinConfig)
     n = 0
-    for I in plaquetteIterator(x)
+    for I in plaquetteIterator(Config)
         @inbounds applPlus, applMinus = P_applicable(Config, I)
         n += applPlus + applMinus
     end
