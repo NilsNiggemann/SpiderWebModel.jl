@@ -9,6 +9,16 @@ function trueMomenta(kmin,kmax,L)
     # return 1/(2pi*L*100) .* nmin:nmax
     return (nmin : nmax) .* 2pi/L
 end
+function roundToTrueMomentum(k,L)
+    n = round(Int,k*L/(2pi))
+    return n*2pi/L
+end
+function roundToTrueMomenta((kx,ky),L)
+    nx = roundToTrueMomentum(kx,L)
+    ny = roundToTrueMomentum(ky,L)
+    return nx,ny
+end
+
 function plotEnergies(results,method,E0=NaN;normalize=true,axis=(;),kwargs...)
     ylabel = normalize ? L"E_0/L^2" : L"E_0"
     with_theme(theme_SimpleTicks()) do
