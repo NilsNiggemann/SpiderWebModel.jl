@@ -9,7 +9,7 @@ function trueMomenta(kmin,kmax,L)
     # return 1/(2pi*L*100) .* nmin:nmax
     return (nmin : nmax) .* 2pi/L
 end
-function plotEnergies(results,method,E0=NaN;normalize=false,axis=(;),kwargs...)
+function plotEnergies(results,method,E0=NaN;normalize=true,axis=(;),kwargs...)
     ylabel = normalize ? L"E_0/L^2" : L"E_0"
     with_theme(theme_SimpleTicks()) do
         fig = Figure(fontsize = 22)
@@ -20,7 +20,7 @@ function plotEnergies(results,method,E0=NaN;normalize=false,axis=(;),kwargs...)
     end
 end
 
-function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,τ=nothing, nThermal=1,normalize=false,dense = false,legend = true,marker = '●',markersize = 5,label = L"GFMC$$",kwargs...)
+function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,τ=nothing, nThermal=1,normalize=true,dense = false,legend = true,marker = '●',markersize = 5,label = L"GFMC$$",kwargs...)
     
     getnBra(i::Integer) = i
     getnBra(m::SW.AbstractGFMCMethod) = m.nBranch
