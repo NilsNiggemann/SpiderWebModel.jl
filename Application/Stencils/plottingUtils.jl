@@ -29,8 +29,9 @@ function plotEnergies(results,method,E0=NaN;normalize=true,axis=(;),kwargs...)
         return fig
     end
 end
-
-function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,τ=nothing, nThermal=1,normalize=true,dense = false,legend = true,marker = '●',markersize = 5,label = L"GFMC$$",kwargs...)
+_iscontinuous(m::Any) = false
+_iscontinuous(m::SW.ContinuousTimeMethod) = true
+function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,τ=nothing, nThermal=1,normalize=true,dense = _iscontinuous(method),legend = true,marker = '●',markersize = 5,label = L"GFMC$$",kwargs...)
     
     getnBra(i::Integer) = i
     getnBra(m::SW.AbstractGFMCMethod) = m.nBranch
