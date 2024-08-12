@@ -83,36 +83,51 @@ function invertDict(D)
 end
 
 
-function flipSpinsAlongLine!(Conf, org, slope)
-    slope ∈ (-Inf, Inf) && return flipSpinsAlongRow!(Conf, org[2])
+function transformSpinsAlongLine!(Conf, org, slope,transformation)
+    slope ∈ (-Inf, Inf) && return transformSpinsAlongRow!(Conf, org[2],transformation)
     for i in axes(Conf.Mat, 1), j in axes(Conf.Mat, 2)
         if slope * (i - org[1]) == j - org[2]
-            Conf[i, j] *= -1
+            Conf[i, j] = transformation(Conf[i, j])
         end
     end
     return Conf
 end
 
-function flipSpinsAlongDiagonal!(Conf, org, slope)
+function transformSpinsAlongDiagonal!(Conf, org, slope,transformation)
     j = org
     for i in axes(Conf.Mat, 1)
         j += slope
         if checkbounds(Bool, Conf, i, j)
-            Conf[i, j] *= -1
+            Conf[i, j] = transformation(Conf[i, j])
         end
     end
     return Conf
 end
 
-function flipSpinsAlongRow!(Conf, i, offset = 0)
-    Conf[1+offset:2:end, i] .*= -1
+function transformSpinsAlongRow!(Conf, i, transformation,offset = 0)
+    vec = @view Conf[1+offset:2:end, i]
+    for i in eachindex(vec)
+        vec[i] = transformation(vec[i])
+    end
     return Conf
 end
 
-function flipSpinsAlongCol!(Conf, i, offset = 0)
-    Conf[i, 1+offset:2:end] .*= -1
+function transformSpinsAlongCol!(Conf, i, transformation,offset = 0)
+    vec = @view Conf[i, 1+offset:2:end]
+    for i in eachindex(vec)
+        vec[i] = transformation(vec[i])
+    end
     return Conf
 end
+
+flipSpinsAlongLine!(Conf, org, slope) = transformSpinsAlongLine!(Conf, org, slope, x -> -x)
+
+flipSpinsAlongDiagonal!(Conf, org, slope) = transformSpinsAlongDiagonal!(Conf, org, slope, x -> -x)
+
+flipSpinsAlongRow!(Conf, i, offset = 0) = transformSpinsAlongRow!(Conf, i, x -> -x, offset)
+
+flipSpinsAlongCol!(Conf, i, offset = 0) = transformSpinsAlongCol!(Conf, i, x -> -x, offset)
+
 
 function CanApply(Conf::SpinConfig, Op::AbstractMatrix, i, j)
     plaquetteIsInBounds(Conf, i, j) || return false

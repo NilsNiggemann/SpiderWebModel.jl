@@ -42,7 +42,7 @@ struct ContinuousTimeMethod{F2} <: AbstractGFMCMethod
     Hxx::F2
 end
 ContinuousTimeMethod(τ,nBranch::Integer,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(float(τ),nBranch,float(w_avg_estimate),Hxx)
-ContinuousTimeMethod(;τ,nBranch,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(τ,nBranch,float(w_avg_estimate),Hxx)
+ContinuousTimeMethod(τ;nBranch=1,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(τ,nBranch,float(w_avg_estimate),Hxx)
 
 abstract type AbstractGFMCProblem end
 struct SpiderwebGFMCProblem{MethodType<:AbstractGFMCMethod,T<:AbstractFloat,C,F,W,O} <: AbstractGFMCProblem
@@ -116,7 +116,7 @@ function findAffectedPlaquettes!(Plaq_indices,S,i,j)
     pad = Stencils.padding(A)
     findAffectedPlaquettes!(Plaq_indices,S,i,j,bound,pad)
 end
-function findAffectedPlaquettes!(Plaq_indices,Config,i,j,::Stencils.Remove,::Stencils.Conditional)
+function findAffectedPlaquettes!(Plaq_indices,Config,i,j,::Stencils.Remove,::Any)
     empty!(Plaq_indices)
     for (index,I) in enumerate(plaquetteIterator(Config))
         if !plaquettesAreSeparated(I,(i,j))

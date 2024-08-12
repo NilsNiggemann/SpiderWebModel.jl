@@ -27,57 +27,22 @@ end
 
 function get_S_condensate(S)
     S_cond = copy(S)
-    S_cond .= SW.periodicStateLoops(size(S,1))
+    
+    S_cond[begin:2:end,begin:4:end] .= 2
+
+    S_cond[begin+1:4:end,begin+1:2:end] .= -2
     return S_cond
 end
-function get_S_diag(S)
-    S_diag = copy(S)
-    S_diag .= SW.periodicStateDiag(size(S,1))
-    return S_diag
-end
-function get_S_stair(S)
-    S_staircase = copy(S)
-    S_staircase .= 4*SW.getStairCase(size(S,1))
-    return S_staircase
-end
-
 
 ##
-
 println("Starting")
-S = SW.stencilConfig(zeros(20,20),1;
-boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+S = SW.stencilConfig(zeros(22,22),1;
+boundary = SW.Stencils.Remove(Int8(0)),padding = SW.Stencils.Halo(:in)
 )
-##
-S_string = copy(S)
-# S .= SW.h5read("temp.h5","conf")
-S_string[end÷2,1:2:end] .= 2
-
-
 S_two_strings = copy(S)
 S_two_strings[end÷2,2:2:end] .= 2
 S_two_strings[1:2:end,end÷2+1] .= -2
-
-
-S_four_strings = copy(S)
-S_four_strings[end÷4,1:2:end] .= 2
-S_four_strings[2:2:end,end÷4] .= -2
-S_four_strings[end÷4*3+1,1:2:end] .= 2
-S_four_strings[1:2:end,end÷4*3] .= -2
-
-# ψG = SW.fullVariationalFunction(S,0.15*(1-μ))
-
-##
 S_string_condensate = get_S_condensate(S)
-S_diag_condensate = get_S_diag(S)
-S_stair = get_S_stair(S)
-
-##
-@assert SW.fulFillsConstraint(S_two_strings)
-@assert SW.fulFillsConstraint(S_string_condensate)
-##
-μ = 0.0
-ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
 
 ##
 function makeRuns(S_vec::AbstractVector,muRange,folder;Nwalkers = 30,NSteps = 8000,NwalkersOpt = 1,NStepsOpt = NSteps,OptIndep = Threads.nthreads())
@@ -90,62 +55,44 @@ function makeRuns(S_vec::AbstractVector,muRange,folder;Nwalkers = 30,NSteps = 80
         
         if !isdir(files_folder)
             mkpath(files_folder)
-            println("Making runs for μ = $μ")
-            flush(stdout)
-            CTFindOpt = SW.ContinuousTimeMethod(1. + 2μ,1,(1-μ)* 0.266*length(S),SW.Hxx_RK(μ))
+            CTFindOpt = SW.ContinuousTimeMethod(1.,1,(1-μ)* 0.266*length(S),SW.Hxx_RK(μ))
             
-            @time OptimStart = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CTFindOpt,NwalkersOpt,NStepsOpt,ψG;equilibration_steps=1,pre_equilibration_steps=40_000,scatter_fraction=0.5,initializer = initializer0) for _ in 1:OptIndep])
+            @time OptimStart = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CTFindOpt,NwalkersOpt,NStepsOpt,ψG;equilibration_steps=1,pre_equilibration_steps=30_000,scatter_fraction=0.5,initializer = initializer0) for _ in 1:OptIndep])
             initializer = SW.WeightedConfigsInitializers(OptimStart)
-            flush(stdout)
+
             CT2 = SW.ContinuousTimeMethod(0.08,1,0.266*length(S)*(1-μ),SW.Hxx_RK(μ))
             
             @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT2,Nwalkers,NSteps,ψG;equilibration_steps=0,initializer=initializer,outfile = joinpath(files_folder,"$i.h5")) for i in 1:6])
             
-            # plotEnergies(results,CT2;normalize=true,dense=true,τ = 10,color = :red,legend = false,axis = (;title = L"μ = %$μ"))
-            # display(current_figure())
-            # GC.gc()
+            plotEnergies(results,CT2;normalize=true,dense=true,τ = 10,color = :red,legend = false,axis = (;title = L"μ = %$μ"))
+            display(current_figure())
+            GC.gc()
             flush(stdout)
         end
     end
 end
 makeRuns(S::SW.StencilSpinConfig,args...;kwargs...) = makeRuns([S],args...;kwargs...)
 
-# muRange = [0,0.02,0.025,0.03,0.035,0.1,0.15,0.2,0.3]
-# muRange = [0.0,0.1,0.02,0.035,0.05,0.06,0.07,0.08,0.9,0.1,0.15]
-# muRange = collect(0.0:0.02:0.12)
-# muRange = collect(0.0:0.05:1)
-muRange = collect(-0.1:0.05:1)
+muRange = collect(0.0:0.05:1)
 # append!(muRange,collect(0.05:0.01:0.09))
-sort!(muRange,rev = true)
-# folder = "temp/LoopSector/L=$(size(S,1))/noString"
-# S_hash = get_S_hash(S)
-# makeRuns([S,S_hash],muRange,folder;Nwalkers = 200,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 300,OptIndep = 12)
+sort!(muRange)
+folder = "temp/LoopSectorOpen/L=$(size(S,1))/noString"
+S_hash = get_S_hash(S)
+makeRuns([S,S_hash],muRange,folder;Nwalkers = 300,NSteps = 4000,NwalkersOpt = 400,NStepsOpt = 400,OptIndep = 16)
 ##
-# folder = "temp/LoopSectorHybridInit2/L=$(size(S,1))/string"
-# makeRuns(S_string,muRange,folder;Nwalkers = 80,NSteps = 2000,NwalkersOpt = 120,NStepsOpt = 100,OptIndep = 4)
-# ##
-# folder = "temp/LoopSector/L=$(size(S,1))/two_strings"
-# makeRuns(S_two_strings,muRange,folder;Nwalkers = 180,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 4)
+# folder = "temp/LoopSectorOpen/L=$(size(S,1))/two_strings"
+# makeRuns(S_two_strings,muRange,folder;Nwalkers = 180,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 6)
 ##
-# folder = "temp/LoopSector/L=$(size(S,1))/four_strings"
-# makeRuns(S_four_strings,muRange,folder;Nwalkers = 400,NSteps = 4000,NwalkersOpt = 600,NStepsOpt = 1000,OptIndep = 24)
+# folder = "temp/LoopSectorOpen/L=$(size(S,1))/string_condensate"
+# makeRuns(S_string_condensate,muRange,folder;Nwalkers = 120,NSteps = 4000,NwalkersOpt = 160,NStepsOpt = 100,OptIndep = 6)
+
 ##
 # folder = "temp/LoopSectorNoInit/L=$(size(S,1))/string_condensate"
-# makeRuns(S_string_condensate,muRange,folder;Nwalkers = 120,NSteps = 4000,NwalkersOpt = 160,NStepsOpt = 100,OptIndep = 4)
-##
-# folder = "temp/LoopSector/L=$(size(S,1))/diag_condensate"
-# makeRuns(S_diag_condensate,muRange,folder;Nwalkers = 180,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 4)
-
-##
-folder = "temp/LoopSector/L=$(size(S,1))/stair"
-makeRuns(S_stair,muRange,folder;Nwalkers = 500,NSteps = 10000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 6)
-
-##
+# makeRuns(S_string_condensate,muRange,folder;Nwalkers = 400,NSteps = 4000,NwalkersOpt = 600,NStepsOpt = 1000,OptIndep = 24)
 if "TERM_PROGRAM" ∉ keys(ENV)
     exit()
 end
 ##
-# import Interpolations as ITP
 
 function getAllFilesInFolder(folder)
     files = [joinpath(root,file) for (root,_,files) in walkdir(folder) for file in files]
@@ -183,12 +130,9 @@ end
 # res_two_strings_18 = getMuSweep("temp/LoopSectorHybridInit2/L=18/two_strings")
 # res_string_condensate_18 = getMuSweep("temp/LoopSectorNoInit/L=18/string_condensate")
 
-res_noString_20 = getMuSweep("temp/LoopSector/L=20/noString/",100)
-res_two_strings_20 = getMuSweep("temp/LoopSector/L=20/two_strings",100)
-res_string_condensate_20 = getMuSweep("temp/LoopSector/L=20/string_condensate",100)
-res_diag_condensate_20 = getMuSweep("temp/LoopSector/L=20/diag_condensate",100)
-res_stair_20 = getMuSweep("temp/LoopSector/L=20/stair",100)
-
+res_noString_20 = getMuSweep("temp/LoopSectorOpen/L=20/noString/",50)
+res_two_strings_20 = getMuSweep("temp/LoopSectorOpen/L=20/two_strings",50)
+res_string_condensate_20 = getMuSweep("temp/LoopSectorOpen/L=20/string_condensate",50)
 with_theme(theme_SimpleTicks()) do 
 
     # res_four_strings = getMuSweep("temp/LoopSector3/L=14/four_strings")
@@ -208,24 +152,11 @@ with_theme(theme_SimpleTicks()) do
     xminorticks = collect(0:0.1:1)
     ax = Axis(fig[1,1],xlabel = L"μ",ylabel = L"E_0/L^2",xlabelvisible=false,xticklabelsvisible=false,xminorticksvisible = true,xminorticks = xminorticks)
 
-    axDiff = Axis(fig[2,1],xlabel = L"μ",ylabel = L"E_0/L^2 - %$MU_SCALE(μ-1)",xminorticks = xminorticks,xminorticksvisible = true,xticks = (xticks,xticklabels),
-    # xlabelvisible=false,xticklabelsvisible=false
-    )
 
-    axderiv= Axis(fig[1,1],xlabel = L"μ",ylabel = L"dE/dμ",xminorticks = xminorticks,xminorticksvisible = true,xticks = (xticks,xticklabels),
-    yaxisposition=:right,yticklabelcolor=:red,
-    yticks = SimpleTicks(),
-    xlabelvisible = false,
-    ygridvisible=false,
-    xgridvisible=false,
-    xticklabelsvisible= false,
-    xticksvisible= false,
-    # xminorticksvisible=false
-    ylabelvisible=true,
-    ylabelcolor = :red
-)
-    linkxaxes!(ax,axDiff,axderiv)
-    Nsites = 20^2
+    
+    axDiff = Axis(fig[2,1],xlabel = L"μ",ylabel = L"E_0/L^2 - %$MU_SCALE(μ-1)",xminorticks = xminorticks,xminorticksvisible = true,xticks = (xticks,xticklabels))
+    linkxaxes!(ax,axDiff)
+    Nsites = 18^2
     
     colors = [:black,:red,:blue,:green,:orange]
     labels = [
@@ -233,8 +164,6 @@ with_theme(theme_SimpleTicks()) do
         L"ℓ=0",
     # L"ℓ = 1",
         L"ℓ = 2",
-        L"diag$$",
-        L"stair$$",
     # "ℓ = 4",
     ]
 
@@ -249,72 +178,39 @@ with_theme(theme_SimpleTicks()) do
             res_string_condensate_20,
             res_noString_20,
             res_two_strings_20,
-            res_diag_condensate_20,
-            res_stair_20,
     ]
 
-    # res_s_22 = empty(res_s_20)
+    res_s_22 = empty(res_s_20)
 
     # getEDiff(res) = res.E[end,:] ./ Nsites
     linestyles = [:solid,:dash,:dot]
     markers = ('●','×' ,'+')
-    Ls = [20]
+    Ls = [22,20]
     markersizes = [6,15]
-    
-    function getdEDmu(mu,E)
-        # E_interp_linear = ITP.interpolate((mu,), E, ITP.Gridded(ITP.Linear()))
-        # x -> ITP.gradient(E_interp_linear,x)[1]
-        diff(E) ./ diff(mu)
-    end
-
-    function getDeltaDE(Estd)
-        ΔDE = [Estd[i] + Estd[i+1] for i in eachindex(Estd)[1:end-1]]
-    end
-
-    for (L,res_s,linestyle,marker,markersize) in zip(Ls,[res_s_20],linestyles,markers,markersizes)
+    for (L,res_s,linestyle,marker,markersize) in zip(Ls,[res_s_22,res_s_20],linestyles,markers,markersizes)
         Nsites = L^2
-        # getE(res) = minimum(res.E,dims=2)[:] ./ Nsites
-        getEScale(E) = @views E[end,:] ./ Nsites
-        getEDiff(res) = getEScale(res.E) .- comparison_func.(res.mus)
+        getEScale(res) = res.E[end,:] ./ Nsites
+        getEDiff(res) = getEScale(res) .- comparison_func.(res.mus)
 
         for (res,color,label) in zip(res_s,colors,labels)
+            scatterlines!(ax,res.mus,getEScale(res);color ,label,markersize,linestyle = linestyle,marker = marker)
+            errorbars!(ax,res.mus,getEScale(res),res.Estd[end,:] ./ Nsites,color = color,whiskerwidth = 6,linewidth=0.5)
 
-            E_mu = getEScale(res.E)
-            E_std = getEScale(res.Estd)
-            E_diff = getEDiff(res)
-            μ = res.mus
-
-            scatterlines!(ax,μ,E_mu;color ,label,markersize,linestyle = linestyle,marker = marker)
-            errorbars!(ax,μ,E_mu, E_std,color = color,whiskerwidth = 6,linewidth=0.5)
-
-            scatterlines!(axDiff,μ,E_diff;color ,label,markersize,linestyle = linestyle,marker = marker)
-            errorbars!(axDiff,μ,E_diff, E_std,color = color,whiskerwidth = 6,linewidth=0.5)
+            scatterlines!(axDiff,res.mus,getEDiff(res);color ,label,markersize,linestyle = linestyle,marker = marker)
+            errorbars!(axDiff,res.mus,getEDiff(res),res.Estd[end,:] ./ Nsites,color = color,whiskerwidth = 6,linewidth=0.5)
             
-            mu_fine = LinRange(extrema(μ)...,100)
-            # dE = getdEDmu(res.mus,E_mu)
-            # dE_interp = dE.(mu_fine)
-            # μ = μ[1:2:end]
-            # E_mu = E_mu[1:2:end]
-            # E_std = E_std[1:2:end] 
-
-            dE = getdEDmu(μ,E_mu)
-            deltaDE = getDeltaDE(E_std./Nsites)
-
-            scatterlines!(axderiv,μ[1:end-1],dE;color ,label,marker = marker,markersize = markersize,linestyle = linestyle)
-            errorbars!(axderiv,μ[1:end-1],dE,deltaDE,color = color,alpha = 0.2,whiskerwidth = 6,linewidth=0.5)
-            # band!(axderiv,res.mus[begin:end-1],dE,deltaDE,color = color,alpha = 0.2)
             # lines!(ax,[0,1],[res.E[end,1] /Nsites,0],color = color,linestyle = :dash)
         end
         scatterlines!(ax,[NaN],[NaN];marker,linestyle,label = L"L = %$L",color = :grey)
 
     end
-    axislegend(ax,position = :rc,merge = true,unique = true,nbanks=1)
+    axislegend(ax,position = :lt,merge = true,unique = true,nbanks=1)
     # xlims!(axDiff,-0.005,0.15)
     # ylims!(ax,-0.275,-0.22)
 
     vlines!(ax,[QCP],color = :grey,linestyle = :dash)
     vlines!(axDiff,[QCP],color = :grey,linestyle = :dash)
-    rowsize!(fig.layout,1,Relative(0.6))
+    rowsize!(fig.layout,1,Relative(0.7))
     fig
 
     
@@ -396,13 +292,11 @@ end
 
 
 ##
-μ = 0.05
-# res1 = getRes("temp/LoopSector/L=20/noString/μ=$μ")
-# res1 = getRes("temp/LoopSector/L=20/string_condensate/μ=$μ")
-# res1 = getRes("temp/LoopSector/L=20/diag_condensate/μ=$μ",3600)
-# res1 = getRes("temp/LoopSector/L=20/stair/μ=$μ")
-# res2 = getRes("temp/LoopSector/L=20/string_condensate/μ=$μ")
-res1 = getRes("temp/LoopSector/L=20/two_strings/μ=$μ")
+# res1 = getRes("temp/LoopSector/L=20/noString/μ=0.0")
+μ = 0.3
+res1 = getRes("temp/LoopSectorOpen/L=20/noString/μ=$μ")
+# res1 = getRes("temp/LoopSectorOpen/L=20/string_condensate/μ=$μ")
+# res1 = getRes("temp/LoopSector/L=20/two_strings/μ=$μ")
 ##
 SqsGFMC = SW.getSqsGFMC(res1,50)
 SqMat = mean(SqsGFMC)
@@ -491,82 +385,8 @@ with_theme(theme_SimpleTicks()) do
     fig
 end
 ##
-Snew = SW.stencilConfig(zeros(24,24),1;
+Stest = SW.stencilConfig(zeros(20,20),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
-# Snew[end÷4,2:2:end] .= -2
-# Snew[2:2:end,end÷4] .= -2
-# Snew[end÷4*3,2:2:end] .= 2
-# Snew[1:2:end,end÷4*3] .= 2
-SW.flipSpinsAlongDiagonal!(Snew,23,-1;add=2)
-Snew[24,23] = 2
-Snew[23,24] = 2
-# @assert SW.fulFillsConstraint(Snew)
-SW.plotFractons(Snew)
-##
-μ = 0.1
-ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
-CT = SW.ContinuousTimeMethod(0.08,1,(1-μ)* 0.9*0.266*length(Snew),SW.Hxx_RK(μ))
-@time results = fetch.([SW.startManyWalkerGFMC(Snew,CT,120,1000,ψG;equilibration_steps=1,pre_equilibration_steps=30_000,scatter_fraction=0.5) for _ in 1:2])
-
-##
-plotEnergies(results,CT;normalize=true,dense=true,τ = 10)
-##
-SqsGFMC = mean(SW.getSqsGFMC(results,20,nBra = 1))
-
-with_theme(theme_PiTicks()) do 
-    fig = Figure()
-    ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y")
-    Sq = SW.getSqCont(SqsGFMC)
-    qx = qy = trueMomenta(-0.5pi,1.5pi,size(SqsGFMC,1)-1)
-    Sq_q = collect(Iterators.product(qx,qy))
-    Sq_q = Sq.(Iterators.product(qx,qy))
-    heatmap!(ax,qx,qy,Sq_q)
-    fig
-end
-##
-S = SW.stencilConfig(zeros(18,18),1;
-boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
-)
-
-
-S_hash = get_S_hash(S)
-# @assert SW.fulFillsConstraint(S_hash)
-μ = 0.2
-
-SW.plotFractons(S_hash)
-##
-
-# CTFindOpt = SW.ContinuousTimeMethod(1.,1,(1-μ)* 0.9*0.266*length(S),SW.Hxx_RK(μ))
-            
-# @time OptimStart = fetch.([SW.startManyWalkerGFMC(S,CTFindOpt,200,100,ψG;equilibration_steps=1,pre_equilibration_steps=30_000,scatter_fraction=0.5) for _ in 1:12])
-initializer = SW.WeightedConfigsInitializers([S,S_hash],[1,1])
-
-##
-CT2 = SW.ContinuousTimeMethod(0.08,1,0.266*length(S)*(μ-1),SW.Hxx_RK(μ))
-ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
-res1 = fetch.([SW.startManyWalkerGFMC(S_hash,CT2,50,2000,ψG;equilibration_steps=0,initializer) for _ in 1:3])
-res2 = fetch.([SW.startManyWalkerGFMC(S,CT2,50,2000,ψG;equilibration_steps=0,pre_equilibration_steps = 10_000,scatter_fraction = 0.0) for _ in 1:3])
-##
-
-plotEnergies(res1,CT2;normalize=true,dense=true,τ = 10,color = :green,nThermal = 100)
-plotEnergies!(res2,CT2;normalize=true,dense=true,τ = 10,color = :red)
-# plotEnergies(vcat(res1,res2),CT2;normalize=true,dense=true,τ = 10,color = :black,nThermal = 50)
-current_figure()
-##
-equilib_plots(res1;scatter_fraction=0.8)
-# equilib_plots(hcat(res1,res2);scatter_fraction=0.8)
-##
-SqsGFMC = mean(SW.getSqsGFMC(vcat(res1,res2),80,nBra = 1))
-
-##
-with_theme(theme_PiTicks()) do 
-    fig = Figure()
-    ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y")
-    Sq = SW.getSqCont(SqsGFMC)
-    qx = qy = trueMomenta(-0.5pi,1.5pi,size(SqsGFMC,1)-1)
-    Sq_q = collect(Iterators.product(qx,qy))
-    Sq_q = Sq.(Iterators.product(qx,qy))
-    heatmap!(ax,qx,qy,Sq_q)
-    fig
-end
+Stest .= SW.periodicStateWeb(20)
+SW.plotSpinConfig(Stest)

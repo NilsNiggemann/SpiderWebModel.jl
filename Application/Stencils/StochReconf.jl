@@ -4,19 +4,19 @@ import SpiderWebModel as SW
 using CairoMakie
 using Statistics
 using MakieHelpers
-using MKL
+# using MKL
 include("plottingUtils.jl")
 ##
 S = SW.stencilConfig(zeros(8,8),1;
-# boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 # S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 
-# ψG = SW.fullVariationalFunction(S,0.12)
-ψG = SW.RBM(S,2)
-SW.get_b_j(ψG) .= 0.01
+ψG = SW.fullVariationalFunction(S,0.12)
+# ψG = SW.RBM(S,2)
+# SW.get_b_j(ψG) .= 0.01
 # SW.get_alpha_i(ψG) .= 1
-SW.get_W_ij(ψG) .= 0.01
+# SW.get_W_ij(ψG) .= 0.01
 # SW.get_beta_ij(ψG) .= 0.0001
 nThermal = 300
 DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
@@ -42,7 +42,7 @@ reset = true,
 plotVarEn(stochReconfResLoc)
 ##
 
-stochReconfRes = SW.stochastic_reconfiguration(S,DT,3000,ψG,400,30,SW.IterativeSRSolver();Nwalkers = 120,reconfigure=true,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+stochReconfRes = SW.stochastic_reconfiguration(S,DT,2000,ψG,40,30,SW.IterativeSRSolver();Nwalkers = 120,reconfigure=true,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
 report_steps = 10,
 reset = true,
 # outfile = "tempSR/SR2.h5"
@@ -107,4 +107,3 @@ with_theme(theme_PiTicks()) do
     rowsize!(fig.layout,2,Relative(0.1))
     fig
 end
-
