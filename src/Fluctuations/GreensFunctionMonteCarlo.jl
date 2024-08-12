@@ -42,7 +42,7 @@ struct ContinuousTimeMethod{F2} <: AbstractGFMCMethod
     Hxx::F2
 end
 ContinuousTimeMethod(τ,nBranch::Integer,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(float(τ),nBranch,float(w_avg_estimate),Hxx)
-ContinuousTimeMethod(;τ,nBranch,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(τ,nBranch,float(w_avg_estimate),Hxx)
+ContinuousTimeMethod(τ;nBranch=1,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(τ,nBranch,float(w_avg_estimate),Hxx)
 
 abstract type AbstractGFMCProblem end
 struct SpiderwebGFMCProblem{MethodType<:AbstractGFMCMethod,T<:AbstractFloat,C,F,W,O} <: AbstractGFMCProblem
@@ -116,7 +116,7 @@ function findAffectedPlaquettes!(Plaq_indices,S,i,j)
     pad = Stencils.padding(A)
     findAffectedPlaquettes!(Plaq_indices,S,i,j,bound,pad)
 end
-function findAffectedPlaquettes!(Plaq_indices,Config,i,j,::Stencils.Remove,::Stencils.Conditional)
+function findAffectedPlaquettes!(Plaq_indices,Config,i,j,::Stencils.Remove,::Any)
     empty!(Plaq_indices)
     for (index,I) in enumerate(plaquetteIterator(Config))
         if !plaquettesAreSeparated(I,(i,j))
@@ -497,6 +497,17 @@ function WeightedConfigsInitializers(SaveConfigs::AbstractArray{<:Number,4},Tota
     configsVec = reshape(configs,length(configs))
     weights = [w for w in TotalWeights for _ in axes(SaveConfigs,3)]
     return WeightedConfigsInitializers(configsVec,weights)
+end
+
+function WeightedConfigsInitializers(resultsArr::AbstractVector,weight::Symbol=:TotalWeights)
+
+    w1 = WeightedConfigsInitializers(resultsArr[begin].SaveConfigs,getproperty(resultsArr[begin],weight))
+    for i in eachindex(resultsArr)[2:end]
+        w2 = WeightedConfigsInitializers(resultsArr[i].SaveConfigs,getproperty(resultsArr[i],weight))
+        append!(w1.configs,w2.configs)
+        append!(w1.weights,w2.weights)
+    end
+    return w1
 end
 
 function initialize!(Walkers::AbstractVector{<:SpiderWebWalker},I::WeightedConfigsInitializers)

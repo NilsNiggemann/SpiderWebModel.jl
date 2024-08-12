@@ -9,7 +9,17 @@ function trueMomenta(kmin,kmax,L)
     # return 1/(2pi*L*100) .* nmin:nmax
     return (nmin : nmax) .* 2pi/L
 end
-function plotEnergies(results,method,E0=NaN;normalize=false,axis=(;),kwargs...)
+function roundToTrueMomentum(k,L)
+    n = round(Int,k*L/(2pi))
+    return n*2pi/L
+end
+function roundToTrueMomenta((kx,ky),L)
+    nx = roundToTrueMomentum(kx,L)
+    ny = roundToTrueMomentum(ky,L)
+    return nx,ny
+end
+
+function plotEnergies(results,method,E0=NaN;normalize=true,axis=(;),kwargs...)
     ylabel = normalize ? L"E_0/L^2" : L"E_0"
     with_theme(theme_SimpleTicks()) do
         fig = Figure(fontsize = 22)
@@ -19,8 +29,9 @@ function plotEnergies(results,method,E0=NaN;normalize=false,axis=(;),kwargs...)
         return fig
     end
 end
-
-function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,τ=nothing, nThermal=1,normalize=false,dense = false,legend = true,marker = '●',markersize = 5,label = L"GFMC$$",kwargs...)
+_iscontinuous(m::Any) = false
+_iscontinuous(m::SW.ContinuousTimeMethod) = true
+function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,τ=nothing, nThermal=1,normalize=true,dense = _iscontinuous(method),legend = true,marker = '●',markersize = 5,label = L"GFMC$$",kwargs...)
     
     getnBra(i::Integer) = i
     getnBra(m::SW.AbstractGFMCMethod) = m.nBranch
@@ -65,15 +76,15 @@ end
 plotEnergies!(results,method,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,kwargs...) = plotEnergies!(current_axis(),results,method,E0;Emin=Emin,Emax=Emax,kwargs...)
 
 
-function movingaverage(X::Vector,numofele::Int)
+function movingaverage(X::AbstractVector,numofele::Int)
     BackDelta = div(numofele,2) 
     ForwardDelta = isodd(numofele) ? div(numofele,2) : div(numofele,2) - 1
-    len = length(X)
+    len = lastindex(X)
     Y = similar(X)
-    for n = 1:len
-        lo = max(1,n - BackDelta)
+    for n = eachindex(X)
+        lo = max(firstindex(X),n - BackDelta)
         hi = min(len,n + ForwardDelta)
-        Y[n] = mean(X[lo:hi])
+        @views Y[n] = mean(X[lo:hi])
     end
     return Y
 end
@@ -106,9 +117,9 @@ function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p =
         return (;)
     end
 
-    axen = [Axis(fig[i,1],xlabel = "Iteration";getkw(i,"Energy")...) for i in eachindex(results)]
-    axws = [Axis(fig[i,2],xlabel = "Iteration";getkw(i,"weight")...) for i in eachindex(results)]
-    axreconf = [Axis(fig[i,3],xlabel = "Iteration";getkw(i,"walker heritage")...) for i in eachindex(results)]
+    axen = [Axis(fig[i,1],xlabel = "step";getkw(i,L"E_L/L^2")...) for i in eachindex(results)]
+    axws = [Axis(fig[i,2],xlabel = "step";getkw(i,"weight")...) for i in eachindex(results)]
+    axreconf = [Axis(fig[i,3],xlabel = "step";getkw(i,"walker heritage")...) for i in eachindex(results)]
     axSq = [Axis(fig[i,4],xlabel = L"q_x",aspect = 1,ylabel = L"q_y";xticks = PiTicks([0,pi,2pi]),yticks = PiTicks([0,pi,2pi]),getkw(i,L"\mathcal{S}(\mathbf{q})")...) for i in eachindex(results)]
 
     minweight,maxweight = (Inf,-Inf)
@@ -125,7 +136,7 @@ function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p =
         minweight = min(minimum(ws),minweight)
         maxweight = max(maximum(ws),maxweight)
         en = movingaverage(res.energies,averageSteps)
-
+        en ./= length(confex)
         enAvg = mean(en[end÷4:end])
         markenergy = min(markenergy,enAvg)
         
@@ -143,11 +154,12 @@ function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p =
 
 
         # WP = trackWalkerPath(res.reconfigurationTable,initWalkers,Ntrack)'
-        WP = SW.getBranchingMatrix(res.reconfigurationTable,Ntrack,Ntrack-1)
         if plotPopulation
+            WP = SW.getBranchingMatrix(res.reconfigurationTable,Ntrack,Ntrack-1)
             heatmap!(axreconf[i],WP.PopulationMatrix',colormap = :jet)
         else
-            heatmap!(axreconf[i],WP.BranchingMatrix',colormap = :jet)
+            WP = getBranchingHistory(res.reconfigurationTable,Ntrack)
+            heatmap!(axreconf[i],WP',colormap = :jet)
         end
         hlines!(axreconf[i],minimum(initWalkers)-0.5,color = :black,linewidth = 1,linestyle = :dash)
         Sq = SW.getSqGFMC(res,p)
@@ -164,13 +176,13 @@ function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p =
     fig
 end
 
-function getBranchingMatrix(reconfigurationTable,NSteps)
+function getBranchingHistory(reconfigurationTable,NSteps)
     BranchingMatrix = fill(0,size(reconfigurationTable,1),NSteps)
     recView = @view reconfigurationTable[:,begin:NSteps]
-    getBranchingMatrix!(BranchingMatrix,recView)
+    getBranchingHistory!(BranchingMatrix,recView)
 end
 
-function getBranchingMatrix!(BranchingMatrix::AbstractMatrix,reconfigurationTable::AbstractMatrix)
+function getBranchingHistory!(BranchingMatrix::AbstractMatrix,reconfigurationTable::AbstractMatrix)
     BranchingMatrix[:,begin] .= @view reconfigurationTable[:,begin]
 
     for n in axes(reconfigurationTable,2)[begin+1:end]

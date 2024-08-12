@@ -11,60 +11,95 @@ meanstd(x) = (mean(x),std(x))
 ##
 
 S = SW.stencilConfig(zeros(18,18),1;
-boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+# boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 # S .= SW.h5read("temp.h5","conf")
-μ = 0.8
+μ = 0.6
 # ψG = SW.fullVariationalFunction(S,0.15*(1-μ))
 ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
 
 ##
-CTFindOpt = SW.ContinuousTimeMethod(10.,1,(1-μ)* 0.2*0.266*length(S),SW.Hxx_RK(μ))
+CTFindOpt = SW.ContinuousTimeMethod(3.,1,(1-μ)* 0.2*0.266*length(S),SW.Hxx_RK(μ))
 
-@time OptimStart = SW.startManyWalkerGFMC(S,CTFindOpt,30,100,ψG;equilibration_steps=1,pre_equilibration_steps=50_000,scatter_fraction=0.5)
+@time OptimStart = SW.startManyWalkerGFMC(S,CTFindOpt,120,1000,ψG;equilibration_steps=1,pre_equilibration_steps=50_000,scatter_fraction=0.5)
 OptimStart.TotalWeights
 ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
-##
+
+scatter_fraction = 0.5
+# initializer = SW.CombinedInitializer(SW.WeightedConfigsInitializers(OptimStart.SaveConfigs,OptimStart.TotalWeights),SW.UnguidedWalkInitializer(10_000,scatter_fraction))
 initializer = SW.WeightedConfigsInitializers(OptimStart.SaveConfigs,OptimStart.TotalWeights)
 CT_SR = SW.ContinuousTimeMethod(0.05,1,(1-μ)* 0.266*length(S),SW.Hxx_RK(μ))
-
-stochReconfRes = SW.stochastic_reconfiguration(S,CT_SR,i->round(Int,100+ 2i),ψG,50,i->100*min(0.4,0.05+0.001*i),SW.IterativeSRSolver();Nwalkers = 
-60,reconfigure=true,reset = true,rel_tolerance=0,equilibration_steps=0,initializer,
-report_steps = 2,
-)
-plotVarEn(stochReconfRes)
+##
+# stochReconfRes = SW.stochastic_reconfiguration(S,CT_SR,i->round(Int,200+ 2i),ψG,50,i->200*min(0.4,0.05+0.001*i),SW.IterativeSRSolver();Nwalkers = 
+# 72,reconfigure=true,reset = true,rel_tolerance=0,equilibration_steps=0,initializer,
+# report_steps = 2,
+# )
+# plotVarEn(stochReconfRes)
 ##
 # ψG = SW.fullVariationalFunction(S,0.1)
 # ψG = SW.RKFunction()
-CT = SW.ContinuousTimeMethod(0.1,1,stochReconfRes.E0[end],SW.Hxx_RK(μ))
+CT = SW.ContinuousTimeMethod(0.15,1,mean(OptimStart.energies),SW.Hxx_RK(μ))
 ##
-ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
-# ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
+# ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
+ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
 
-@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,80,3000,ψG,equilibration_steps=1000,pre_equilibration_steps=10_000,scatter_fraction=0.0) for i in 1:12])
+@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,800,4000,ψG,equilibration_steps=100,pre_equilibration_steps=20_000,scatter_fraction=0.5) for i in 1:6])
 ##
 
 # ψG = SW.RKFunction()
 # ψG = SW.PlaquetteNumberGuidingFunction(only(unique(stochReconfRes.params)))
-# ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
+ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
 # ψG = typeof(ψG)(stochReconfRes.params)
-ψG = SW.LocalPlaquetteGuidingFunction(stochReconfRes.params)
+# ψG = SW.LocalPlaquetteGuidingFunction(stochReconfRes.params)
 # ψG = SW.FullVariationalGuidingFunction(stochReconfRes.params)
 # ψG = SW.fullVariationalFunction(S,0.1)
-CT2 = SW.ContinuousTimeMethod(0.1,1,-stochReconfRes.E0[end],SW.Hxx_RK(μ))
+CT2 = SW.ContinuousTimeMethod(0.2,1,mean(OptimStart.energies),SW.Hxx_RK(μ))
 
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT2,80,3000,ψG;equilibration_steps=1000,initializer) for i in 1:12])
+
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT2,120,4000,
+ψG;equilibration_steps=100,initializer)  for i in 1:6])
 ##
 # plotEnergies(results,CT,p=100;normalize=true,dense=true,τ = 30,Emax = stochReconfRes.E0[end]+stochReconfRes.ΔE[end]/1.5,Emin = stochReconfRes.E0[end]-stochReconfRes.ΔE[end]/1.5)
-plotEnergies(results,CT2;normalize=false,dense=true,τ = 30,color = :red)
-plotEnergies!(resultsOld,CT;normalize=false,dense=true,τ = 30)
+
+plotEnergies(results,CT2;normalize=true,dense=true,τ = 20,color = :red)
+# plotEnergies!(resultsOld,CT;normalize=true,dense=true,τ = 10)
 current_figure()
 ##
-equilib_plots(results;scatter_fraction=0,averageSteps=10,Ntrack=30,p = round(Int,20÷CT.τ),plotPopulation=true)
+# equilib_plots(results;scatter_fraction,averageSteps=10,Ntrack=30,p = round(Int,20÷CT.τ),plotPopulation=true)
 
+with_theme(theme_SimpleTicks()) do
+    fig = Figure()
+    ax1 = Axis(fig[1,1],xlabel = L"L",ylabel = L"E/L^2")
+    ax2 = Axis(fig[2,1],xlabel = L"1/L",ylabel = L"E/L^2")
+    Ls = collect(keys(ENLs))
+    ens = collect(values(ENLs))
+    en = getindex.(getindex.(ens,1),100)
+    enstd = getindex.(getindex.(ens,2),100)
+    perm = sortperm(Ls)
+    Ls = Ls[perm]
+    en = en[perm] ./ Ls.^2
+    enstd = enstd[perm] ./ Ls.^2
+    push!(Ls,30)
+    push!(en,-81.945 /30^2)
+    push!(enstd,0.1 /30^2)
+
+    color = fill(:black,length(Ls))
+    color[end] = :red
+    scatter!(ax1,Ls,en;color)
+    lines!(ax1,Ls,en)
+    errorbars!(ax1,Ls,en,enstd,whiskerwidth = 5 ;color)
+    # scatter!(Ls[end],en[end],color = :red)
+    # errorbars!(Ls[end:end],en[end:end],enstd[end:end],whiskerwidth = 5,color = :red)
+
+    scatter!(1 ./ Ls,en;color)
+    lines!(1 ./ Ls,en)
+    errorbars!(1 ./ Ls,en,enstd,whiskerwidth = 5;color)
+    # scatter!(1 ./ Ls[end],en[end],color = :red)
+    # errorbars!(1 ./ Ls[end:end],en[end:end],enstd[end:end],whiskerwidth = 5,color = :red)
+    # lines!([Ls[1],Ls[end]],[en[1],en[end]] ./ [Ls[1],Ls[end]].^2,linestyle = :dash,color = :black)
+    current_figure()    
+end
 ##
-SqsGFMC = fetch.([Threads.@spawn SW.getSqGFMC(res,round(Int,50÷CT.τ)+2) for res in results])
-
 function SqFieldTheory(x,y)
     num = cos(x) - cos(y) +2sin(x)sin(y) 
     denom = (cos(x) - cos(y))^2 + (2sin(x)sin(y))^2
@@ -106,8 +141,21 @@ function makeSqFTPlots(SqsGFMC,k=1,b2=0)
         fig
     end
 end
-makeSqFTPlots(SqsGFMC,1,0.1)
+# SqsGFMC = fetch.([Threads.@spawn SW.getSqGFMC(res,round(Int,20÷CT.τ)+2;discardborder=1) for res in results])
+SqsGFMC = SW.getSqsGFMC(results,round(Int,10÷CT.τ);nBra = 1,discardborder=0) 
 
+makeSqFTPlots(SqsGFMC,1,0.1)
+##
+mag = [SW.getObs(res,float,200) for res in results]
+##
+with_theme(theme_SimpleTicks()) do 
+    fig = Figure(size = 80 .* (length(mag),4))
+    axes = [Axis(fig[j,i], xlabel = L"x", ylabel = L"y",ylabelvisible = i == 1, yticklabelsvisible = i == 1 ,xlabelvisible = j==2, xticklabelsvisible = j==2,aspect = 1) for i in 1:length(mag)÷2 for j in 1:2]
+    for (i,m) in enumerate(mag)
+        heatmap!(axes[i],m)
+    end
+    fig
+end
 ##
 function plotReconfStats(reconfigurationTable)
     survWalkers = SW.StatsBase.countmap(length.(unique.(eachcol(reconfigurationTable))))

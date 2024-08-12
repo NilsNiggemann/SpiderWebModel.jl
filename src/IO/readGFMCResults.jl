@@ -14,6 +14,14 @@ function readResults(filename,binsize)
     end
     return [getRes(getrange(i)) for i in 0:length(energies_raw)÷binsize-1]
 end
+
+function readResults(filename)
+    NSamples = h5open(filename) do f
+        length(f["energies"])
+    end
+    return readResults(filename,NSamples)
+end
+
 function allocateResults(Res)
     (;energies,TotalWeights,SaveConfigs,reconfigurationTable,nBra) = Res
     SaveConfigs = Array(SaveConfigs)

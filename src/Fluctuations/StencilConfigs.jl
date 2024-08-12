@@ -14,11 +14,11 @@ function stencilConfig(A::AbstractMatrix{<:AbstractFloat}, S,paddingValue = Int8
     return stencilConfig(Int8.(2 .*A), S,paddingValue; kwargs...)
 end
 
-function stencilConfig(A::AbstractMatrix{Int8}, S,paddingValue = Int8(typemax(Int8)); kwargs...)
+function stencilConfig(A::AbstractMatrix{Int8}, S,paddingValue = Int8(typemax(Int8));boundary = Stencils.Remove(paddingValue),kwargs...)
     St = Stencils.StencilArray(
         A,
         Stencils.Moore();
-        boundary = Stencils.Remove(paddingValue),
+        boundary,
         kwargs...,
     )
     M = Val(Int(2S)) # do not chose Int8 to avoid overflows
@@ -45,7 +45,11 @@ function stencil_plaquetteIterator(S,::Stencils.Wrap,shift=false)
     inboundsInds = Base.Iterators.product(axes(S, 1), axes(S, 2))
     filterInds = Iterators.filter(ind -> isodd(sum(ind)+shift), inboundsInds)
 end
-stencil_plaquetteIterator(S,::Any,shift=false) = plaquetteIterator(parent(S),shift)    
+function stencil_plaquetteIterator(S,::Stencils.Remove,shift=false)
+    inboundsInds = Base.Iterators.product(axes(S, 1), axes(S, 2))
+    filterInds = Iterators.filter(ind -> isodd(sum(ind)+shift), inboundsInds)
+end
+stencil_plaquetteIterator(S,::Any,shift=false) = plaquetteIterator(parent(S),shift)
 
 
 @inline Base.@propagate_inbounds getPlaquetteStencil(
@@ -85,31 +89,41 @@ end
 
 Base.@propagate_inbounds function applyPlaquette!(Mat::Stencils.AbstractStencilArray,i,j,sgn)
     # sites = Stencils.indices(Stencils.stencil(Mat), CartesianIndex(i, j))
-    sites = safe_indices(Mat, (i, j))
+    sgntype = convert(eltype(Mat), sgn)
+    sites = safe_parent_indices(Mat, (i, j))
+    parentArr = parent(Mat)
     for (ij,s) in zip(sites,P1_STENCIL)
         i,j = ij
-        Mat[i,j] += sgn *s
+        parentArr[i,j] += sgntype *s
     end
     return Mat
 end
 
-@inline function safe_indices(A::Stencils.AbstractStencilArray,I)
-    return safe_indices(A, Stencils.boundary(A), Stencils.padding(A), CartesianIndex(I))
+getStencilRadii(::Stencils.AbstractStencilArray{<:Any,R,<:Any,N}) where {R,N} = CartesianIndex(ntuple(_ -> -R, N))
+
+
+@inline function safe_parent_indices(A::Stencils.AbstractStencilArray,I)
+    return safe_parent_indices(A, Stencils.boundary(A), Stencils.padding(A), CartesianIndex(I))
 end
-@inline function safe_indices(A::Stencils.AbstractStencilArray{<:Any,R,<:Any,N}, ::Stencils.Wrap, ::Stencils.Conditional,I ::CartesianIndex
-) where {R,N}
+@inline function safe_parent_indices(A::Stencils.AbstractStencilArray, ::Stencils.Wrap, ::Stencils.Conditional,I ::CartesianIndex
+)
     inds = Stencils.indices(Stencils.stencil(A), I)
-    radii = CartesianIndex(ntuple(_ -> -R, N))
+    radii = getStencilRadii(A)
     if checkbounds(Bool, A, I + radii) && checkbounds(Bool, A, I - radii)
         return inds
     else
         return get_wrappend_inds.(Ref(A), inds)
     end
 end
-@inline function safe_indices(A::Stencils.AbstractStencilArray,::Stencils.Remove,::Stencils.Conditional,I::CartesianIndex)
+@inline function safe_parent_indices(A::Stencils.AbstractStencilArray,::Stencils.Remove,::Stencils.Conditional,I::CartesianIndex)
     inds = Stencils.indices(Stencils.stencil(A), I)
 end
-@inline function safe_indices(A::Stencils.AbstractStencilArray,::Any,::Any,I::CartesianIndex)
+@inline function safe_parent_indices(A::Stencils.AbstractStencilArray,::Stencils.Remove,::Stencils.Halo,I::CartesianIndex)
+    radii = getStencilRadii(A)
+    inds = Stencils.indices(Stencils.stencil(A), I .- radii) 
+end
+
+@inline function safe_parent_indices(A::Stencils.AbstractStencilArray,::Any,::Any,I::CartesianIndex)
     error("setindex for generic Stencil not implemented yet")
 end
 
