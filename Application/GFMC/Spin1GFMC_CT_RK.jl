@@ -7,7 +7,7 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=2-00:00:00
+#SBATCH --time=1-10:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
 #SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK/%a.out
 #SBATCH --partition=normal
@@ -29,7 +29,7 @@ using HDF5
 using SpiderWebModel.Statistics
 i_arg = parse(Int, ARGS[1])
 
-μs = -0.2:0.02:1.2
+μs = -0.1:0.02:1.2
 # μs = μs[1:2:end]
 # μs = μs[2:2:end]
 
@@ -37,19 +37,22 @@ i_arg = parse(Int, ARGS[1])
 L = 30
 τ = 0.15
 nBra = 1
-NSteps = 21_000
-NBinsEval = 3
-NRuns = 10
-equilibration_steps = 3_000
-pre_equilibration_steps=0
-NWalkers = 128*80
-scatter_fraction = 0.0
-
+NSteps = 12_000
+NBinsEval = 1
+NRuns = 14
+equilibration_steps = 2_000
+pre_equilibration_steps = 50_000
+NWalkers = 128*40
+scatter_fraction = 0.5
+NWalkers_optim_start = 128*8
+NSteps_optim_start = 4000
 NStepsstart = 800
 NStepsEnd = 1500
 NBins = 400
 ##
-# L = 8
+# L = 32
+# NWalkers_optim_start = 30*3
+# NSteps_optim_start = 20
 # nBra = 1
 # NSteps = 1000
 # equilibration_steps = 10
@@ -57,6 +60,9 @@ NBins = 400
 # NWalkers = 120
 # scatter_fraction = 0.6
 # NRuns = 1
+# NStepsstart = 200
+# NStepsEnd = 500
+# NBins = 10
 
 # NStepsstart = 100
 # NBins = 10
@@ -64,17 +70,34 @@ NBins = 400
 NWalkers_stochRec = NWalkers ÷ 8
 equilibration_steps_stochRec = 100
 
-outfileSR = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataStochRec_periodic_RK_simpl/L=($L)/mu=$(μ)/StochRec_L=$(L)_tau=$(τ)_NW=$(NWalkers)_mu=$(μ)_noscatter.h5"
-rm(outfileSR,force=true)
+# rm(outfileSR,force=true)
+SRdir = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataStochRec_periodic_RK_simpl/L=($L)/mu=$(μ)/"
+mkpath(SRdir)
+SRoutfiles = readdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataStochRec_periodic_RK_simpl/L=($L)/mu=$(μ)/",join=true)
+outfileSR = if isempty(SRoutfiles)
+    "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataStochRec_periodic_RK_simpl/L=($L)/mu=$(μ)/StochRec_L=$(L)_tau=$(τ)_NW=$(NWalkers)_mu=$(μ).h5"
+else
+    last(SRoutfiles)
+end
 
-mkpath(dirname(outfileSR))
 
 parentState = SW.stencilConfig(zeros(L,L),1,
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 αstart = 0.13 * (1-μ)
 ψG = SW.localPlaquetteGuidingFunction(parentState,αstart)
-CT = SW.ContinuousTimeMethod(τ,1,prod(size(parentState))*0.266*(1-μ),SW.Hxx_RK(μ))
+CT = SW.ContinuousTimeMethod(τ,1,prod(size(parentState))*0.266*0.8*(1-μ),SW.Hxx_RK(μ))
+##
+# optimize starting
+
+CT_findOpt = SW.ContinuousTimeMethod(2. + μ,1,CT.w_avg_estimate,CT.Hxx)
+
+ψG_findOpt = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
+
+@time OptimStart = SW.startManyWalkerGFMC(parentState,CT_findOpt,NWalkers_optim_start,NSteps_optim_start,ψG_findOpt;equilibration_steps=1,pre_equilibration_steps,scatter_fraction)
+OptimStart.TotalWeights
+
+initializer = SW.WeightedConfigsInitializers(OptimStart.SaveConfigs,OptimStart.TotalWeights)
 
 ##
 if !isfile(outfileSR) && μ != 1.0
@@ -100,13 +123,10 @@ else
     w_avg_estimate = 0.
 end
 
-parentState = SW.stencilConfig(zeros(L,L),1;
-boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
-)
 CT = SW.ContinuousTimeMethod(τ,nBra,w_avg_estimate,SW.Hxx_RK(μ))
 
 
-outfileDIR = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK/L=$(L)/$i_arg/"
+outfileDIR = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/L=$(L)/$i_arg/"
 
 for run in 1:NRuns
     outfile = joinpath(outfileDIR,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run).h5")
@@ -115,7 +135,7 @@ for run in 1:NRuns
     if !isfile(outfile)
         @info "starting run $run of $NRuns" L τ nBra NSteps NWalkers outfile
 
-        @time results = SW.startManyWalkerGFMC(parentState,CT,NWalkers,NSteps,ψG;equilibration_steps,pre_equilibration_steps,scatter_fraction,outfile)
+        @time results = SW.startManyWalkerGFMC(parentState,CT,NWalkers,NSteps,ψG;equilibration_steps,pre_equilibration_steps,scatter_fraction,outfile,initializer)
     end
     flush(stdout)
 
@@ -127,7 +147,7 @@ resFiles = [joinpath(root,file) for (root,_,files) in walkdir(outfileDIR) for fi
 
 AllResults = vcat(SW.readResults.(resFiles,NSteps÷NBinsEval)...);
 ## 
-outfileTotal = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK/eval/L=$(L)/mu=$(μ)/Spin1GFMC_Eval_periodic_mu$(μ)_L$(L)_$(i_arg).h5"
+outfileTotal = "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=$(L)/mu=$(μ)/Spin1GFMC_Eval_periodic_mu$(μ)_L$(L)_$(i_arg).h5"
 mkpath(dirname(outfileTotal))
 @assert !isfile(outfileTotal) "file already exists!"
 function getEns(results)
@@ -146,7 +166,7 @@ let
         file["tau"] = τ
     end
     
-    Threads.@threads for projectionSteps in (50,250,500,750,1000,1250)
+    Threads.@threads for projectionSteps in (50,250,500,750,1000)
     # for projectionSteps in (20,40)
         SqsGFMC = stack(SW.getSqsGFMC(AllResults,projectionSteps),dims=3)
         h5open(outfileTotal,"cw") do file
