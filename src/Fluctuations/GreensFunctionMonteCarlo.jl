@@ -116,7 +116,7 @@ function findAffectedPlaquettes!(Plaq_indices,S,i,j)
     pad = Stencils.padding(A)
     findAffectedPlaquettes!(Plaq_indices,S,i,j,bound,pad)
 end
-function findAffectedPlaquettes!(Plaq_indices,Config,i,j,::Stencils.Remove,::Stencils.Conditional)
+function findAffectedPlaquettes!(Plaq_indices,Config,i,j,::Stencils.Remove,::Any)
     empty!(Plaq_indices)
     for (index,I) in enumerate(plaquetteIterator(Config))
         if !plaquettesAreSeparated(I,(i,j))

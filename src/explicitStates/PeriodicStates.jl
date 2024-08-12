@@ -51,3 +51,33 @@ function periodicState6x6_3(L)
     ] .- 1 / 2
     getPeriodicState(UC, L, L, 0)
 end
+
+function periodicStateLoops(L)
+    UC = SA[
+        1 0 1 0;
+        0 -1 0 0;
+        0 0 0 0;
+        0 -1 0 0;
+    ]' .*2
+    getPeriodicState(UC, L, L, 0)
+end
+
+function periodicStateDiag(L)
+    UC = SA[
+        0 1 0 -1;
+        -1 0 1 0;
+        0 -1 0 1;
+        1 0 -1 0;
+    ] .*2
+    getPeriodicState(UC, L, L, 0)
+end
+
+function periodicStateWeb(L)
+    UC = SA[
+        -1 1 1 1;
+        -1 1 -1 0;
+        1 1 0 1;
+        -1 0 -1 0;
+    ] .*2
+    getPeriodicState(UC, L, L, 0)
+end
