@@ -81,3 +81,13 @@ function periodicStateWeb(L)
     ] .*2
     getPeriodicState(UC, L, L, 0)
 end
+
+function periodicPlainWeave(L)
+    UC = SA[
+        1 0 1 0;
+        1 -1 -1 -1;
+        1 0 1 0;
+        -1 -1 1 -1;
+    ] .*2
+    getPeriodicState(UC, L, L, 0)
+end
