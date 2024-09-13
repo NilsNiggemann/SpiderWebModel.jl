@@ -320,80 +320,6 @@ with_theme(theme_SimpleTicks()) do
     
 end
 ##
-using Optim
-function SqFieldTheory(qx::Real, qy::Real, A, r)
-    cos_qx = cos(qx)
-    cos_qy = cos(qy)
-    sin_qx = sin(qx)
-    sin_qy = sin(qy)
-    numerator = (2 * (cos_qx - cos_qy + 2 * sin_qx * sin_qy))^2
-    denominator = sqrt(((cos_qx - cos_qy)^2 + 4 * sin_qx^2 * sin_qy^2) * (r + 4 * ((cos_qx - cos_qy)^2 + 4 * sin_qx^2 * sin_qy^2)))
-    return A* numerator / (denominator+1e-30)
-end
-
-SqFieldTheory(q,v,w) = SqFieldTheory(q[1],q[2],v,w)
-
-SqFieldTheory(q,coefs::AbstractVector) = SqFieldTheory(q[1],q[2],coefs[1],coefs[2])
-function optimizeCoeffs(SqMat)
-    q = trueMomenta(0., 2pi, size(SqMat, 1) - 1)[1:end-1]
-
-    function loss(v, w)
-        l = 0.0
-        v = abs(v)
-        w = abs(w)
-        for (i, qx) in enumerate(q), (j, qy) in enumerate(q)
-            l += abs2(SqMat[i, j] - SqFieldTheory(qx, qy, v, w))
-        end
-        return l
-    end
-
-    loss(v) = loss(v[1], v[2])
-
-    x0 = [1., 1.]
-
-    res = optimize(loss, x0)
-    @info res
-    coefs = abs.(Optim.minimizer(res))
-    return coefs
-end
-function rasterCurve(curvePoints,grid,t)
-
-    getPos(point) = findmin(x->SW.norm(SW.SVector(x.-point)),grid)[2]
-    positions = getPos.(curvePoints)
-    tnew = empty(t)
-    posnew = empty(positions)
-    for i in eachindex(t)
-        p = positions[i]
-        if p ∉ posnew
-            push!(tnew, t[i])
-            push!(posnew,p)
-        end 
-    end
-    return tnew,posnew
-end
-
-using StaticArrays
-function pointPath(p1::StaticArray,p2::StaticArray,res)
-    Path = Vector{typeof(p1)}(undef,res)
-    for i in eachindex(Path)
-        Path[i] = p1 + i/res*(p2 -p1)
-    end
-    return Path
-end
-"""res contains the number of points along -pi,pi"""
-function fetchKPath(points,res = 100)
-    Path = Vector{typeof(points[begin])}(undef,0)
-    # Path = []
-    PointIndices = [1]
-    for i in eachindex(points[begin:end-1])
-        p1 = points[i]
-        p2 = points[i+1]
-        append!(Path,pointPath(p1,p2,round(Int,SW.norm(p1-p2)/2pi * res)))
-        append!(PointIndices,length(Path)) # get indices corresponding to points
-    end
-    return PointIndices,Path
-end
-
 
 ##
 μ = 0.05
@@ -570,3 +496,26 @@ with_theme(theme_PiTicks()) do
     heatmap!(ax,qx,qy,Sq_q)
     fig
 end
+##
+function round_matrix_elements(matrix, tol = 0.1)
+    scale = maximum(abs,matrix)
+
+    
+    for i in axes(matrix, 1)
+        for j in axes(matrix, 2)
+            element = matrix[i, j]
+            if abs(element) < tol*scale
+                matrix[i, j] = 0
+            else
+                matrix[i, j] = sign(element)
+            end
+        end
+    end
+    
+    return matrix
+end
+
+# Example usage:
+matrix = [0.1 0.5 -0.3; 0.7 -0.8 0.2; -0.4 0.9 -0.1]
+rounded_matrix = round_matrix_elements(matrix)
+println(rounded_matrix)

@@ -2,14 +2,14 @@
 #=
 #!/bin/bash
 # SBATCH --dependency=afterok:8745821
-#SBATCH --job-name=CTRKS1
+#SBATCH --job-name=sCTRKS1
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
 #SBATCH --time=5-10:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
-#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK/%a.out
+#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK/spec%a.out
 #SBATCH --partition=normal
 #SBATCH --ntasks=1
 #SBATCH --mem=220GB
@@ -17,7 +17,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --ntasks-per-node=1
 ~/.bashrc
-julia -O3 -t $SLURM_CPUS_PER_TASK /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/Spin1GFMC_CT_RK.jl $SLURM_ARRAY_TASK_ID
+julia -O3 -t $SLURM_CPUS_PER_TASK /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/Spin1GFMC_CT_RK_specific.jl $SLURM_ARRAY_TASK_ID
 exit
 =#
 
@@ -29,21 +29,17 @@ using HDF5
 using SpiderWebModel.Statistics
 i_arg = parse(Int, ARGS[1])
 
-μs = -0.1:0.05:1.1
-# μs = μs[1:2:end]
-# μs = μs[2:2:end]
-
-μ = μs[i_arg]
+μ = 0.7
 L = 32
-τ = 0.10
+τ = 0.2
 nBra = 1
 NSteps = 12_000
 NBinsEval = 1
 NRuns = 14
 equilibration_steps = 800
 pre_equilibration_steps = 50_000
-NWalkers = 128*40
-scatter_fraction = 0.0
+NWalkers = 128*100
+scatter_fraction = 0.8
 NStepsstart = 1000
 NStepsEnd = 2000
 NBins = 400
@@ -76,15 +72,6 @@ function get_S_stair!(S)
     return S
 end
 
-function getInitializer(S,mu;NWalkers=128,NSteps = 100,tau = 1. + 2mu,OptIndep = 10)
-    μ = mu
-    ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
-    CTFindOpt = SW.ContinuousTimeMethod(tau,1,(1-μ)* 0.266*length(S),SW.Hxx_RK(μ))
-            
-    @time OptimStart = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CTFindOpt,NWalkers,NSteps,ψG;equilibration_steps=1,pre_equilibration_steps=60_000,scatter_fraction=0.5) for _ in 1:OptIndep])
-    initializer = SW.WeightedConfigsInitializers(OptimStart)
-    return initializer
-end
 ##
 
 SECTOR_NAME  = "Condensate"
@@ -96,12 +83,8 @@ parentState = get_S_condensate!(
     )
 )
 
-##
-
-initializer = getInitializer(parentState,μ;NWalkers,NSteps = 100,OptIndep = 20)
-##
 # rm(outfileSR,force=true)
-SRdir = ENV["MYSCRATCH"]*"/Spiderweb/DataStochRec/L=($L)/periodic_RK_Full_$(SECTOR_NAME)/mu=$(μ)/"
+SRdir = ENV["MYSCRATCH"]*"/Spiderweb/DataStochRec_acc/L=($L)/$(i_arg)/periodic_RK_Full_$(SECTOR_NAME)/mu=$(μ)/"
 mkpath(SRdir)
 SRoutfiles = readdir(SRdir,join=true)
 
@@ -118,7 +101,7 @@ CT = SW.ContinuousTimeMethod(τ,1,-length(parentState)*0.266*(1-μ),SW.Hxx_RK(μ
 # optimize starting
 if !isfile(outfileSR) && μ != 1.0
     @info "starting run" L τ nBra NSteps NWalkers_stochRec outfileSR
-    stochReconfRes = SW.stochastic_reconfiguration(parentState,CT,i->min(NStepsstart + 20*i,NStepsEnd),ψG,NBins,i -> 1*max(0.3,0.6 -0.002i),SW.IterativeSRSolver();Nwalkers = NWalkers_stochRec,reconfigure = true,rel_tolerance=0.,equilibration_steps=equilibration_steps_stochRec,pre_equilibration_steps=100_000,scatter_fraction,outfile=outfileSR,initializer,reset = false)
+    stochReconfRes = SW.stochastic_reconfiguration(parentState,CT,i->min(NStepsstart + 20*i,NStepsEnd),ψG,NBins,i -> 1*max(0.3,0.6 -0.002i),SW.IterativeSRSolver();Nwalkers = NWalkers_stochRec,reconfigure = true,rel_tolerance=0.,equilibration_steps=equilibration_steps_stochRec,pre_equilibration_steps=100_000,scatter_fraction,outfile=outfileSR,reset = false)
 end
 
 println("stochastic reconf done")
@@ -142,24 +125,32 @@ end
 CT = SW.ContinuousTimeMethod(τ,nBra,w_avg_estimate,SW.Hxx_RK(μ))
 
 ##
-outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/L=$(L)/periodic_RK_Full_$(SECTOR_NAME)/mu_$(μ)/"
+outfileDIRtemp = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil_acc/L=$(L)/temp/$(i_arg)/periodic_RK_Full_$(SECTOR_NAME)/mu_$(μ)/"
 
-for run in 1:NRuns
-    outfile = joinpath(outfileDIR,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run).h5")
-    mkpath(dirname(outfile))
+run = i_arg
+outfile = joinpath(outfileDIRtemp,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run).h5")
+mkpath(dirname(outfile))
 
-    if !isfile(outfile)
-        @info "starting run $run of $NRuns" L τ nBra NSteps NWalkers outfile
+if !isfile(outfile)
+    @info "starting run $run of $NRuns" L τ nBra NSteps NWalkers outfile
 
-        @time results = SW.startManyWalkerGFMC(parentState,CT,NWalkers,NSteps,ψG;equilibration_steps,pre_equilibration_steps,scatter_fraction,outfile,initializer)
-    end
-    flush(stdout)
-
+    @time results = SW.startManyWalkerGFMC(parentState,CT,NWalkers,NSteps,ψG;equilibration_steps,pre_equilibration_steps,scatter_fraction,outfile)
 end
+flush(stdout)
+
+outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil_acc/L=$(L)/periodic_RK_Full_$(SECTOR_NAME)/mu_$(μ)/"
+
+mv(outfile,outfileDIR)
+
 ##
 println("GFMC done")
 flush(stdout)
 resFiles = [joinpath(root,file) for (root,_,files) in walkdir(outfileDIR) for file in files]
+
+if length(resFiles) != NRuns
+    exit()
+end
+
 
 AllResults = vcat(SW.readResults.(resFiles,NSteps÷NBinsEval)...);
 ## 
@@ -182,7 +173,7 @@ let
         file["tau"] = τ
     end
     
-    Threads.@threads for projectionSteps in (50,250,500,750,1000)
+    Threads.@threads for projectionSteps in (50,100,150,200,250,300,500,750,1000)
     # for projectionSteps in (20,40)
         SqsGFMC = stack(SW.getSqsGFMC(AllResults,projectionSteps),dims=3)
         h5open(outfileTotal,"cw") do file

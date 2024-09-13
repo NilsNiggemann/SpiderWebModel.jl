@@ -15,24 +15,24 @@ function prepResults(folder,mufilter)
     ens = stack(SW.getEnergies.(TotalWeights,energies,1,1000))
 end
 # entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equiv_open/",0.30)
-entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil_open/L=30/",0.6)
+entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/L=32/",0.65)
 ##
-files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil_open/eval/L=30/") for file in files]#[1:2:end]
+files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=32/") for file in files]#[1:2:end]
 # files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=30/") for file in files]#[1:2:end]
 # filter!(!contains("mu=-0.18"),files)
 # filter!(!contains("mu=-0.2"),files)
 ##
 energies = stack([h5read(file,"energies") for file in files])
 mus = [h5read(file,"mu") for file in files]
-Sqs = stack([h5read(file,"SqsGFMC/500") for file in files])
+Sqs = stack([h5read(file,"SqsGFMC/200") for file in files])
 taus = [h5read(file,"tau") for file in files]
 ##
 with_theme(theme_SimpleTicks()) do
     ind = 3
     Nsites = length(Sqs[1:end-1,1:end-1,1,ind])
-    enmean = mean(energies,dims=2)[1:100,1,ind] ./ Nsites
+    enmean = mean(energies,dims=2)[1:250,1,ind] ./ Nsites
 
-    enstd = std(energies,dims=2)[1:100,1,ind] ./ Nsites
+    enstd = std(energies,dims=2)[1:250,1,ind] ./ Nsites
     # enmean = mean(entest,dims=2)[:,1]
     # enstd = std(entest,dims=2)[:,1]
     tau = taus[ind]
@@ -114,7 +114,8 @@ end
 ##
 with_theme(theme_PiTicks()) do 
     Sq = mean(Sqs,dims=3)[:,:,1,:] ./ 4
-    muPlot = [-0.06,0.2,0.3,0.6,0.94,1.1]
+    # muPlot = [-0.06,0.2,0.3,0.6,0.94,1.1]
+    muPlot = [0.4,0.6,0.9,1.05]
 
     fig = Figure(fontsize = 22,size = 200 .*(length(muPlot),1.4))
     ticks = PiTicks([0,pi])
@@ -140,6 +141,107 @@ with_theme(theme_PiTicks()) do
     end
     fig
 end
+##
+muIndex = 10
+SqsGFMC = Sqs[:,:,:,muIndex]./ 4
+SqMat = dropdims(mean(SqsGFMC,dims=3),dims=3)
+SqErr = dropdims(std(SqsGFMC,dims=3),dims=3)
+fittingCoefs = optimizeCoeffs(SqMat)
+##
+with_theme(theme_SimpleTicks()) do 
+
+    μ = mus[muIndex]
+    fig = Figure(size = 120 .* (4,5))
+
+    axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1,xticks = PiTicks(), yticks = PiTicks())
+
+    ax = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1,xticks = PiTicks(), yticks = PiTicks(),ylabelvisible = false,yticklabelsvisible = false)
+
+    ax2 = Axis(fig[2,1:2],xlabel = L"|\mathbf{q}|^2",ylabel = L"\mathcal{S}(\mathbf{q})",title = L"μ= %$μ")
+    Sq = SW.getSqCont(SqMat)
+    Sqerr = SW.getSqCont(SqErr)
+    qx = qy = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
+    Sq_q = collect(Iterators.product(qx,qy))
+    Sq_q = Sq.(Iterators.product(qx,qy))
+    heatmap!(ax,qx,qy,Sq_q)
+    
+    SqFT = [SqFieldTheory(x,y,fittingCoefs...) for x in qx, y in qy]
+    heatmap!(axFT,qx,qy,SqFT)
+
+    q_path(r,phi) = (r*cos(phi),r*sin(phi))
+    qr = LinRange(0,.35pi,100)
+    
+    colors = (:red,:blue,:magenta)
+    
+
+
+    let color = :black
+
+        KPoints = Dict([
+            "Γ" => SVector(0,0),
+            "X" => SVector(pi,0),
+            "M" => SVector(pi,pi),
+            "X'" => SVector(0,pi)
+            ])
+        kpath = ["Γ","X","X'","Γ"]
+        pointlabels,p1 = fetchKPath([KPoints[k] for k in kpath],500)
+        kpointlabels = Makie.latexstring.(kpath)
+        tRange = eachindex(p1)
+        xygrid = [(x,y) for x in qx, y in qy]
+    
+        
+        axPath = Axis(fig[3,1:2],ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
+        )
+        tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
+        
+    
+        p1_points = xygrid[p1_discrete]
+
+        Sqcut = [Sq(x,y) for (x,y) in p1_points]
+        Sqerrcut = [Sqerr(x,y) for (x,y) in p1_points]
+        SqFT = [SqFieldTheory(q,fittingCoefs...) for q in p1_points]
+        
+        # SqFT = [SqFieldTheory(q,1,10) for q in qpoints]
+        scatter!(ax,p1_points,marker = '∘' ,color = color,markersize = 10)
+        scatterlines!(axFT,p1_points,color = color,linestyle = :dash,marker = '●',markersize = 2)
+        # tRange = SW.norm.(p1).^2
+        scatter!(axPath,tRange,Sqcut,
+        marker = '∘',markersize = 15,color = color)
+        errorbars!(axPath,tRange,Sqcut,Sqerrcut,color = color,whiskerwidth = 6,linewidth=0.5)
+        scatterlines!(axPath,tRange,SqFT,color = color,linestyle = :dash,marker = '●',markersize = 4)
+        
+        text!(axFT,Point(0,0),text="Γ",color = :white,align = (:center,:center))
+        text!(axFT,Point(pi,0),text="X",color = :white,align = (:center,:center))
+        text!(axFT,Point(0,pi),text="X'",color = :white,align = (:center,:center))
+    end
+
+    for (phi,color) in zip([0,pi/4],colors)
+        qpoints_raw = q_path.(qr,phi)
+        qpoints = sort!(unique!(roundToTrueMomenta.(qpoints_raw,size(SqMat,1)-1)), by = SW.norm)
+
+        Sqcut = Sq.(qpoints)
+        Sqerrcut = Sqerr.(qpoints)
+        
+        # SqFT = [SqFieldTheory(q,1,10) for q in qpoints]
+        SqFT = [SqFieldTheory(q,fittingCoefs...) for q in qpoints]
+        scatter!(ax,qpoints,marker = '×' ,color = color)
+        scatterlines!(axFT,Point.(qpoints),color = color,linestyle = :dash,marker = '●',markersize = 4)
+        qnorms_sq = SW.norm.(qpoints).^2
+        scatter!(ax2,qnorms_sq,Sqcut,
+        marker = '×',markersize = 15,color = color)
+        errorbars!(ax2,qnorms_sq,Sqcut,Sqerrcut,color = color,whiskerwidth = 6,linewidth=0.5)
+        scatterlines!(ax2,qnorms_sq,SqFT,color = color,linestyle = :dash,marker = '●',markersize = 4)
+    end
+    rowsize!(fig.layout,1,Relative(0.4))
+
+    Label(fig[1,1, TopLeft()],L"a)$$",padding = (-30,0,-10,0))
+    Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-10,0))
+    Label(fig[2,1, TopLeft()],L"c)$$",padding = (-30,0,-10,0))
+    Label(fig[3,1, TopLeft()],L"d)$$",padding = (-30,0,-10,0))
+
+    fig
+end
+
 ##
 res1 = SW.readResults(entest[2],2000)[1:2]
 Sqs = SW.getSqsGFMC(res1,200;discardborder = 4)
