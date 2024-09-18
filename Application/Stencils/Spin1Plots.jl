@@ -9,18 +9,7 @@ function trueMomenta(kmin,kmax,L)
     return (nmin : nmax) .* 2pi/L
 end
 ##
-# filesRK = readdir("/p/scratch/pmfrg/niggemann1/Spiderweb/DataRK/",join=true)
-# resRK = h5open(filesRK[end]) do f
-#     read(f)
-# end
-##
-resRK = SW.readResults(first(readdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataRK/L=100/2/",join=true)),1000);
-##
-SqRK = let  
-    # RKConfs = eachslice(resRK[1].SaveConfigs,dims=(3,4))
-    SqRK = SW.getSqGFMC(resRK[end],1)
-    
-end
+SqRK = h5read("../Data/Spin1S0_RK.h5","Sq")
 
 ##
 res = h5open("../Data/Spin1GFMC_Eval_periodic.h5") do f
