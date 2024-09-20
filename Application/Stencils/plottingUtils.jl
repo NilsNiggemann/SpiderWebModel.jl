@@ -224,19 +224,25 @@ function getLastSlice(arr::AbstractArray{T,N}) where {T,N}
     return view(arr,slicedims...,:)
 end
 
-function SqFieldTheory(qx::Real, qy::Real, A, r)
-    cos_qx = cos(qx)
-    cos_qy = cos(qy)
-    sin_qx = sin(qx)
-    sin_qy = sin(qy)
-    numerator = (2 * (cos_qx - cos_qy + 2 * sin_qx * sin_qy))^2
-    denominator = sqrt(((cos_qx - cos_qy)^2 + 4 * sin_qx^2 * sin_qy^2) * (r + 4 * ((cos_qx - cos_qy)^2 + 4 * sin_qx^2 * sin_qy^2)))
-    return A* numerator / (denominator+1e-30)
+function SqFieldTheory_full(qx::Real, qy::Real, K::Real, W::Real, U::Real)
+    cx = cos(qx)
+    cy = cos(qy)
+    sx = sin(qx)
+    sy = sin(qy)
+    
+    numerator = (cx - cy + 2 * sx * sy)^2
+    denominator = sqrt((cx - cy)^2 + 4 * sx^2 * sy^2) * sqrt(U / W + 4 * ((cx - cy)^2 + 4 * sx^2 * sy^2)) +1e-30
+    
+    return sqrt(K / (4 * W)) * numerator / denominator
 end
 
-SqFieldTheory(q,v,w) = SqFieldTheory(q[1],q[2],v,w)
+SqFieldTheory(qx, qy, A,r) = SqFieldTheory_full(qx, qy, 4*A^2,1, r)
 
-SqFieldTheory(q,coefs::AbstractVector) = SqFieldTheory(q[1],q[2],coefs[1],coefs[2])
+
+SqFieldTheory(q::AbstractVector,A::Real,r::Real) = SqFieldTheory(q[1],q[2],A,r)
+
+SqFieldTheory(q::AbstractVector,coefs::AbstractVector) = SqFieldTheory(q[1],q[2],coefs[1],coefs[2])
+
 function optimizeCoeffs(SqMat,weightfunc=x->one(first(x)))
     q = trueMomenta(0., 2pi, size(SqMat, 1) - 1)[1:end-1]
 
