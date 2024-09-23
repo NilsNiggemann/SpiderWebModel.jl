@@ -1,21 +1,29 @@
-using CairoMakie
-function SqExact(x,y)
-    num = cos(x) - cos(y) +2sin(x)sin(y) 
-    denom = (cos(x) - cos(y))^2 + (2sin(x)sin(y))^2
-    return num^2/(sqrt(denom)+1e-30)
-end
-
-k = LinRange(0,2pi,100)
-heatmap(k,k,[SqExact(x,y) for x in k, y in k],axis = (;aspect=1))
+using CairoMakie, MakieHelpers
+import SpiderWebModel as SW
+include("plottingUtils.jl")
 ##
-# perturbation
-function V(x)
-    s1,s2 = x
+with_theme(theme_PiTicks()) do 
+    # k = LinRange(-0.5pi, 1.50pi, 32)
+    k = trueMomenta(-0.5pi, 1.50pi, 400)
 
-    S⁺S⁻(s) = 2 + s*(1-s)
-    S⁻S⁺(s) = 2 - s*(1+s)
-
-    V = S⁺S⁻(s1)*S⁻S⁺(s2) + S⁻S⁺(s1)*S⁺S⁻(s2)
+    # Define three different values for r
+    r_values = [1e2,1,1e-2]
+    # Create a 3x1 figure with shared y-axis
+    
+    fig = Figure(size = 100 .* (4, 1.8))
+    for (i, r) in enumerate(r_values)
+        # A = 2.3329237880493565
+        # r = 25.664665666632807
+        ax = Axis(fig[1, i], xlabel = L"q_x", aspect = 1,ylabelvisible = i == 1, yticklabelsvisible = i == 1,
+        xticks = PiTicks([0,pi]),yticks = PiTicks([0,pi]),
+        xminorticks = IntervalsBetween(2),yminorticks = IntervalsBetween(2),
+        xminorticksvisible = true, yminorticksvisible = true,
+        )
+        heatmap!(ax, k, k, [SqFieldTheory(x, y, 1,r) for x in k, y in k])
+        
+        # Add label to the plot
+        Label(fig[1,i,TopLeft()],string(('a':'z')[i],")"), color = :black, fontsize = 14,padding = (-20,0,-10,0))
+    end
+    
+    fig
 end
-
-[V(x) for x in [(-1,-1),(-1,0),(-1,1),(0,-1),(0,0),(0,1),(1,-1),(1,0),(1,1)]]
