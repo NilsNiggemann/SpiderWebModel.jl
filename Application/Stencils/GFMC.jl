@@ -429,28 +429,20 @@ equilib_plots(resultsDT;scatter_fraction,averageSteps=10,Ntrack=30,p = 300)
 # U field repulsion
 
 SW.Random.seed!(1234)
-S = SW.stencilConfig(zeros(16,16),1;
+S = SW.stencilConfig(parent(SW.getStairCase(4*10)),1/2,
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 
-CT = SW.ContinuousTimeMethod(0.01,3,10.,SW.Hxx_SIA(0.3))
-ψG = SW.fullVariationalFunction(S,.2)
-stochReconfRes = SW.stochastic_reconfiguration(S,CT,i->round(Int,2000+ 200*i),ψG,10,i->max(1. - 0.1*log(i),0.3) ,SW.IterativeSRSolver();Nwalkers = 6*50,rel_tolerance=1e-8,equilibration_steps=100,pre_equilibration_steps=50_000,scatter_fraction=0.6)
-ψG = SW.FullVariationalGuidingFunction(stochReconfRes.params)
+CT = SW.ContinuousTimeMethod(0.3,Hxx = SW.Hxx_RK(1))
+ψG = SW.RKFunction()
 ##
-# ψG = SW.fullVariationalFunction(S,0.15)
-# CT = SW.ContinuousTimeMethod(0.03,1,0.2655*prod(size(S)),SW.Hxx_zero())
-CT = SW.ContinuousTimeMethod(0.03,1,23.2,SW.Hxx_SIA(0.3))
-scatter_fraction = 0.8
-@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,500,10000,ψG;equilibration_steps=0,pre_equilibration_steps=50_000,scatter_fraction) for i in 1:6])
+scatter_fraction = 0.9
+@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,6,10000,ψG;equilibration_steps=0,pre_equilibration_steps=50_000,scatter_fraction) for i in 1:24])
 ##
 # results = resultsCT
 plotEnergies(resultsCT,CT,nThermal=1,τ=2,normalize=true)
 ##
-equilib_plots(resultsCT;scatter_fraction,averageSteps=10,Ntrack=80,p = 100)
-
-##
-SqsGFMC = fetch.([Threads.@spawn getSq(res,100÷nBra) for res in resultsCT])
+SqsGFMC = SW.getSqsGFMC(resultsCT,100,nBra=1)
 makeSqFTPlots(SqsGFMC)
 ##
 projection_orders = [800,300,100]

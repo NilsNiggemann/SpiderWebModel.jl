@@ -40,12 +40,17 @@ function get_S_stair(S)
     S_staircase .= 4*SW.getStairCase(size(S,1))
     return S_staircase
 end
+function get_S_plainWeave(S)
+    S_plainWeave = copy(S)
+    S_plainWeave .= SW.periodicPlainWeave(size(S,1))
+    return S_plainWeave
+end
 
 
 ##
-
+L = 20
 println("Starting")
-S = SW.stencilConfig(zeros(20,20),1;
+S = SW.stencilConfig(zeros(L,L),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 ##
@@ -70,11 +75,14 @@ S_four_strings[1:2:end,end÷4*3] .= -2
 ##
 S_string_condensate = get_S_condensate(S)
 S_diag_condensate = get_S_diag(S)
+S_plainWeave = get_S_plainWeave(S)
 S_stair = get_S_stair(S)
 
 ##
 @assert SW.fulFillsConstraint(S_two_strings)
 @assert SW.fulFillsConstraint(S_string_condensate)
+@assert SW.fulFillsConstraint(S_diag_condensate)
+@assert SW.fulFillsConstraint(S_plainWeave)
 ##
 μ = 0.0
 ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
@@ -137,8 +145,11 @@ sort!(muRange,rev = true)
 # makeRuns(S_diag_condensate,muRange,folder;Nwalkers = 180,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 4)
 
 ##
-folder = "temp/LoopSector/L=$(size(S,1))/stair"
-makeRuns(S_stair,muRange,folder;Nwalkers = 500,NSteps = 10000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 6)
+# folder = "temp/LoopSector/L=$(size(S,1))/stair"
+# makeRuns(S_stair,muRange,folder;Nwalkers = 500,NSteps = 10000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 6)
+##
+folder = "temp/LoopSector/L=$(size(S,1))/plainWeave"
+makeRuns(S_plainWeave,muRange,folder;Nwalkers = 150,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 4)
 
 ##
 if "TERM_PROGRAM" ∉ keys(ENV)
@@ -188,106 +199,81 @@ res_two_strings_20 = getMuSweep("temp/LoopSector/L=20/two_strings",100)
 res_string_condensate_20 = getMuSweep("temp/LoopSector/L=20/string_condensate",100)
 res_diag_condensate_20 = getMuSweep("temp/LoopSector/L=20/diag_condensate",100)
 res_stair_20 = getMuSweep("temp/LoopSector/L=20/stair",100)
-
-with_theme(theme_SimpleTicks()) do 
-
-    # res_four_strings = getMuSweep("temp/LoopSector3/L=14/four_strings")
-    # res_string_condensate = getMuSweep("temp/LoopSector3/L=14/string_condensate")
-
-    fig = Figure(size = 150 .* (4,5))
-    MU_SCALE = 0.266
-    comparison_func(μ) = MU_SCALE * (μ-1)
-    QCP = 0.25
-    
-    xticks = collect(0:0.5:1)
-
-    push!(xticks,QCP)
-    unique!(sort!(xticks))
-    xticklabels = [x == QCP ? L"μ_c = %$QCP" : L"%$x" for x in xticks]
-
-    xminorticks = collect(0:0.1:1)
-    ax = Axis(fig[1,1],xlabel = L"μ",ylabel = L"E_0/L^2",xlabelvisible=false,xticklabelsvisible=false,xminorticksvisible = true,xminorticks = xminorticks)
-
-    axDiff = Axis(fig[2,1],xlabel = L"μ",ylabel = L"E_0/L^2 - %$MU_SCALE(μ-1)",xminorticks = xminorticks,xminorticksvisible = true,xticks = (xticks,xticklabels),
-    # xlabelvisible=false,xticklabelsvisible=false
+res_plainWeave_20 = getMuSweep("temp/LoopSector/L=20/plainWeave",100)
+res_plainWeave_40 = getMuSweep("temp/LoopSector/L=40/plainWeave",100)
+##
+function EnergyPlot(resultsVec,labels,L;
+    colors = Makie.Colors.distinguishable_colors(length(resultsVec),parse.(Makie.Colors.RGB,[:black,:red,:blue])),
+    markersize = 7,
+    linestyle  = :solid,
+    marker = '●'
     )
+    with_theme(theme_SimpleTicks()) do 
 
-    axderiv= Axis(fig[1,1],xlabel = L"μ",ylabel = L"dE/dμ",xminorticks = xminorticks,xminorticksvisible = true,xticks = (xticks,xticklabels),
-    yaxisposition=:right,yticklabelcolor=:red,
-    yticks = SimpleTicks(),
-    xlabelvisible = false,
-    ygridvisible=false,
-    xgridvisible=false,
-    xticklabelsvisible= false,
-    xticksvisible= false,
-    # xminorticksvisible=false
-    ylabelvisible=true,
-    ylabelcolor = :red
-)
-    linkxaxes!(ax,axDiff,axderiv)
-    Nsites = 20^2
-    
-    colors = [:black,:red,:blue,:green,:orange]
-    labels = [
-        L"condensate$$",
-        L"ℓ=0",
-    # L"ℓ = 1",
-        L"ℓ = 2",
-        L"diag$$",
-        L"stair$$",
-    # "ℓ = 4",
-    ]
+        # res_four_strings = getMuSweep("temp/LoopSector3/L=14/four_strings")
+        # res_string_condensate = getMuSweep("temp/LoopSector3/L=14/string_condensate")
 
-    # res_s_18 = [
-    #     res_string_condensate_18,
-    #     res_noString_18,
-    #     # res_string_18,
-    #     res_two_strings_18,
-    #     ]
+        fig = Figure(size = 150 .* (4,5))
+        MU_SCALE = 0.266
+        comparison_func(μ) = MU_SCALE * (μ-1)
+        QCP = 0.25
         
-    res_s_20 = [
-            res_string_condensate_20,
-            res_noString_20,
-            res_two_strings_20,
-            res_diag_condensate_20,
-            res_stair_20,
-    ]
+        xticks = collect(0:0.5:1)
 
-    # res_s_22 = empty(res_s_20)
+        push!(xticks,QCP)
+        unique!(sort!(xticks))
+        xticklabels = [x == QCP ? L"μ_c = %$QCP" : L"%$x" for x in xticks]
 
-    # getEDiff(res) = res.E[end,:] ./ Nsites
-    linestyles = [:solid,:dash,:dot]
-    markers = ('●','×' ,'+')
-    Ls = [20]
-    markersizes = [6,15]
-    
-    function getdEDmu(mu,E)
-        # E_interp_linear = ITP.interpolate((mu,), E, ITP.Gridded(ITP.Linear()))
-        # x -> ITP.gradient(E_interp_linear,x)[1]
-        diff(E) ./ diff(mu)
-    end
+        xminorticks = collect(0:0.1:1)
+        ax = Axis(fig[1,1],xlabel = L"μ",ylabel = L"E_0/L^2",xlabelvisible=false,xticklabelsvisible=false,xminorticksvisible = true,xminorticks = xminorticks)
 
-    function getDeltaDE(Estd)
-        ΔDE = [Estd[i] + Estd[i+1] for i in eachindex(Estd)[1:end-1]]
-    end
+        axDiff = Axis(fig[2,1],xlabel = L"μ",ylabel = L"E_0/L^2 - %$MU_SCALE(μ-1)",xminorticks = xminorticks,xminorticksvisible = true,xticks = (xticks,xticklabels),
+        # xlabelvisible=false,xticklabelsvisible=false
+        )
 
-    for (L,res_s,linestyle,marker,markersize) in zip(Ls,[res_s_20],linestyles,markers,markersizes)
+        axderiv= Axis(
+            fig[1,1],xlabel = L"μ",ylabel = L"dE/dμ",xminorticks = xminorticks,xminorticksvisible = true,xticks = (xticks,xticklabels),
+            yaxisposition=:right,yticklabelcolor=:red,
+            yticks = SimpleTicks(),
+            xlabelvisible = false,
+            ygridvisible=false,
+            xgridvisible=false,
+            xticklabelsvisible= false,
+            xticksvisible= false,
+            # xminorticksvisible=false
+            ylabelvisible=true,
+            ylabelcolor = :red
+        )
+        linkxaxes!(ax,axDiff,axderiv)
+        Nsites = 20^2
+        
+        function getdEDmu(mu,E)
+            # E_interp_linear = ITP.interpolate((mu,), E, ITP.Gridded(ITP.Linear()))
+            # x -> ITP.gradient(E_interp_linear,x)[1]
+            diff(E) ./ diff(mu)
+        end
+
+        function getDeltaDE(Estd)
+            ΔDE = [Estd[i] + Estd[i+1] for i in eachindex(Estd)[1:end-1]]
+        end
+
+        # for (L,res_s,linestyle,marker,markersize) in zip(Ls,[res_s_20],linestyles,markers,markersizes)
         Nsites = L^2
         # getE(res) = minimum(res.E,dims=2)[:] ./ Nsites
         getEScale(E) = @views E[end,:] ./ Nsites
         getEDiff(res) = getEScale(res.E) .- comparison_func.(res.mus)
 
-        for (res,color,label) in zip(res_s,colors,labels)
+        for (res,color,label) in zip(resultsVec,colors,labels)
 
             E_mu = getEScale(res.E)
             E_std = getEScale(res.Estd)
             E_diff = getEDiff(res)
             μ = res.mus
 
-            scatterlines!(ax,μ,E_mu;color ,label,markersize,linestyle = linestyle,marker = marker)
+            scatterlines!(ax,μ,E_mu;color ,label,markersize,linestyle,marker = marker)
             errorbars!(ax,μ,E_mu, E_std,color = color,whiskerwidth = 6,linewidth=0.5)
 
-            scatterlines!(axDiff,μ,E_diff;color ,label,markersize,linestyle = linestyle,marker = marker)
+            scatterlines!(axDiff,μ,E_diff;color ,label,markersize,linestyle,marker = marker)
             errorbars!(axDiff,μ,E_diff, E_std,color = color,whiskerwidth = 6,linewidth=0.5)
             
             mu_fine = LinRange(extrema(μ)...,100)
@@ -300,35 +286,127 @@ with_theme(theme_SimpleTicks()) do
             dE = getdEDmu(μ,E_mu)
             deltaDE = getDeltaDE(E_std./Nsites)
 
-            scatterlines!(axderiv,μ[1:end-1],dE;color ,label,marker = marker,markersize = markersize,linestyle = linestyle)
+            scatterlines!(axderiv,μ[1:end-1],dE;color ,label,marker = marker,markersize = markersize,linestyle)
             errorbars!(axderiv,μ[1:end-1],dE,deltaDE,color = color,alpha = 0.2,whiskerwidth = 6,linewidth=0.5)
             # band!(axderiv,res.mus[begin:end-1],dE,deltaDE,color = color,alpha = 0.2)
             # lines!(ax,[0,1],[res.E[end,1] /Nsites,0],color = color,linestyle = :dash)
         end
         scatterlines!(ax,[NaN],[NaN];marker,linestyle,label = L"L = %$L",color = :grey)
-
-    end
-    axislegend(ax,position = :rc,merge = true,unique = true,nbanks=1)
-    # xlims!(axDiff,-0.005,0.15)
+        axislegend(ax,position = :rc,merge = true,unique = true,nbanks=1)
+        # xlims!(axDiff,-0.005,0.15)
     # ylims!(ax,-0.275,-0.22)
 
     vlines!(ax,[QCP],color = :grey,linestyle = :dash)
     vlines!(axDiff,[QCP],color = :grey,linestyle = :dash)
     rowsize!(fig.layout,1,Relative(0.6))
     fig
-
+    
     
 end
+end
 ##
+let 
+    # colors = [:black,:red,:blue,:green,:orange,:purple]
+    labels = [
+        L"condensate$$",
+        L"ℓ=0",
+    # L"ℓ = 1",
+        L"ℓ = 2",
+        L"diag$$",
+        L"stair$$",
+        L"plainWeave$$",
+    # "ℓ = 4",
+    ]
+    EnergyPlot([res_string_condensate_20,res_noString_20,res_two_strings_20,res_diag_condensate_20,res_stair_20,res_plainWeave_20],labels,20)
+end
+##
+EnergyPlot([res_plainWeave_40],[L"1"],40)
 
 ##
-μ = 0.05
+using Optim
+function SqFieldTheory(qx::Real, qy::Real, A, r)
+    cos_qx = cos(qx)
+    cos_qy = cos(qy)
+    sin_qx = sin(qx)
+    sin_qy = sin(qy)
+    numerator = (2 * (cos_qx - cos_qy + 2 * sin_qx * sin_qy))^2
+    denominator = sqrt(((cos_qx - cos_qy)^2 + 4 * sin_qx^2 * sin_qy^2) * (r + 4 * ((cos_qx - cos_qy)^2 + 4 * sin_qx^2 * sin_qy^2)))
+    return A* numerator / (denominator+1e-30)
+end
+
+SqFieldTheory(q,v,w) = SqFieldTheory(q[1],q[2],v,w)
+
+SqFieldTheory(q,coefs::AbstractVector) = SqFieldTheory(q[1],q[2],coefs[1],coefs[2])
+function optimizeCoeffs(SqMat)
+    q = trueMomenta(0., 2pi, size(SqMat, 1) - 1)[1:end-1]
+
+    function loss(v, w)
+        l = 0.0
+        v = abs(v)
+        w = abs(w)
+        for (i, qx) in enumerate(q), (j, qy) in enumerate(q)
+            l += abs2(SqMat[i, j] - SqFieldTheory(qx, qy, v, w))
+        end
+        return l
+    end
+
+    loss(v) = loss(v[1], v[2])
+
+    x0 = [1., 1.]
+
+    res = optimize(loss, x0)
+    @info res
+    coefs = abs.(Optim.minimizer(res))
+    return coefs
+end
+function rasterCurve(curvePoints,grid,t)
+
+    getPos(point) = findmin(x->SW.norm(SW.SVector(x.-point)),grid)[2]
+    positions = getPos.(curvePoints)
+    tnew = empty(t)
+    posnew = empty(positions)
+    for i in eachindex(t)
+        p = positions[i]
+        if p ∉ posnew
+            push!(tnew, t[i])
+            push!(posnew,p)
+        end 
+    end
+    return tnew,posnew
+end
+
+using StaticArrays
+function pointPath(p1::StaticArray,p2::StaticArray,res)
+    Path = Vector{typeof(p1)}(undef,res)
+    for i in eachindex(Path)
+        Path[i] = p1 + i/res*(p2 -p1)
+    end
+    return Path
+end
+"""res contains the number of points along -pi,pi"""
+function fetchKPath(points,res = 100)
+    Path = Vector{typeof(points[begin])}(undef,0)
+    # Path = []
+    PointIndices = [1]
+    for i in eachindex(points[begin:end-1])
+        p1 = points[i]
+        p2 = points[i+1]
+        append!(Path,pointPath(p1,p2,round(Int,SW.norm(p1-p2)/2pi * res)))
+        append!(PointIndices,length(Path)) # get indices corresponding to points
+    end
+    return PointIndices,Path
+end
+
+
+##
+μ = 0.8
 # res1 = getRes("temp/LoopSector/L=20/noString/μ=$μ")
 # res1 = getRes("temp/LoopSector/L=20/string_condensate/μ=$μ")
 # res1 = getRes("temp/LoopSector/L=20/diag_condensate/μ=$μ",3600)
 # res1 = getRes("temp/LoopSector/L=20/stair/μ=$μ")
-# res2 = getRes("temp/LoopSector/L=20/string_condensate/μ=$μ")
-res1 = getRes("temp/LoopSector/L=20/two_strings/μ=$μ")
+res1 = getRes("temp/LoopSector/L=20/string_condensate/μ=$μ")
+# res1 = getRes("temp/LoopSector/L=40/plainWeave/μ=$μ")
+# res1 = getRes("temp/LoopSector/L=20/two_strings/μ=$μ")
 ##
 SqsGFMC = SW.getSqsGFMC(res1,50)
 SqMat = mean(SqsGFMC)
@@ -496,26 +574,3 @@ with_theme(theme_PiTicks()) do
     heatmap!(ax,qx,qy,Sq_q)
     fig
 end
-##
-function round_matrix_elements(matrix, tol = 0.1)
-    scale = maximum(abs,matrix)
-
-    
-    for i in axes(matrix, 1)
-        for j in axes(matrix, 2)
-            element = matrix[i, j]
-            if abs(element) < tol*scale
-                matrix[i, j] = 0
-            else
-                matrix[i, j] = sign(element)
-            end
-        end
-    end
-    
-    return matrix
-end
-
-# Example usage:
-matrix = [0.1 0.5 -0.3; 0.7 -0.8 0.2; -0.4 0.9 -0.1]
-rounded_matrix = round_matrix_elements(matrix)
-println(rounded_matrix)

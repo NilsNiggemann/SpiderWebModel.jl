@@ -2,6 +2,13 @@ using CairoMakie, MakieHelpers
 import SpiderWebModel as SW
 include("plottingUtils.jl")
 ##
+a = []
+push!(a,1)
+push!(a,"a string")
+
+##
+b = a +2
+##
 with_theme(theme_PiTicks()) do 
     # k = LinRange(-0.5pi, 1.50pi, 32)
     k = trueMomenta(-0.5pi, 1.50pi, 400)
