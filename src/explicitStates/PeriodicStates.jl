@@ -61,6 +61,15 @@ function periodicStateLoops(L)
     ]' .*2
     getPeriodicState(UC, L, L, 0)
 end
+function periodicStateDenseLoops(L)
+    UC = SA[
+        0 0 0 0;
+        -1 0 1 0;
+        0 0 0 0;
+        1 0 -1 0;
+    ]' .*2
+    getPeriodicState(UC, L, L, 0)
+end
 
 function periodicStateDiag(L)
     UC = SA[

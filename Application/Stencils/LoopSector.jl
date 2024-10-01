@@ -77,12 +77,14 @@ S_string_condensate = get_S_condensate(S)
 S_diag_condensate = get_S_diag(S)
 S_plainWeave = get_S_plainWeave(S)
 S_stair = get_S_stair(S)
+S_LoopsDense = copy(S) .= SW.periodicStateDenseLoops(size(S,1))
 
 ##
 @assert SW.fulFillsConstraint(S_two_strings)
 @assert SW.fulFillsConstraint(S_string_condensate)
 @assert SW.fulFillsConstraint(S_diag_condensate)
 @assert SW.fulFillsConstraint(S_plainWeave)
+@assert SW.fulFillsConstraint(S_LoopsDense)
 ##
 μ = 0.0
 ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
@@ -148,8 +150,11 @@ sort!(muRange,rev = true)
 # folder = "temp/LoopSector/L=$(size(S,1))/stair"
 # makeRuns(S_stair,muRange,folder;Nwalkers = 500,NSteps = 10000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 6)
 ##
-folder = "temp/LoopSector/L=$(size(S,1))/plainWeave"
-makeRuns(S_plainWeave,muRange,folder;Nwalkers = 150,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 4)
+# folder = "temp/LoopSector/L=$(size(S,1))/plainWeave"
+# makeRuns(S_plainWeave,muRange,folder;Nwalkers = 150,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 4)
+##
+folder = "temp/LoopSector/L=$(size(S,1))/LoopsDense"
+makeRuns(S_LoopsDense,muRange,folder;Nwalkers = 150,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 4)
 
 ##
 if "TERM_PROGRAM" ∉ keys(ENV)
@@ -200,7 +205,8 @@ res_string_condensate_20 = getMuSweep("temp/LoopSector/L=20/string_condensate",1
 res_diag_condensate_20 = getMuSweep("temp/LoopSector/L=20/diag_condensate",100)
 res_stair_20 = getMuSweep("temp/LoopSector/L=20/stair",100)
 res_plainWeave_20 = getMuSweep("temp/LoopSector/L=20/plainWeave",100)
-res_plainWeave_40 = getMuSweep("temp/LoopSector/L=40/plainWeave",100)
+# res_plainWeave_40 = getMuSweep("temp/LoopSector/L=40/plainWeave",100)
+res_LoopsDense_20 = getMuSweep("temp/LoopSector/L=20/LoopsDense",100)
 ##
 function EnergyPlot(resultsVec,labels,L;
     colors = Makie.Colors.distinguishable_colors(length(resultsVec),parse.(Makie.Colors.RGB,[:black,:red,:blue])),
@@ -208,6 +214,7 @@ function EnergyPlot(resultsVec,labels,L;
     linestyle  = :solid,
     marker = '●'
     )
+    QCP = 0.25
     with_theme(theme_SimpleTicks()) do 
 
         # res_four_strings = getMuSweep("temp/LoopSector3/L=14/four_strings")
@@ -216,7 +223,6 @@ function EnergyPlot(resultsVec,labels,L;
         fig = Figure(size = 150 .* (4,5))
         MU_SCALE = 0.266
         comparison_func(μ) = MU_SCALE * (μ-1)
-        QCP = 0.25
         
         xticks = collect(0:0.5:1)
 
@@ -293,16 +299,16 @@ function EnergyPlot(resultsVec,labels,L;
         end
         scatterlines!(ax,[NaN],[NaN];marker,linestyle,label = L"L = %$L",color = :grey)
         axislegend(ax,position = :rc,merge = true,unique = true,nbanks=1)
+        vlines!(ax,[QCP],color = :grey,linestyle = :dash)
+        vlines!(axDiff,[QCP],color = :grey,linestyle = :dash)
+        rowsize!(fig.layout,1,Relative(0.6))
+        fig
+        
+    end
         # xlims!(axDiff,-0.005,0.15)
     # ylims!(ax,-0.275,-0.22)
 
-    vlines!(ax,[QCP],color = :grey,linestyle = :dash)
-    vlines!(axDiff,[QCP],color = :grey,linestyle = :dash)
-    rowsize!(fig.layout,1,Relative(0.6))
-    fig
     
-    
-end
 end
 ##
 let 
@@ -311,54 +317,27 @@ let
         L"condensate$$",
         L"ℓ=0",
     # L"ℓ = 1",
-        L"ℓ = 2",
+        # L"ℓ = 2",
         L"diag$$",
         L"stair$$",
         L"plainWeave$$",
+        L"LoopsDense$$",
     # "ℓ = 4",
     ]
-    EnergyPlot([res_string_condensate_20,res_noString_20,res_two_strings_20,res_diag_condensate_20,res_stair_20,res_plainWeave_20],labels,20)
+    EnergyPlot([
+        res_string_condensate_20,
+        res_noString_20,
+        # res_two_strings_20,
+        res_diag_condensate_20,
+        res_stair_20,
+        res_plainWeave_20,
+        res_LoopsDense_20
+    ],labels,20)
 end
 ##
 EnergyPlot([res_plainWeave_40],[L"1"],40)
 
-##
-using Optim
-function SqFieldTheory(qx::Real, qy::Real, A, r)
-    cos_qx = cos(qx)
-    cos_qy = cos(qy)
-    sin_qx = sin(qx)
-    sin_qy = sin(qy)
-    numerator = (2 * (cos_qx - cos_qy + 2 * sin_qx * sin_qy))^2
-    denominator = sqrt(((cos_qx - cos_qy)^2 + 4 * sin_qx^2 * sin_qy^2) * (r + 4 * ((cos_qx - cos_qy)^2 + 4 * sin_qx^2 * sin_qy^2)))
-    return A* numerator / (denominator+1e-30)
-end
 
-SqFieldTheory(q,v,w) = SqFieldTheory(q[1],q[2],v,w)
-
-SqFieldTheory(q,coefs::AbstractVector) = SqFieldTheory(q[1],q[2],coefs[1],coefs[2])
-function optimizeCoeffs(SqMat)
-    q = trueMomenta(0., 2pi, size(SqMat, 1) - 1)[1:end-1]
-
-    function loss(v, w)
-        l = 0.0
-        v = abs(v)
-        w = abs(w)
-        for (i, qx) in enumerate(q), (j, qy) in enumerate(q)
-            l += abs2(SqMat[i, j] - SqFieldTheory(qx, qy, v, w))
-        end
-        return l
-    end
-
-    loss(v) = loss(v[1], v[2])
-
-    x0 = [1., 1.]
-
-    res = optimize(loss, x0)
-    @info res
-    coefs = abs.(Optim.minimizer(res))
-    return coefs
-end
 function rasterCurve(curvePoints,grid,t)
 
     getPos(point) = findmin(x->SW.norm(SW.SVector(x.-point)),grid)[2]
@@ -399,12 +378,13 @@ end
 
 
 ##
-μ = 0.8
+μ = 0.2
 # res1 = getRes("temp/LoopSector/L=20/noString/μ=$μ")
 # res1 = getRes("temp/LoopSector/L=20/string_condensate/μ=$μ")
 # res1 = getRes("temp/LoopSector/L=20/diag_condensate/μ=$μ",3600)
 # res1 = getRes("temp/LoopSector/L=20/stair/μ=$μ")
-res1 = getRes("temp/LoopSector/L=20/string_condensate/μ=$μ")
+# res1 = getRes("temp/LoopSector/L=20/string_condensate/μ=$μ")
+res1 = getRes("temp/LoopSector/L=20/LoopsDense/μ=$μ")
 # res1 = getRes("temp/LoopSector/L=40/plainWeave/μ=$μ")
 # res1 = getRes("temp/LoopSector/L=20/two_strings/μ=$μ")
 ##

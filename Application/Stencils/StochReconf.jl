@@ -7,12 +7,14 @@ using MakieHelpers
 # using MKL
 include("plottingUtils.jl")
 ##
-S = SW.stencilConfig(zeros(8,8),1;
+S = SW.stencilConfig(zeros(20,20),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
+S .= SW.periodicStateDenseLoops(size(S,1))
 # S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 
-ψG = SW.fullVariationalFunction(S,0.12)
+# ψG = SW.fullVariationalFunction(S,0.12)
+ψG = SW.orderGuidingFunction(S,0.12)
 # ψG = SW.RBM(S,2)
 # SW.get_b_j(ψG) .= 0.01
 # SW.get_alpha_i(ψG) .= 1
@@ -20,21 +22,15 @@ boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 # SW.get_beta_ij(ψG) .= 0.0001
 nThermal = 300
 DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
-##
-stochReconfResRBM = SW.stochastic_reconfiguration(S,DT,1000,ψG,100,0.002,SW.IterativeSRSolver();Nwalkers = 6,reconfigure=false,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
-report_steps = 10,
-scatter_fraction = 0.1,
-reset = true,
-# outfile = "tempSR/SR2.h5"
-)
-plotVarEn(stochReconfResRBM)
+# DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
+
 ##
 SW.Random.seed!(1234)
-DT = SW.DiscreteTimeMethod(0.,2,0.266*length(S))
+CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2))
 # DT = SW.ContinuousTimeMethod(0.05,1,0.266*length(S))
 ψGPlaq = SW.localPlaquetteGuidingFunction(S,0.12)
 
-stochReconfResLoc = SW.stochastic_reconfiguration(S,DT,1400,ψGPlaq,20,0.01,SW.IterativeSRSolver();Nwalkers = 30,reconfigure=true,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+stochReconfResLoc = SW.stochastic_reconfiguration(S,CT,800,ψGPlaq,100,0.8,SW.IterativeSRSolver();Nwalkers = 30,reconfigure=true,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
 report_steps = 5,
 reset = true,
 # outfile = "tempSR/SR2.h5"
@@ -42,22 +38,12 @@ reset = true,
 plotVarEn(stochReconfResLoc)
 ##
 
-stochReconfRes = SW.stochastic_reconfiguration(S,DT,2000,ψG,40,30,SW.IterativeSRSolver();Nwalkers = 120,reconfigure=true,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
-report_steps = 10,
+stochReconfRes = SW.stochastic_reconfiguration(S,CT,800,ψG,100,0.8,SW.IterativeSRSolver();Nwalkers = 30,reconfigure=true,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+report_steps = 5,
 reset = true,
 # outfile = "tempSR/SR2.h5"
 )
 plotVarEn(stochReconfRes)
-##
-
-SW.Random.seed!(1234)
-nThermal = 100
-# DT = SW.DiscreteTimeMethod(0.,4,0.266 * length(S))
-DT = SW.ContinuousTimeMethod(0.1,1,0.266*length(S))
-
-ψGnew = typeof(ψG)(stochReconfResRBM.params[:],ψG.N,ψG.hidden_density)
-
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,10_000,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:12])
 ##
 ψnewPlaq = typeof(ψGPlaq)(stochReconfResLoc.params)
 SW.Random.seed!(1234)
@@ -68,11 +54,16 @@ SW.Random.seed!(1234)
 # @time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,2*80,750,nBraOld,ψGold,1;equilibration_steps=nThermal,pre_equilibration_steps=nBra*nThermal,w_avg_estimate = 8.) for _ in 1:32])
 @time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,10_000,ψG;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:12])
 ##
+ψGnew = deepcopy(ψG)
+ψGnew.params .= stochReconfRes.params
+
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,10_000,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:12])
+##
 
 # plotEnergies(results,nBra,-20.35;Emin=-20.5,Emax=-19.8) # L=10
-plotEnergies(resultsOld,DT,nThermal=100,p=30,normalize=false,dense=true)
-plotEnergies!(results,DT;nThermal=100,p=30,color=:red,normalize=false,dense=true) # L=15
-plotEnergies!(resultsPlaq,DT;nThermal=100,p=30,color=:blue,normalize=false,dense=true) # L=15
+# plotEnergies(resultsOld,CT,nThermal=100,p=30,normalize=false,dense=true)
+plotEnergies(results,CT;nThermal=100,p=30,color=:red,normalize=false,dense=true,τ = 20) # L=15
+plotEnergies!(resultsPlaq,CT;nThermal=100,p=30,color=:blue,normalize=false,dense=true,τ = 20) # L=15
 # plotEnergies(results,DT.nBranch;nThermal=1,p=1000,color=:red) # L=15
 current_figure()
 # plotEnergies(results,nBra,-49.7;Emin=-50.5,Emax=-46)

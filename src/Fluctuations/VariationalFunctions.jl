@@ -18,12 +18,13 @@ variational_parameters(::RKFunction) = Dict{Symbol,Float64}()
 variational_parameters(P::AbstractGuidingFunction) = Dict([:params=>P.params])
 variational_parameters(P::Function) = Dict([x => getproperty(P,x) for x in propertynames(P)])
 
-guidingfuncRatio_exponent(ψG::RKFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes) = 0.
+guidingfuncRatio_exponent(ψG::RKFunction,Walker::SpiderWebWalker,affectedPlaquettes) = 0.
 
-function guidingfuncRatio_exponent(ψG::PlaquetteNumberGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes)
+function guidingfuncRatio_exponent(ψG::PlaquetteNumberGuidingFunction,Walker::SpiderWebWalker,affectedPlaquettes)
     α = ψG.α
     exponent = zero(α)
-
+    n = Walker.n_x
+    n´ = Walker.n_x´
     for i in affectedPlaquettes
         Δn = n´[i] - n[i]
         exponent += Δn
@@ -65,15 +66,20 @@ function guidingfunc_exponent(ψG::FullVariationalGuidingFunction,N□::Abstract
     return exponent
 end
 
-@inline guidingfuncRatio(ψG::AbstractGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes) = exp(guidingfuncRatio_exponent(ψG,n,n´,affectedPlaquettes))
-@inline guidingfuncRatio(ψG::FullVariationalGuidingFunction,n::AbstractArray,n´::AbstractArray) = exp(guidingfuncRatio_exponent(ψG,n,n´))
+@inline guidingfuncRatio(ψG::AbstractGuidingFunction,Walker::SpiderWebWalker,move,affectedPlaquettes) = exp(guidingfuncRatio_exponent(ψG,Walker,move,affectedPlaquettes))
+@inline guidingfuncRatio(ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker,move) = exp(guidingfuncRatio_exponent(ψG,n,n´,move))
 
-function guidingfuncRatio_exponent(ψG::FullVariationalGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes)
+function guidingfuncRatio_exponent(ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker,move,affectedPlaquettes)
     α = get_alpha_i(ψG)
     β = get_beta_ij(ψG)
+    _guidingfuncRatio_exponent(α,β,Walker,affectedPlaquettes)
+end
+
+function _guidingfuncRatio_exponent(α::AbstractVector,β::AbstractMatrix,Walker::SpiderWebWalker,affectedPlaquettes)
 
     exponent = zero(eltype(α))
-
+    n = Walker.n_x
+    n´ = Walker.n_x´
     for i in affectedPlaquettes
         Δn = n´[i] - n[i]
         iszero(Δn) && continue
@@ -84,14 +90,10 @@ function guidingfuncRatio_exponent(ψG::FullVariationalGuidingFunction,n::Abstra
         end
         exponent += exp_i*Δn
     end
-    # exponent1 = α' *  n + dot(n,β,n)
-    # exponent2 = α' *  n´ + dot(n´,β,n´)
-    # exponent = exponent2 - exponent1
-
     return exponent
 end
 
-guidingfuncRatio_exponent(ψG::AbstractGuidingFunction,n::AbstractArray,n´::AbstractArray) = guidingfuncRatio_exponent(ψG,n,n´,eachindex(n,n´))
+guidingfuncRatio_exponent(ψG::AbstractGuidingFunction,Walker::SpiderWebWalker,move) = guidingfuncRatio_exponent(ψG,eachindex(Walker.n,Walker.n´),move)
 
 function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::AbstractGuidingFunction,Λ=0)
     (;Config,weights) = Walker
@@ -128,7 +130,7 @@ function updateWeightList_plaqs!(Walker::SpiderWebWalker,AffectedPlaquetteList,�
         
         n_x´ = getNPlaqfilled!(Walker,indices)
         
-        weight = guidingfuncRatio(ψG,n_x,n_x´,indices)
+        weight = guidingfuncRatio(ψG,Walker,operator,indices)
         push!(weights,weight)
         applyPlaquette!(Config, i, j, -opNum)
     end
@@ -170,11 +172,12 @@ function guidingfunc_exponent(ψG::LocalPlaquetteGuidingFunction,N□::AbstractA
     return exponent
 end
 
-function guidingfuncRatio_exponent(ψG::LocalPlaquetteGuidingFunction,n::AbstractArray,n´::AbstractArray,affectedPlaquettes)
+function guidingfuncRatio_exponent(ψG::LocalPlaquetteGuidingFunction,Walker::SpiderWebWalker,move,affectedPlaquettes)
     α = get_alpha_i(ψG)
 
     exponent = zero(eltype(α))
-
+    n = Walker.n_x
+    n´ = Walker.n_x´
     for ind in eachindex(affectedPlaquettes)
         i = affectedPlaquettes[ind]
         Δn = n´[i] - n[i]
@@ -309,3 +312,59 @@ function get_theta_j(x::AbstractMatrix,j,b,W)
     end
     return θj
 end
+
+struct OrderGuidingFunction{A<:AbstractArray} <: AbstractGuidingFunction
+    params::A
+    N::Int
+    Nsites::Int
+end
+guidingfunc_name(F::OrderGuidingFunction) = "OrderGuidingFunction"
+
+function orderGuidingFunction(State,α::Real=0.1)
+    plaqs = collect(plaquetteIterator(State))
+    N = length(plaqs)
+    Nsites = length(State)
+    params = zeros(N + Nsites)
+    ψ = OrderGuidingFunction(params,N,Nsites)
+    get_alpha_i(ψ) .= α
+    return ψ
+end
+
+function get_alpha_i(ψG::OrderGuidingFunction)
+    @view ψG.params[begin:begin+ψG.N-1]
+end
+
+function get_m_i(ψG::OrderGuidingFunction)
+    startIndex = firstindex(ψG.params) + ψG.N
+    m = @view ψG.params[startIndex:startIndex + ψG.Nsites-1]
+    return m
+end
+
+function guidingfuncRatio_exponent(ψG::OrderGuidingFunction,Walker::SpiderWebWalker,move::Tuple,affectedPlaquettes)
+    α = get_alpha_i(ψG)
+    m = get_m_i(ψG)
+
+    Mat = parent(get_config(Walker))
+
+    exp_α = zero(eltype(ψG.params))
+    n = Walker.n_x
+    n´ = Walker.n_x´
+    for i in affectedPlaquettes
+        Δn = n´[i] - n[i]
+        exp_α += α[i] * Δn
+    end
+
+    i,j,opSign = move
+    
+    sites = safe_parent_indices(Mat, (i, j))
+    LI = LinearIndices(Mat)
+
+    exp_m = zero(exp_α)
+    for (ij,s) in zip(sites,P1_STENCIL)
+        i,j = ij
+        I = LI[i,j]
+        exp_m += m[I]*s
+    end
+    return exp_α + opSign*exp_m
+end
+@inline updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::OrderGuidingFunction,Λ=0) = updateWeightList_plaqs!(Walker,AffectedPlaquetteList,ψG,Λ)

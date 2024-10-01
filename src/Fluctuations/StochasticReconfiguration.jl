@@ -54,6 +54,19 @@ function getOx_k(ψG::Union{FullVariationalGuidingFunction,LocalPlaquetteGuiding
     return getOx_k_plaqs(ψG,Walker.n_x,k)
 end
 
+function getOx_k(ψG::OrderGuidingFunction,Walker::SpiderWebWalker,k)
+    α = get_alpha_i(ψG)
+
+    if k in eachindex(α)
+        return Walker.n_x[k]
+    end
+    # m = get_m_i(ψG)
+
+    Ok = get_config(Walker)[k-lastindex(α)]
+
+    return Ok
+end
+
 function getOx_k_plaqs(ψG::FullVariationalGuidingFunction,n::AbstractArray,k)
     par = ψG.params
 
@@ -70,7 +83,6 @@ function getOx_k_plaqs(ψG::FullVariationalGuidingFunction,n::AbstractArray,k)
 
     return Ok
 end
-
 getOx_k_plaqs(::LocalPlaquetteGuidingFunction,n::AbstractArray,k) = n[k]
 
 function getOx_k(ψG::RBM,x::AbstractMatrix,k)
