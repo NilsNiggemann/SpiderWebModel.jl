@@ -40,3 +40,44 @@ function guidingfuncRatio_exponent(ψG::LocalPlaquetteGuidingFunction,Walker::Sp
 
     return exponent
 end
+getOx_k_plaqs(::LocalPlaquetteGuidingFunction,n::AbstractArray,k) = n[k]
+
+function getOx_k(ψG::LocalPlaquetteGuidingFunction,Walker::SpiderWebWalker,k)
+    return getOx_k_plaqs(ψG,Walker.n_x,k)
+end
+
+function getDistReduction(S,ψG::LocalPlaquetteGuidingFunction)
+    AllDists = Dict{SVector{2,Rational{Int}},Int}()
+    if isperiodic(S)
+        indicesMapping = ones(Int,length(ψG.params))
+        uniqueInds = [1]
+        return AllDists,indicesMapping,uniqueInds
+    end
+    
+    α = get_alpha_i(ψG)
+    Allplaqs = collect(plaquetteIterator(S))
+
+    indicesMapping = Int[]
+    uniqueInds = Int[]
+    LxLy = size(S)
+    r_Central = centralPos(S)
+    for (i,ri) in enumerate(Allplaqs)
+        x,y = ri .- r_Central
+        if y < -x
+            x,y = -y,-x
+        end
+        if y>x
+            x,y = y,x
+        end
+
+        symMapped = SVector(x,y)
+        if symMapped ∉ keys(AllDists)
+            uniqueInds = push!(uniqueInds,i)
+            AllDists[symMapped] = length(uniqueInds)
+        end
+        push!(indicesMapping,AllDists[symMapped])
+    end
+    
+    return (;AllDists,indicesMapping,uniqueInds)
+
+end

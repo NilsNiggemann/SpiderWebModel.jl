@@ -77,3 +77,25 @@ function get_theta_j(x::AbstractMatrix,j,b,W)
     return θj
 end
 
+function getOx_k(ψG::RBM,x::AbstractMatrix,k)
+    par = ψG.params
+
+    paramtype = getParameterType(ψG,k)
+
+    if paramtype == 1 
+        return x[k]
+    end
+    bj = get_b_j(ψG)
+    Wij = get_W_ij(ψG)
+    
+    if paramtype == 2
+        j = k - ψG.N
+        θj = get_theta_j(x,j,bj,Wij)
+        return tanh(θj)
+    elseif paramtype == 3
+        i,j = Tuple(CartesianIndices(Wij)[k-ψG.N-length(bj)])
+        θj = get_theta_j(x,j,bj,Wij)
+        return x[i] * tanh(θj)
+    end
+    return Ok
+end

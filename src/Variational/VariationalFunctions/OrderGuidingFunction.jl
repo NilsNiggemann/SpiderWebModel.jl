@@ -53,3 +53,15 @@ function guidingfuncRatio_exponent(ψG::OrderGuidingFunction,Walker::SpiderWebWa
 end
 @inline updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::OrderGuidingFunction,Λ=0) = updateWeightList_plaqs!(Walker,AffectedPlaquetteList,ψG,Λ)
 
+function getOx_k(ψG::OrderGuidingFunction,Walker::SpiderWebWalker,k)
+    α = get_alpha_i(ψG)
+
+    if k in eachindex(α)
+        return Walker.n_x[k]
+    end
+    # m = get_m_i(ψG)
+
+    Ok = get_config(Walker)[k-lastindex(α)]
+
+    return Ok
+end
