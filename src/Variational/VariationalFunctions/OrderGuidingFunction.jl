@@ -4,7 +4,6 @@ struct OrderGuidingFunction{A<:AbstractArray} <: AbstractGuidingFunction
     Nsites::Int
 end
 guidingfunc_name(F::OrderGuidingFunction) = "OrderGuidingFunction"
-test() = 1
 function orderGuidingFunction(State,α::Real=0.1)
     plaqs = collect(plaquetteIterator(State))
     N = length(plaqs)
