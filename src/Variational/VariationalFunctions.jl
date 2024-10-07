@@ -35,7 +35,7 @@ function getDistReduction(S,ψG::AbstractGuidingFunction)
     AllDists = Dict{SVector{2,Int},Int}()
     indicesMapping = collect(eachindex(ψG.params))
     uniqueInds = collect(indicesMapping)
-    return (;AllDists,indicesMapping,uniqueInds)
+    return SymmetryReducedWaveFunction(ψG,indicesMapping,uniqueInds)
 end
 
 function getReducedDist(ri,rj,Lx,Ly) 

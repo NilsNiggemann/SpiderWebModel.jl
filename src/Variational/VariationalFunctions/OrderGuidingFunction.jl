@@ -65,3 +65,30 @@ function getOx_k(ψG::OrderGuidingFunction,Walker::SpiderWebWalker,k)
 
     return Ok
 end
+
+function getDistReduction(S,ψG::OrderGuidingFunction)
+    AllDists = Dict{SVector{2,Rational{Int}},Int}()
+    if isperiodic(S)
+        indicesMapping = ones(Int,length(ψG.params))
+        uniqueInds = [1]
+        return SymmetryReducedWaveFunction(ψG,indicesMapping,uniqueInds)
+    end
+    
+    m = get_m_i(ψG)
+    indicesMapping = Int[]
+    uniqueInds = Int[]
+    LxLy = size(S)
+    for (i,ri) in enumerate(CartesianIndices(S))
+        x,y = Tuple(ri)
+        
+        symMapped = SVector(x,y)
+        if symMapped ∉ keys(AllDists)
+            uniqueInds = push!(uniqueInds,i)
+            AllDists[symMapped] = length(uniqueInds)
+        end
+        push!(indicesMapping,AllDists[symMapped])
+    end
+    
+    return SymmetryReducedWaveFunction(ψG,indicesMapping,uniqueInds)
+
+end

@@ -69,7 +69,7 @@ function getDistReduction(S,ψG::FullVariationalGuidingFunction)
     if !isperiodic(S)
         indicesMapping = collect(eachindex(ψG.params))
         uniqueInds = collect(indicesMapping)
-        return (;AllDists,indicesMapping,uniqueInds)
+        return SymmetryReducedWaveFunction(ψG,indicesMapping,uniqueInds)
     end
 
     α = get_alpha_i(ψG)
@@ -98,6 +98,6 @@ function getDistReduction(S,ψG::FullVariationalGuidingFunction)
         end
     end
 
-    return (;AllDists,indicesMapping,uniqueInds)
+    return SymmetryReducedWaveFunction(ψG,indicesMapping,uniqueInds)
 
 end

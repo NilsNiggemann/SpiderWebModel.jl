@@ -4,7 +4,7 @@ end
 (ψG::PlaquetteNumberGuidingFunction)(ΔNPlaq::Real) = exp(ψG.α*ΔNPlaq)
 guidingfunc_name(F::PlaquetteNumberGuidingFunction) = "PlaquetteNumberGuidingFunction"
 variational_parameters(P::PlaquetteNumberGuidingFunction) = Dict([:alpha=>P.α])
-function guidingfuncRatio_exponent(ψG::PlaquetteNumberGuidingFunction,Walker::SpiderWebWalker,affectedPlaquettes)
+function _guidingfuncRatio_exponent(ψG::PlaquetteNumberGuidingFunction,Walker::SpiderWebWalker,affectedPlaquettes)
     α = ψG.α
     exponent = zero(α)
     n = Walker.n_x
@@ -16,4 +16,5 @@ function guidingfuncRatio_exponent(ψG::PlaquetteNumberGuidingFunction,Walker::S
 
     return exponent * α
 end
+guidingfuncRatio_exponent(ψG::PlaquetteNumberGuidingFunction,Walker::SpiderWebWalker,move::Tuple,affectedPlaquettes) = _guidingfuncRatio_exponent(ψG,Walker,affectedPlaquettes)
 @inline updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::PlaquetteNumberGuidingFunction,Λ=0) = updateWeightList_plaqs!(Walker,AffectedPlaquetteList,ψG,Λ)

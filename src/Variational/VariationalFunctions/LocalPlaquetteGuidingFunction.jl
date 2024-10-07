@@ -51,7 +51,7 @@ function getDistReduction(S,ψG::LocalPlaquetteGuidingFunction)
     if isperiodic(S)
         indicesMapping = ones(Int,length(ψG.params))
         uniqueInds = [1]
-        return AllDists,indicesMapping,uniqueInds
+        return SymmetryReducedWaveFunction(ψG,indicesMapping,uniqueInds)
     end
     
     α = get_alpha_i(ψG)
@@ -78,6 +78,6 @@ function getDistReduction(S,ψG::LocalPlaquetteGuidingFunction)
         push!(indicesMapping,AllDists[symMapped])
     end
     
-    return (;AllDists,indicesMapping,uniqueInds)
+    return SymmetryReducedWaveFunction(ψG,indicesMapping,uniqueInds)
 
 end

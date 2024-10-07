@@ -121,16 +121,18 @@ function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatri
 end
 stochastic_reconfiguration_step(E_i,Ok_i,::AbstractSRSolver) = error("solver not implemented")
 
-function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,ψG,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,reconfigure=true,initializer = UnguidedWalkInitializer(equilibration_steps,0.8);verbose=true,report_steps=1,reset = true)
+function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,GWF::SymmetryReducedWaveFunction,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,reconfigure=true,initializer = UnguidedWalkInitializer(equilibration_steps,0.8);verbose=true,report_steps=1,reset = true)
     
-    ψG = deepcopy(ψG)
+    (;psi,indicesMapping,uniqueInds) = GWF
+    ψG = deepcopy(psi)
     params = ψG.params
 
     convergedSteps = 0
 
     normDelta = Inf
 
-    _,indicesMapping,uniqueInds = getDistReduction(InitialState,ψG)
+    # _, = getDistReduction(InitialState,ψG)
+
     maxNSteps = maximum(NSteps)
     prob = setup_GFMC_problem(InitialState,method,Nwalkers,maxNSteps,ψG) 
     initializeGFMC!(prob,equilibration_steps,initializer)
@@ -202,8 +204,13 @@ function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSte
     
     NStepsVec = makeVec(NSteps,n)
     dtVec = makeVec(dt,n)
-    return _stochastic_reconfiguration(InitialState,method,solver,NStepsVec,ψG,n,dtVec,equilibration_steps,rel_tolerance,Nwalkers,outfile,reconfigure,initializer;kwargs...)
+    GWF = _default_symmetry(InitialState,ψG)
+
+    return _stochastic_reconfiguration(InitialState,method,solver,NStepsVec,GWF,n,dtVec,equilibration_steps,rel_tolerance,Nwalkers,outfile,reconfigure,initializer;kwargs...)
 end
+
+_default_symmetry(InitialState,ψG::AbstractGuidingFunction) = getDistReduction(InitialState,ψG)
+_default_symmetry(InitialState,ψG::SymmetryReducedWaveFunction) = ψG
 
 makeVec(x::AbstractVector,len) = x
 makeVec(x::Number,len) = fill(x,len)

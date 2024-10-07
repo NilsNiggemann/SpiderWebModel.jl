@@ -1,6 +1,11 @@
 abstract type AbstractGuidingFunction end
 
-using ..SpiderWebModel
+"""Contains guiding wave function and information about symmetry equivalent parameters"""
+struct SymmetryReducedWaveFunction{F<:AbstractGuidingFunction} <: AbstractGuidingFunction
+    psi::F
+    indicesMapping::Vector{Int}
+    uniqueInds::Vector{Int}
+end
 
 (ψG::AbstractGuidingFunction)(x::AbstractWalker) = ψG(get_config(x))
 
@@ -108,4 +113,3 @@ function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::T,
     end
     return weights
 end
-
