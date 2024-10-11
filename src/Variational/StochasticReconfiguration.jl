@@ -55,8 +55,7 @@ function reconf_obs(InitialState::ConfType,method::AbstractGFMCMethod,configs,ψ
     Nparams = length(inequivParams)
     Ok_i = zeros(Float32,length(configs),Nparams)
     E_i = zeros(Float32,length(configs))
-
-    WorkChunks = ChunkSplitters.chunks(eachindex(configs),n=NThreads)
+    WorkChunks = ChunkSplitters.chunks(eachindex(IndexLinear(),configs),n=NThreads)
     
     # println("collecting obs")
     # @time Threads.@threads for (ichunk,chunkinds) in enumerate(WorkChunks)
