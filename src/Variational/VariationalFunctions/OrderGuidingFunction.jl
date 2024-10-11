@@ -66,29 +66,61 @@ function getOx_k(ψG::OrderGuidingFunction,Walker::SpiderWebWalker,k)
     return Ok
 end
 
-function getDistReduction(S,ψG::OrderGuidingFunction)
-    AllDists = Dict{SVector{2,Rational{Int}},Int}()
-    if isperiodic(S)
-        indicesMapping = ones(Int,length(ψG.params))
-        uniqueInds = [1]
-        return SymmetryReducedWaveFunction(ψG,indicesMapping,uniqueInds)
-    end
-    
-    m = get_m_i(ψG)
-    indicesMapping = Int[]
-    uniqueInds = Int[]
-    LxLy = size(S)
+function _symmetrize_sites(S,unitcell::Tuple{Int,Int})
+    MappingDict = Dict{CartesianIndex{2},CartesianIndex{2}}()
+
     for (i,ri) in enumerate(CartesianIndices(S))
         x,y = Tuple(ri)
-        
-        symMapped = SVector(x,y)
-        if symMapped ∉ keys(AllDists)
-            uniqueInds = push!(uniqueInds,i)
-            AllDists[symMapped] = length(uniqueInds)
-        end
-        push!(indicesMapping,AllDists[symMapped])
+        x = x % unitcell[1]
+        y = y % unitcell[2]
+        symMapped = CartesianIndex(x,y)
+        MappingDict[ri] = symMapped
     end
-    
-    return SymmetryReducedWaveFunction(ψG,indicesMapping,uniqueInds)
+    return MappingDict
 
+end
+
+function symmetrize(S,ψG::OrderGuidingFunction,unitcell::Tuple{Int,Int})
+    Map = _symmetrize_sites(S,unitcell)
+    AllPlaquettes = collect(plaquetteIterator(S))
+    uniqueSitesDict = Dict{CartesianIndex{2},Int}()
+    indicesMapping = Int[]
+    
+    for (i,I) in enumerate(AllPlaquettes)
+        I´ = Map[CartesianIndex(I)]
+        if I´ ∉ keys(uniqueSitesDict)
+            uniqueSitesDict[I´] = length(uniqueSitesDict) + 1
+        end
+        push!(indicesMapping,uniqueSitesDict[I´])
+    end
+    current_variational_par = length(uniqueSitesDict)
+    empty!(uniqueSitesDict)
+    for (i,I) in enumerate(CartesianIndices(S))
+        I´ = Map[I]
+        if I´ ∉ keys(uniqueSitesDict)
+            uniqueSitesDict[I´] = length(uniqueSitesDict) + 1# + current_variational_par
+        end
+        push!(indicesMapping,uniqueSitesDict[I´] + current_variational_par)
+    end
+
+    uniqueInds = findFirstUniqueIndices(indicesMapping)
+    return SymmetryReducedWaveFunction(ψG,indicesMapping,uniqueInds)
+    # uniqueInds = Map.uniqueInds
+
+    # AllSites = collect(CartesianIndices(S))
+    # for I in CartesianIndices(S)
+
+end
+
+"""given arr, return the indices of all the first unique elements"""
+function findFirstUniqueIndices(arr::AbstractArray{T}) where T
+    uniqueInds = Int[]
+    uniqueVals = Set{T}()
+    for (i,val) in enumerate(arr)
+        if val ∉ uniqueVals
+            push!(uniqueVals,val)
+            push!(uniqueInds,i)
+        end
+    end
+    return uniqueInds
 end
