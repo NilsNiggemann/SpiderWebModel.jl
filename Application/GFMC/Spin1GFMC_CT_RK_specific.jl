@@ -127,20 +127,21 @@ CT = SW.ContinuousTimeMethod(τ,nBra,w_avg_estimate,SW.Hxx_RK(μ))
 ##
 outfileDIRtemp = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil_acc/L=$(L)/temp/$(i_arg)/periodic_RK_Full_$(SECTOR_NAME)/mu_$(μ)/"
 
-run = i_arg
-outfile = joinpath(outfileDIRtemp,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run).h5")
-mkpath(dirname(outfile))
+outfile = joinpath(outfileDIRtemp,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(i_arg).h5")
+outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil_acc/L=$(L)/periodic_RK_Full_$(SECTOR_NAME)/mu_$(μ)/"
 
-if !isfile(outfile)
+mkpath(dirname(outfile)) 
+outfileFinal = joinpath(outfileDIR,basename(outfile))
+
+if !isfile(outfile) && !isfile(outfileFinal)
     @info "starting run $run of $NRuns" L τ nBra NSteps NWalkers outfile
 
     @time results = SW.startManyWalkerGFMC(parentState,CT,NWalkers,NSteps,ψG;equilibration_steps,pre_equilibration_steps,scatter_fraction,outfile)
+    flush(stdout)
+    
+    mkpath(outfileDIR)
+    mv(outfile,outfileFinal)
 end
-flush(stdout)
-
-outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil_acc/L=$(L)/periodic_RK_Full_$(SECTOR_NAME)/mu_$(μ)/"
-
-mv(outfile,outfileDIR)
 
 ##
 println("GFMC done")
@@ -187,24 +188,24 @@ end
 
 ##
 
-function separate_files_by_mu(files)
-    for file in files
-        # Extract the mu value from the filename using a regular expression
-        foundmatch = match(r"mu=(-?\d+\.?\d*)_", file)
-        path = dirname(file)
-        if foundmatch !== nothing
-            mu_value = foundmatch.captures[1]
-            # Create the directory for the mu value if it doesn't exist
-            mu_dir = joinpath(path,"mu_$mu_value")
-            # return (mu_dir)
+# function separate_files_by_mu(files)
+#     for file in files
+#         # Extract the mu value from the filename using a regular expression
+#         foundmatch = match(r"mu=(-?\d+\.?\d*)_", file)
+#         path = dirname(file)
+#         if foundmatch !== nothing
+#             mu_value = foundmatch.captures[1]
+#             # Create the directory for the mu value if it doesn't exist
+#             mu_dir = joinpath(path,"mu_$mu_value")
+#             # return (mu_dir)
 
-            mkpath(mu_dir)
-            # Move the file to the corresponding directory
-            mv(file, joinpath(mu_dir, basename(file)))
-        else
-            println("No mu value found in filename: $file")
-        end
-    end
-end
+#             mkpath(mu_dir)
+#             # Move the file to the corresponding directory
+#             mv(file, joinpath(mu_dir, basename(file)))
+#         else
+#             println("No mu value found in filename: $file")
+#         end
+#     end
+# end
 
-separate_files_by_mu(resFiles)
+# separate_files_by_mu(resFiles)

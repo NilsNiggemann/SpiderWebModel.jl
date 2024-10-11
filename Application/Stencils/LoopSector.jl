@@ -497,22 +497,20 @@ with_theme(theme_PiTicks()) do
     fig
 end
 ##
-function round_matrix_elements(matrix, tol = 0.1)
-    scale = maximum(abs,matrix)
+function round_matrix_elements(array, tol = 0.1)
+    scale = maximum(abs,array)
 
     
-    for i in axes(matrix, 1)
-        for j in axes(matrix, 2)
-            element = matrix[i, j]
-            if abs(element) < tol*scale
-                matrix[i, j] = 0
-            else
-                matrix[i, j] = sign(element)
-            end
+    for i in eachindex(array)
+        element = array[i]
+        if abs(element) < tol*scale
+            array[i] = 0
+        else
+            array[i] = sign(element)
         end
     end
     
-    return matrix
+    return array
 end
 
 # Example usage:

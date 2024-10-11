@@ -17,14 +17,14 @@ end
 # entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equiv_open/",0.30)
 entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/L=32/",0.65)
 ##
-files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=32/") for file in files]#[1:2:end]
+files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=32/") for file in files]#[8:end]
 # files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=30/") for file in files]#[1:2:end]
 # filter!(!contains("mu=-0.18"),files)
 # filter!(!contains("mu=-0.2"),files)
 ##
 energies = stack([h5read(file,"energies") for file in files])
 mus = [h5read(file,"mu") for file in files]
-Sqs = stack([h5read(file,"SqsGFMC/100") for file in files])
+Sqs = stack([h5read(file,"SqsGFMC/250") for file in files])
 taus = [h5read(file,"tau") for file in files]
 ##
 with_theme(theme_SimpleTicks()) do
@@ -115,7 +115,7 @@ end
 with_theme(theme_PiTicks()) do 
     Sq = mean(Sqs,dims=3)[:,:,1,:] ./ 4
     # muPlot = [-0.06,0.2,0.3,0.6,0.94,1.1]
-    muPlot = [0.4,0.6,0.9,1.05]
+    muPlot = [0.25,0.4,0.9,1.05]
 
     fig = Figure(fontsize = 22,size = 200 .*(length(muPlot),1.4))
     ticks = PiTicks([0,pi])
@@ -129,6 +129,11 @@ with_theme(theme_PiTicks()) do
     # hm = heatmap!(ax1,kx,ky,Sqpl,colormap = :viridis)
     # muPlot = [0.9,0.92,0.94,0.96]
     mupls = mus[[findfirst(>=(mu),mus) for mu in muPlot]]
+    spinconf = SW.SpinConfig(SW.periodicStateLoops(8),1)
+    ax0 = Axis(fig[1,0];SW.getConfigAxis(spinconf)...,xticks = 1:2:8 ,yticks = 1:2:8,xlabel = L"x",ylabel = L"y")
+    
+    SW.plotSpinConfig!(ax0,spinconf)
+
     axes = [Axis(fig[1,i],aspect=1,title = L"μ = %$(mupls[i])",yticklabelsvisible=i==1,xticks=ticks,yticks=ticks,xlabel = L"q_x",ylabel = L"q_y", ylabelvisible = i==1) for i in eachindex(muPlot)]
 
     for (i,ax) in enumerate(axes)
@@ -139,6 +144,11 @@ with_theme(theme_PiTicks()) do
         Sqpl = SqFunc.(Iterators.product(kx,ky))
         heatmap!(ax,kx,ky,Sqpl,colormap = :viridis)
     end
+    colgap!(fig.layout,2,0)
+    colgap!(fig.layout,3,0)
+    colgap!(fig.layout,4,0)
+    Label(fig[1,0, TopLeft()],L"a)$$",padding = (-30,0,-10,0))
+    Label(fig[1,1, TopLeft()],L"b)$$",padding = (-30,0,-10,0))
     fig
 end
 ##
