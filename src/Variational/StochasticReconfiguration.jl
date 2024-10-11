@@ -46,187 +46,6 @@ function LinearMaps._unsafe_mul!(y, S::QuantumMetric, v::AbstractVector)
 
 end
 
-function getOx_k(ψG,Walker::SpiderWebWalker,k)
-    return getOx_k(ψG,get_config(Walker),k)
-end
-
-function getOx_k(ψG::Union{FullVariationalGuidingFunction,LocalPlaquetteGuidingFunction},Walker::SpiderWebWalker,k)
-    return getOx_k_plaqs(ψG,Walker.n_x,k)
-end
-
-function getOx_k_plaqs(ψG::FullVariationalGuidingFunction,n::AbstractArray,k)
-    par = ψG.params
-
-    α = get_alpha_i(ψG)
-
-    if k in eachindex(α)
-        return n[k]
-    end
-    β = get_beta_ij(ψG)
-
-    (i,j) = Tuple(CartesianIndices(β)[k-lastindex(α)])
-
-    Ok = n[i]*n[j]
-
-    return Ok
-end
-
-getOx_k_plaqs(::LocalPlaquetteGuidingFunction,n::AbstractArray,k) = n[k]
-
-function getOx_k(ψG::RBM,x::AbstractMatrix,k)
-    par = ψG.params
-
-    paramtype = getParameterType(ψG,k)
-
-    if paramtype == 1 
-        return x[k]
-    end
-    bj = get_b_j(ψG)
-    Wij = get_W_ij(ψG)
-    
-    if paramtype == 2
-        j = k - ψG.N
-        θj = get_theta_j(x,j,bj,Wij)
-        return tanh(θj)
-    elseif paramtype == 3
-        i,j = Tuple(CartesianIndices(Wij)[k-ψG.N-length(bj)])
-        θj = get_theta_j(x,j,bj,Wij)
-        return x[i] * tanh(θj)
-    end
-    return Ok
-end
-
-function nearbyInt(x1,x2,x_size)
-    x_rsize = 1.0 / x_size
-
-    dx = x1 - x2
-    dx -= x_size * round(Int,dx * x_rsize)
-end
-
-isperiodic(S::Stencils.StencilArray) = Stencils.boundary(S) == Stencils.Wrap()
-isperiodic(S::StencilSpinConfig) = isperiodic(parent(S))
-
-function getDistReduction(S,ψG::AbstractGuidingFunction) 
-    AllDists = Dict{SVector{2,Int},Int}()
-    indicesMapping = collect(eachindex(ψG.params))
-    uniqueInds = collect(indicesMapping)
-    return (;AllDists,indicesMapping,uniqueInds)
-end
-
-function getDistReduction(S,ψG::FullVariationalGuidingFunction)
-    
-    AllDists = Dict{SVector{2,Int},Int}()
-    if !isperiodic(S)
-        indicesMapping = collect(eachindex(ψG.params))
-        uniqueInds = collect(indicesMapping)
-        return (;AllDists,indicesMapping,uniqueInds)
-    end
-
-    α = get_alpha_i(ψG)
-    Allplaqs = collect(plaquetteIterator(S))
-
-    # AllDists = Dict{Tuple{Int,Int},Int}()
-    
-    betaIndex = lastindex(α)
-    indicesMapping = ones(Int,betaIndex)
-    uniqueInds = [1]
-    # indicesMapping = collect(eachindex(α))
-    # uniqueInds = collect(eachindex(α))
-    Lx,Ly = size(S)
-
-    for (i,ri) in enumerate(Allplaqs)
-        for (j,rj) in enumerate(Allplaqs)
-            Rij = getReducedDist(ri,rj,Lx,Ly)
-            # Rij = SVector(0,0)
-            # Rij = (i,j)
-            betaIndex += 1
-            if Rij ∉ keys(AllDists)
-                uniqueInds = push!(uniqueInds,betaIndex)
-                AllDists[Rij] = length(uniqueInds)
-            end
-            push!(indicesMapping,AllDists[Rij])
-        end
-    end
-
-    return (;AllDists,indicesMapping,uniqueInds)
-
-end
-function getReducedDist(ri,rj,Lx,Ly) 
-    rpr = abs.(SVector(nearbyInt.(ri, rj,(Lx,Ly))))
-    return sort(rpr)
-end
-
-centralPos(Lx,Ly) = ((Lx+1)//2,(Ly+1)//2)
-centralPos(S::AbstractMatrix) = centralPos(size(S)...)
-function getCentralPlaquette(S)
-    allplaqs = collect(plaquetteIterator(S))
-    central = centralPos(S)
-    return allplaqs[findmin([norm(central .- r) for r in allplaqs])[2]]
-end
-function symmetryReducePlaquettes(S,R_ref)
-    
-    AllDists = Dict{SVector{2,Int},Int}()
-
-    Allplaqs = collect(plaquetteIterator(S))
-
-    indicesMapping = Int[]
-    uniqueInds = Int[]
-    Lx,Ly = size(S)
-    ri = R_ref
-    for (j,rj) in enumerate(Allplaqs)
-        Rij = getReducedDist(ri,rj,Lx,Ly)
-        if Rij ∉ keys(AllDists)
-            uniqueInds = push!(uniqueInds,j)
-            AllDists[Rij] = length(uniqueInds)
-        end
-        push!(indicesMapping,AllDists[Rij])
-    end
-    return (;AllDists,indicesMapping,uniqueInds)
-end
-
-function getDistReduction(S,ψG::LocalPlaquetteGuidingFunction)
-    AllDists = Dict{SVector{2,Rational{Int}},Int}()
-    if isperiodic(S)
-        indicesMapping = ones(Int,length(ψG.params))
-        uniqueInds = [1]
-        return AllDists,indicesMapping,uniqueInds
-    end
-    
-    α = get_alpha_i(ψG)
-    Allplaqs = collect(plaquetteIterator(S))
-
-    indicesMapping = Int[]
-    uniqueInds = Int[]
-    LxLy = size(S)
-    r_Central = centralPos(S)
-    for (i,ri) in enumerate(Allplaqs)
-        x,y = ri .- r_Central
-        if y < -x
-            x,y = -y,-x
-        end
-        if y>x
-            x,y = y,x
-        end
-
-        symMapped = SVector(x,y)
-        if symMapped ∉ keys(AllDists)
-            uniqueInds = push!(uniqueInds,i)
-            AllDists[symMapped] = length(uniqueInds)
-        end
-        push!(indicesMapping,AllDists[symMapped])
-    end
-    
-    return (;AllDists,indicesMapping,uniqueInds)
-
-end
-
-function add_reconstructedFullParams!(ψG,indicesMapping,trimmedparams)
-    for (i,k) in enumerate(indicesMapping)
-        ψG.params[i] += trimmedparams[k]
-    end
-    return ψG
-end
-
 function reconf_obs(InitialState::ConfType,method::AbstractGFMCMethod,configs,ψG,inequivParams=eachindex(ψG.params)) where {ConfType}
     plaqs = collect(plaquetteIterator(InitialState))
     AffectedPlaquetteList = precomputeAffectedPlaquettes(InitialState)
@@ -302,16 +121,18 @@ function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatri
 end
 stochastic_reconfiguration_step(E_i,Ok_i,::AbstractSRSolver) = error("solver not implemented")
 
-function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,ψG,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,reconfigure=true,initializer = UnguidedWalkInitializer(equilibration_steps,0.8);verbose=true,report_steps=1,reset = true)
+function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,GWF::SymmetryReducedWaveFunction,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,reconfigure=true,initializer = UnguidedWalkInitializer(equilibration_steps,0.8);verbose=true,report_steps=1,reset = true)
     
-    ψG = deepcopy(ψG)
+    (;psi,indicesMapping,uniqueInds) = GWF
+    ψG = deepcopy(psi)
     params = ψG.params
 
     convergedSteps = 0
 
     normDelta = Inf
 
-    _,indicesMapping,uniqueInds = getDistReduction(InitialState,ψG)
+    # _, = getDistReduction(InitialState,ψG)
+
     maxNSteps = maximum(NSteps)
     prob = setup_GFMC_problem(InitialState,method,Nwalkers,maxNSteps,ψG) 
     initializeGFMC!(prob,equilibration_steps,initializer)
@@ -383,8 +204,13 @@ function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSte
     
     NStepsVec = makeVec(NSteps,n)
     dtVec = makeVec(dt,n)
-    return _stochastic_reconfiguration(InitialState,method,solver,NStepsVec,ψG,n,dtVec,equilibration_steps,rel_tolerance,Nwalkers,outfile,reconfigure,initializer;kwargs...)
+    GWF = _default_symmetry(InitialState,ψG)
+
+    return _stochastic_reconfiguration(InitialState,method,solver,NStepsVec,GWF,n,dtVec,equilibration_steps,rel_tolerance,Nwalkers,outfile,reconfigure,initializer;kwargs...)
 end
+
+_default_symmetry(InitialState,ψG::AbstractGuidingFunction) = getDistReduction(InitialState,ψG)
+_default_symmetry(InitialState,ψG::SymmetryReducedWaveFunction) = ψG
 
 makeVec(x::AbstractVector,len) = x
 makeVec(x::Number,len) = fill(x,len)
