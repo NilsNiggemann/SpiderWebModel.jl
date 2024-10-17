@@ -15,7 +15,7 @@ function prepResults(folder,mufilter)
     ens = stack(SW.getEnergies.(TotalWeights,energies,1,1000))
 end
 # entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equiv_open/",0.30)
-entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/L=32/",0.65)
+# entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/L=32/",0.65)
 ##
 files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=32/") for file in files]#[8:end]
 # files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=30/") for file in files]#[1:2:end]
@@ -24,11 +24,11 @@ files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2
 ##
 energies = stack([h5read(file,"energies") for file in files])
 mus = [h5read(file,"mu") for file in files]
-Sqs = stack([h5read(file,"SqsGFMC/250") for file in files])
+Sqs = stack([h5read(file,"SqsGFMC/50") for file in files])
 taus = [h5read(file,"tau") for file in files]
 ##
 with_theme(theme_SimpleTicks()) do
-    ind = 3
+    ind = 10
     Nsites = length(Sqs[1:end-1,1:end-1,1,ind])
     enmean = mean(energies,dims=2)[1:250,1,ind] ./ Nsites
 
@@ -43,14 +43,14 @@ with_theme(theme_SimpleTicks()) do
 end
 ##
 with_theme(theme_SimpleTicks()) do 
-    tauindices = [round(Int,20 ÷ tau) for tau in taus]
+    tauindices = [round(Int,8 ÷ tau) for tau in taus]
     energies_slice = zeros(size(energies,2),size(energies,3))
     for (i,tau) in enumerate(tauindices)
         energies_slice[:,i] .= @view energies[tau,:,i]
     end
 
-    enmean = mean(energies_slice,dims=1)[1,:]
-    enstd = std(energies_slice,dims=1)[1,:]
+    enmean = dropdims(mean(energies_slice,dims=1),dims=1)
+    enstd = dropdims(std(energies_slice,dims=1),dims=1)
     Nsites = 30^2
     push!(enmean,0)
     push!(enstd,0)
@@ -115,7 +115,7 @@ end
 with_theme(theme_PiTicks()) do 
     Sq = mean(Sqs,dims=3)[:,:,1,:] ./ 4
     # muPlot = [-0.06,0.2,0.3,0.6,0.94,1.1]
-    muPlot = [0.25,0.4,0.9,1.05]
+    muPlot = [0.0,0.4,0.9,1.05]
 
     fig = Figure(fontsize = 22,size = 200 .*(length(muPlot),1.4))
     ticks = PiTicks([0,pi])
@@ -263,35 +263,40 @@ with_theme(theme_SimpleTicks()) do
 end
 
 ##
-res1 = SW.readResults(entest[2],2000)[1:2]
-Sqs = SW.getSqsGFMC(res1,200;discardborder = 4)
+files22 = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=22/") for file in files]#[8:end]
+# files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=30/") for file in files]#[1:2:end]
+# filter!(!contains("mu=-0.18"),files)
+# filter!(!contains("mu=-0.2"),files)
+##
+energies22 = stack([h5read(file,"energies") for file in files22])
+mus22 = [h5read(file,"mu") for file in files22]
+Sqs22 = stack([h5read(file,"SqsGFMC/50") for file in files22])
+taus22 = [h5read(file,"tau") for file in files22]
 ##
 with_theme(theme_PiTicks()) do 
-    Sq = mean(Sqs) ./ 4
-
+    mu = 0.15
     fig = Figure(fontsize = 22,size = 400 .*(1.4,1.4))
     ticks = PiTicks([0,pi])
+    axes = [
+        Axis(fig[1,1],aspect = 1,xlabel = L"q_x",ylabel = L"q_y",xticks = ticks,yticks = ticks,title = L"μ = %$(mu)"),
+        Axis(fig[1,2],aspect = 1,xlabel = L"q_x",ylabel = L"q_y",xticks = ticks,yticks = ticks,title = L"μ = %$(mu)"),
+    ]
 
-    ax1 = Axis(fig[1,1],aspect = 1,xlabel = L"q_x",ylabel = L"q_y",xticks = ticks,yticks = ticks,title = L"μ = 0.6")
-    kx = ky = trueMomenta(-pi/2,1.5pi,size(Sq,1)-1)
-    SqFunc = SW.getSqCont(Sq)
-    heatmap!(ax1,kx,ky,SqFunc.(Iterators.product(kx,ky)),colormap = :viridis)
-    fig
-end
-##
-mags = SW.getObs(res1[1],float,100)
+    for (ax1,L,mus,Sq) in zip(axes,(22,32),(mus22,mus),(Sqs22,Sqs))
 
-##
-let
-    mags1 = mags[begin+4:end-4,begin+4:end-4] ./2
-    # mags1 = mags./2
-    # for I in CartesianIndices(mags1)
-    #     i,j = Tuple(I)
-    #     if iseven(i+j)
-    #         mags1[I] = NaN
-    #     end
-    # end
-    fig,ax,hm = heatmap(mags1)
-    Colorbar(fig[1,2], hm)
+        muIndex = findfirst(==(mu),mus)
+        SqsGFMC = Sq[:,:,:,muIndex]./ 4
+
+        SqMat = dropdims(mean(SqsGFMC,dims=3),dims=3)
+        SqErr = dropdims(std(SqsGFMC,dims=3),dims=3)
+
+
+        # ax2 = Axis(fig[1,1],aspect = 1,xlabel = L"q_x",ylabel = L"q_y",xticks = ticks,yticks = ticks,title = L"μ = 0.6")
+
+        kx = ky = trueMomenta(-pi/2,1.5pi,size(SqMat,1)-1)
+        SqFunc = SW.getSqCont(SqMat)
+        hm = heatmap!(ax1,kx,ky,SqFunc.(Iterators.product(kx,ky)),colormap = :viridis)
+        # Colorbar(fig[1,2],hm)
+    end
     fig
 end
