@@ -28,10 +28,11 @@ include("Fluctuations/ConstructHilbertSpace.jl")
 include("Fluctuations/ED.jl")
 include("Fluctuations/GreensFunctionMonteCarlo.jl")
 include("Fluctuations/Operators.jl")
-include("Fluctuations/VariationalFunctions.jl")
 include("Fluctuations/StraightForwardWalking.jl")
-include("Fluctuations/StochasticReconfiguration.jl")
 include("Fluctuations/RandomFluctuations.jl")
+
+include("Variational/VariationalFunctions.jl")
+# using .VariationalFunctions
 
 include("Plotting/plotSpinConfig.jl")
 include("Plotting/PlaquetteFlips.jl")

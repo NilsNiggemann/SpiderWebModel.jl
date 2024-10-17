@@ -7,9 +7,9 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=2-10:00:00
+#SBATCH --time=3-10:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
-#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK/%L24a.out
+#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK_Staircase/%L24_a.out
 #SBATCH --partition=normal
 #SBATCH --ntasks=1
 #SBATCH --mem=220GB
@@ -17,7 +17,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --ntasks-per-node=1
 ~/.bashrc
-julia -O3 -t $SLURM_CPUS_PER_TASK /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/Spin1GFMC_CT_RK.jl $SLURM_ARRAY_TASK_ID
+julia -O3 -t $SLURM_CPUS_PER_TASK /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/Spin1GFMC_CT_RK_stairCase.jl $SLURM_ARRAY_TASK_ID
 exit
 =#
 
@@ -100,9 +100,14 @@ function getInitializer(S,mu;NWalkers=128,NSteps = 100,tau = 1. + 2mu,OptIndep =
 end
 ##
 
-SECTOR_NAME  = "Condensate"
+SECTOR_NAME  = "StairCase"
+function get_S_stair(S)
+    S_staircase = copy(S)
+    S_staircase .= 4*SW.getStairCase(size(S,1))
+    return S_staircase
+end
 
-parentState = get_S_condensate!(
+parentState = get_S_stair(
     SW.stencilConfig(
         zeros(L,L),1,
         boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()

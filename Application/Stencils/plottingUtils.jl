@@ -1,3 +1,6 @@
+using StaticArrays
+using Optim
+
 _getkwargs(::Any) = (;xlabel = L"projection order $$")
 _getkwargs(m::SW.ContinuousTimeMethod) = (;xlabel = L"\tau")
 _getscaling(m::SW.DiscreteTimeMethod) = m.nBranch
@@ -220,3 +223,82 @@ function getLastSlice(arr::AbstractArray{T,N}) where {T,N}
     slicedims = tuple(collect(1 for i in 1:N-1)...)
     return view(arr,slicedims...,:)
 end
+
+function SqFieldTheory_full(qx::Real, qy::Real, K::Real, W::Real, U::Real)
+    cx = cos(qx)
+    cy = cos(qy)
+    sx = sin(qx)
+    sy = sin(qy)
+    
+    numerator = (cx - cy + 2 * sx * sy)^2
+    denominator = sqrt((cx - cy)^2 + 4 * sx^2 * sy^2) * sqrt(U / W + 4 * ((cx - cy)^2 + 4 * sx^2 * sy^2)) +1e-30
+    
+    return sqrt(K / (4 * W)) * numerator / denominator
+end
+
+SqFieldTheory(qx, qy, A,r) = SqFieldTheory_full(qx, qy, 4*A^2,1, r)
+
+
+SqFieldTheory(q::AbstractVector,A::Real,r::Real) = SqFieldTheory(q[1],q[2],A,r)
+
+SqFieldTheory(q::AbstractVector,coefs::AbstractVector) = SqFieldTheory(q[1],q[2],coefs[1],coefs[2])
+
+function optimizeCoeffs(SqMat,weightfunc=x->one(first(x)))
+    q = trueMomenta(0., 2pi, size(SqMat, 1) - 1)[1:end-1]
+
+    function loss(v, w)
+        l = 0.0
+        v = abs(v)
+        w = abs(w)
+        for (i, qx) in enumerate(q), (j, qy) in enumerate(q)
+            l += abs2(SqMat[i, j] - SqFieldTheory(qx, qy, v, w))*weightfunc(SA[qx,qy])
+        end
+        return l
+    end
+
+    loss(v) = loss(v[1], v[2])
+
+    x0 = [1., 1.]
+
+    res = optimize(loss, x0)
+    @info res
+    coefs = abs.(Optim.minimizer(res))
+    return coefs
+end
+function rasterCurve(curvePoints,grid,t)
+
+    getPos(point) = findmin(x->SW.norm(SW.SVector(x.-point)),grid)[2]
+    positions = getPos.(curvePoints)
+    tnew = empty(t)
+    posnew = empty(positions)
+    for i in eachindex(t)
+        p = positions[i]
+        if p ∉ posnew
+            push!(tnew, t[i])
+            push!(posnew,p)
+        end 
+    end
+    return tnew,posnew
+end
+
+function pointPath(p1::StaticArray,p2::StaticArray,res)
+    Path = Vector{typeof(p1)}(undef,res)
+    for i in eachindex(Path)
+        Path[i] = p1 + i/res*(p2 -p1)
+    end
+    return Path
+end
+"""res contains the number of points along -pi,pi"""
+function fetchKPath(points,res = 100)
+    Path = Vector{typeof(points[begin])}(undef,0)
+    # Path = []
+    PointIndices = [1]
+    for i in eachindex(points[begin:end-1])
+        p1 = points[i]
+        p2 = points[i+1]
+        append!(Path,pointPath(p1,p2,round(Int,SW.norm(p1-p2)/2pi * res)))
+        append!(PointIndices,length(Path)) # get indices corresponding to points
+    end
+    return PointIndices,Path
+end
+

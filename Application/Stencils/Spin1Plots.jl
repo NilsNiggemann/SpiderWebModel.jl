@@ -9,18 +9,7 @@ function trueMomenta(kmin,kmax,L)
     return (nmin : nmax) .* 2pi/L
 end
 ##
-# filesRK = readdir("/p/scratch/pmfrg/niggemann1/Spiderweb/DataRK/",join=true)
-# resRK = h5open(filesRK[end]) do f
-#     read(f)
-# end
-##
-resRK = SW.readResults(first(readdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataRK/L=100/2/",join=true)),1000);
-##
-SqRK = let  
-    # RKConfs = eachslice(resRK[1].SaveConfigs,dims=(3,4))
-    SqRK = SW.getSqGFMC(resRK[end],1)
-    
-end
+SqRK = h5read("../Data/Spin1S0_RK.h5","Sq")
 
 ##
 res = h5open("../Data/Spin1GFMC_Eval_periodic.h5") do f
@@ -32,7 +21,7 @@ resOld = h5open("../Data/Spin1GFMC_Eval_periodic_L40.h5") do f
 end
 
 projectionSteps = 500
-SqsGFMC = eachslice(resOld["SqsGFMC"][string(projectionSteps)],dims=3)
+SqsGFMC = eachslice(resOld["40"]["SqsGFMC"][string(projectionSteps)],dims=3)
 
 SqMat = mean(real(SqsGFMC)) ./4
 errMat = std(real(SqsGFMC)) ./4
@@ -69,62 +58,10 @@ with_theme(theme_SimpleTicks()) do
     fig
 end
 ##
-function SqFieldTheory(x,y)
-    num = cos(x) - cos(y) +2sin(x)sin(y) 
-    denom = (cos(x) - cos(y))^2 + (2sin(x)sin(y))^2
-    return num^2/(sqrt(denom)+1e-30)
-end
-SqFieldTheory(k) = SqFieldTheory(k[1],k[2])
-##
-function SqFieldTheory2(kx,ky,k,b2,b3,A=1)
-    A*(sqrt(2)*sqrt(-((-4 + 4*cos(kx)*cos(ky) + cos(2*kx)*(1 - 2*cos(2*ky)) + cos(2*ky))*(40*(b2 + b3) + k + 8*b2*(-8*cos(kx)*cos(ky) + cos(2*ky)) + 8*cos(2*kx)*(b2 - 4*b3 + (b2 + 2*b3)*cos(2*ky)) + 4*b3*(cos(4*kx) - 8*cos(2*ky) + cos(4*ky)))))*(cos(kx) - cos(ky) + 2*sin(kx)*sin(ky))^2)/((cos(kx) - cos(ky))^2 + 4*sin(kx)^2*sin(ky)^2+1e-30)
-end
-
-SqFieldTheory2(k::AbstractVector,a,b,c,A=1) = SqFieldTheory2(k[1],k[2],a,b,c,A)
-
-function SqFieldTheory3(kx,ky,b2,b3)
-    SqFieldTheory2(kx,ky,0,b2,b3,1)
-end
-
-SqFieldTheory3(k::AbstractVector,b,c) = SqFieldTheory3(k[1],k[2],b,c)
-##
-function optimizeCoeffs(SqMat)
-    k = 2pi .* LinRange(0,1,size(SqMat,1))
-
-    # SqFT = [SqFieldTheory2(x,y,0,0) for x in kx, y in ky]
-    function loss(b2,b3)
-        l = 0.
-        b2 = abs(b2)
-        b3 = abs(b3)
-        for (i,kx) in enumerate(k), (j,ky) in enumerate(k)
-        # for (i,kx) in enumerate(k)
-            # ky = 0
-            # j = 1
-            # l += abs2(SqMat[i,j] - SqFieldTheory2(kx,ky,v,w))#/(SqMat[i,j]+1e-5)
-            # if (kx^2 +ky^2) < (0.8pi)^2
-            # l += abs2(SqMat[i,j] - SqFieldTheory2(kx,ky,b1,b2,b3))*(1/(SqMat[i,j]+1e-10) + 1)
-            l += abs2(SqMat[i,j] - SqFieldTheory3(kx,ky,b2,b3))#*(0.7/(kx^2 +ky^2 +1e-2) + 1)
-            # end
-        end
-        # for (i,kx) in enumerate(kx)
-        #     l += abs2(SqMat[i,1] - SqFieldTheory2(kx,0,v,w))/(SqMat[i,1]+1e-5)
-        # end
-        return l
-    end
-    loss(v) = loss(v[1],v[2])
-
-    x0 = [1, 1.]
-
-    res = optimize(loss, x0)
-    @info res
-    coefs = abs.(Optim.minimizer(res))
-    return coefs
-end
-
 fittingCoefs = optimizeCoeffs(SqMat)
 ##
 function getFittedSq(coefs)
-    SqFit(kx,ky) = SqFieldTheory3(kx,ky,coefs...)
+    SqFit(kx,ky) = SqFieldTheory(kx,ky,coefs...)
     SqFit(k::Union{AbstractVector,Tuple}) = SqFieldTheory3(k[1],k[2],coefs...)
     SqFit
 end
@@ -266,7 +203,9 @@ with_theme(theme_PiTicks()) do
     hmMC = halfhalfheatmap!(axMC,kx,ky,SqFieldTheory,SqFunc,x->-x-pi,normalize = true)
     # SqFT = [SqFieldTheory(x,y) for x in kx, y in ky]
     # heatmap!(axerr,kx,ky,err,colormap = :viridis,colorrange = extrema(!isnan,Sq))
+    return err
     hmerr = heatmap!(axerr,kxSmall,kySmall,err,colormap = :viridis)
+
     # heatmap!(axDiff,kx,ky,(Sq ./maximum(Sq)) .- (SqFT ./maximum(SqFT)),colormap = :viridis)
 
     Colorbar(fig[2,1],hmMC,label = L"\mathcal{S}(\textbf{q})",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
