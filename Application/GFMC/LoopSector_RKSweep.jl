@@ -12,7 +12,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=48
 #SBATCH --mem=90GB         # memory , more means less gc time
-#SBATCH --time=0-08:00:00          # total run time limit (HH:MM:SS)
+#SBATCH --time=0-24:00:00          # total run time limit (HH:MM:SS)
 #SBATCH --mail-type=END
 #SBATCH --output=/p/project/pmfrg/niggemann1/JobsOutput/Spiderweb/GFMC/Spin1_%a.out    # File to which standard Out- will be written
 
@@ -34,7 +34,8 @@ cd(@__DIR__)
 i_arg = parse(Int, ARGS[1])
 
 # muRange = [0,0.05,0.07,0.08,0.1,0.15,0.2]
-muRange = collect(0:0.01:0.14)
+muRange = collect(-0.2:0.1:0.9)
+# muRange1 = collect(0.15:0.05:0.14)
 
 μ = muRange[i_arg]
 import Pkg
@@ -45,20 +46,16 @@ using SpiderWebModel.HDF5
 function roundToEven(x)
     return Int(2*round(x/2))
 end 
-
-function get_S_hash(S)
-    Base.require_one_based_indexing(S)
-    S_hash = copy(S)
-    Lx,Ly = size(S)
+function get_S_condensate(S)
+    S_cond = copy(S)
     
-    S_hash[roundToEven(Lx÷4)+1,1:2:end] .= 2
-    S_hash[roundToEven(Lx*3/4)+1,1:2:end] .= -2
-    S_hash[2:2:end,roundToEven(Ly÷4)] .= 2
-    S_hash[2:2:end,roundToEven(Ly*3/4)] .= -2
-    return S_hash
+    S_cond[begin:2:end,begin:4:end] .= 2
+
+    S_cond[begin+1:4:end,begin+1:2:end] .= -2
+    return S_cond
 end
 ##
-S = SW.stencilConfig(zeros(26,26),1;
+S = SW.stencilConfig(zeros(28,28),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 
@@ -86,11 +83,11 @@ function makeRun(Svec,μ,folder;Nwalkers = 30,NSteps = 8000,NwalkersOpt = 1,NSte
     
     if !isdir(files_folder)
         mkpath(files_folder)
-        # CTFindOpt = SW.ContinuousTimeMethod(1.,1,(1-μ)* 0.266*length(S),SW.Hxx_RK(μ))
+        CTFindOpt = SW.ContinuousTimeMethod(1.,1,(1-μ)* 0.266*length(S),SW.Hxx_RK(μ))
         
-        # @time OptimStart = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CTFindOpt,NwalkersOpt,NStepsOpt,ψG;equilibration_steps=1,pre_equilibration_steps=30_000,scatter_fraction=0.5,initializer=initializer0) for _ in 1:OptIndep])
-        # initializer = SW.WeightedConfigsInitializers(OptimStart)
-        initializer = initializer0
+        @time OptimStart = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CTFindOpt,NwalkersOpt,NStepsOpt,ψG;equilibration_steps=1,pre_equilibration_steps=50_000,scatter_fraction=0.5,initializer=initializer0) for _ in 1:OptIndep])
+        initializer = SW.WeightedConfigsInitializers(OptimStart)
+        # initializer = initializer0
 
         CT2 = SW.ContinuousTimeMethod(0.1,1,(1-μ)* 0.266*length(S),SW.Hxx_RK(μ))
         
@@ -102,20 +99,18 @@ function makeRun(Svec,μ,folder;Nwalkers = 30,NSteps = 8000,NwalkersOpt = 1,NSte
         end
         flush(stdout)
         GC.gc()
+        GC.gc()
     end
+    GC.gc()
     GC.gc()
 end
 makeRuns(S::SW.StencilSpinConfig,args...;kwargs...) = makeRuns([S],args...;kwargs...)
 
+folder = "/p/scratch/pmfrg/niggemann1/LoopSector/L=$(size(S,1))/noString"
+S_condensate = get_S_condensate(S)
+@assert SW.fulFillsConstraint(S_condensate)
+makeRun(S_condensate,μ,folder;Nwalkers = 48*70,NSteps = 5000,NwalkersOpt = 48*80,NStepsOpt = 400,OptIndep = 20,equilibration_steps=0)
 ##
-S_hash = get_S_hash(S)
-
-folder = "/p/scratch/pmfrg/niggemann1/LoopSector_hash2/L=$(size(S,1))/noString"
-makeRun([S,S_hash],μ,folder;Nwalkers = 48*70,NSteps = 5000,NwalkersOpt = 48*80,NStepsOpt = 400,OptIndep = 20,equilibration_steps=0)
+folder = "/p/scratch/pmfrg/niggemann1/LoopSector/L=$(size(S,1))/noString"
+makeRun(S,μ,folder;Nwalkers = 48*100,NSteps = 5000,NwalkersOpt = 48*100,NStepsOpt = 400,OptIndep = 20,equilibration_steps=0)
 GC.gc()
-# ##
-# folder = "/p/scratch/pmfrg/niggemann1/LoopSector/L=$(size(S,1))/string"
-# makeRun(S_string,μ,folder;Nwalkers = 48*50,NSteps = 5000,NwalkersOpt = 48*80,NStepsOpt = 400,OptIndep = 20)
-
-# folder = "/p/scratch/pmfrg/niggemann1/LoopSector/L=$(size(S,1))/two_strings"
-# makeRun(S_two_strings,μ,folder;Nwalkers = 48*50,NSteps = 5000,NwalkersOpt = 48*80,NStepsOpt = 400,OptIndep = 20)
