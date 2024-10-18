@@ -85,11 +85,17 @@ end
 function getMoves!(
     Walker::SpiderWebWalker
 )
-
     Conf = get_config(Walker)
     moves = Walker.moves
+    getMoves!(moves,Conf)
+end
+
+function getMoves!(
+    moves::AbstractVector,
+    Conf::StencilSpinConfig
+)
     empty!(moves)
-    for I in plaquetteIterator(Walker)
+    for I in plaquetteIterator(Conf)
         applPlus, applMinus = P_applicable(Conf, I)
         i,j = I
         if applMinus
@@ -99,7 +105,6 @@ function getMoves!(
             push!(moves, getOperatorRep(i,j,1))
         end
     end
-
     return moves
 end
 # getMoves!(Walker::SpiderWebWalker) = getMoves!(Walker.moves,Walker)

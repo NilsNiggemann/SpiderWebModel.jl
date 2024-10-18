@@ -38,14 +38,19 @@ reset = false,
 
 plotVarEn(stochReconfRes)
 ##
+SW.stochastic_reconfiguration(S,CT,100,ψGSymm,100,1.0,SW.IterativeSRSolver();Nwalkers = 10,reconfigure=true,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+report_steps = 5,
+reset = false,
+# outfile = "tempSR/SR2.h5"
+)
 
 ##
 SW.Random.seed!(1234)
 
-@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,28,10_000,ψGold;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:12])
+@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,120,3_000,ψGold;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:12])
 ##
 
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,28,10_000,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:12])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,120,3_000,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:12])
 ##
 
 # plotEnergies(results,nBra,-20.35;Emin=-20.5,Emax=-19.8) # L=10
