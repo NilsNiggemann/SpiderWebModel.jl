@@ -9,7 +9,9 @@ end
 
 @inline Base.parent(S::StencilSpinConfig) = S.Mat
 @inline getSpin(::StencilSpinConfig{Val{MVal}}) where {MVal} = MVal/2
-@inline Base.similar(S::StencilSpinConfig) = StencilSpinConfig(similar(parent(S)), S.M)
+@inline Base.similar(S::StencilSpinConfig,dims::Tuple) = StencilSpinConfig(similar(parent(S),dims), S.M)
+@inline Base.similar(S::StencilSpinConfig,dims::Vararg{Int64, N}) where { N} = StencilSpinConfig(similar(parent(S),dims...), S.M)
+# @inline Base.similar(S::StencilSpinConfig,dims...) = StencilSpinConfig(similar(parent(S),dims...), S.M)
 # @inline Base.copy(S::StencilSpinConfig) = StencilSpinConfig(copy(parent(S)), S.M)
 function stencilConfig(A::AbstractMatrix{<:AbstractFloat}, S,paddingValue = Int8(typemax(Int8)); kwargs...)
     return stencilConfig(Int8.(2 .*A), S,paddingValue; kwargs...)
