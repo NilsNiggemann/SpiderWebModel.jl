@@ -12,7 +12,9 @@ meanstd(x) = (mean(x),std(x))
 function roundToEven(x)
     return Int(2*round(x/2))
 end 
-
+function roundToOdd(x)
+    return Int(2*round(x/2)+1)
+end
 function get_S_hash(S)
     Base.require_one_based_indexing(S)
     S_hash = copy(S)
@@ -48,7 +50,7 @@ end
 
 
 ##
-L = 20
+L = 16
 println("Starting")
 S = SW.stencilConfig(zeros(L,L),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
@@ -86,8 +88,9 @@ S_LoopsDense = copy(S) .= SW.periodicStateDenseLoops(size(S,1))
 @assert SW.fulFillsConstraint(S_plainWeave)
 @assert SW.fulFillsConstraint(S_LoopsDense)
 ##
-μ = 0.0
+μ = -1
 ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
+ψG = SW.PlaquetteNumberGuidingFunction(0.8)
 
 ##
 function makeRuns(S_vec::AbstractVector,muRange,folder;Nwalkers = 30,NSteps = 8000,NwalkersOpt = 1,NStepsOpt = NSteps,OptIndep = Threads.nthreads())
@@ -127,34 +130,34 @@ makeRuns(S::SW.StencilSpinConfig,args...;kwargs...) = makeRuns([S],args...;kwarg
 muRange = collect(-0.1:0.05:1)
 # append!(muRange,collect(0.05:0.01:0.09))
 sort!(muRange,rev = true)
-# folder = "temp/LoopSector/L=$(size(S,1))/noString"
+folder = "temp/LoopSector/L=$(size(S,1))/noString"
 # S_hash = get_S_hash(S)
-# makeRuns([S,S_hash],muRange,folder;Nwalkers = 200,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 300,OptIndep = 12)
+makeRuns([S,],muRange,folder;Nwalkers = 420,NSteps = 4000,NwalkersOpt = 560,NStepsOpt = 300,OptIndep = 12)
 ##
-# folder = "temp/LoopSectorHybridInit2/L=$(size(S,1))/string"
-# makeRuns(S_string,muRange,folder;Nwalkers = 80,NSteps = 2000,NwalkersOpt = 120,NStepsOpt = 100,OptIndep = 4)
+folder = "temp/LoopSectorHybridInit2/L=$(size(S,1))/string"
+makeRuns(S_string,muRange,folder;Nwalkers = 180,NSteps = 4000,NwalkersOpt = 120,NStepsOpt = 100,OptIndep = 4)
 # ##
-# folder = "temp/LoopSector/L=$(size(S,1))/two_strings"
-# makeRuns(S_two_strings,muRange,folder;Nwalkers = 180,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 4)
+folder = "temp/LoopSector/L=$(size(S,1))/two_strings"
+makeRuns(S_two_strings,muRange,folder;Nwalkers = 180,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 4)
 ##
-# folder = "temp/LoopSector/L=$(size(S,1))/four_strings"
-# makeRuns(S_four_strings,muRange,folder;Nwalkers = 400,NSteps = 4000,NwalkersOpt = 600,NStepsOpt = 1000,OptIndep = 24)
+folder = "temp/LoopSector/L=$(size(S,1))/four_strings"
+makeRuns(S_four_strings,muRange,folder;Nwalkers = 180,NSteps = 4000,NwalkersOpt = 600,NStepsOpt = 100,OptIndep = 4)
 ##
-# folder = "temp/LoopSectorNoInit/L=$(size(S,1))/string_condensate"
-# makeRuns(S_string_condensate,muRange,folder;Nwalkers = 120,NSteps = 4000,NwalkersOpt = 160,NStepsOpt = 100,OptIndep = 4)
+folder = "temp/LoopSectorNoInit/L=$(size(S,1))/string_condensate"
+makeRuns(S_string_condensate,muRange,folder;Nwalkers = 180,NSteps = 4000,NwalkersOpt = 160,NStepsOpt = 100,OptIndep = 4)
 ##
-# folder = "temp/LoopSector/L=$(size(S,1))/diag_condensate"
-# makeRuns(S_diag_condensate,muRange,folder;Nwalkers = 180,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 4)
+folder = "temp/LoopSector/L=$(size(S,1))/diag_condensate"
+makeRuns(S_diag_condensate,muRange,folder;Nwalkers = 180,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 4)
 
 ##
-# folder = "temp/LoopSector/L=$(size(S,1))/stair"
-# makeRuns(S_stair,muRange,folder;Nwalkers = 500,NSteps = 10000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 6)
+folder = "temp/LoopSector/L=$(size(S,1))/stair"
+makeRuns(S_stair,muRange,folder;Nwalkers = 360,NSteps = 4000,NwalkersOpt = 420,NStepsOpt = 100,OptIndep = 6)
 ##
-# folder = "temp/LoopSector/L=$(size(S,1))/plainWeave"
-# makeRuns(S_plainWeave,muRange,folder;Nwalkers = 150,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 4)
+folder = "temp/LoopSector/L=$(size(S,1))/plainWeave"
+makeRuns(S_plainWeave,muRange,folder;Nwalkers = 360,NSteps = 4000,NwalkersOpt = 420,NStepsOpt = 100,OptIndep = 4)
 ##
 folder = "temp/LoopSector/L=$(size(S,1))/LoopsDense"
-makeRuns(S_LoopsDense,muRange,folder;Nwalkers = 150,NSteps = 4000,NwalkersOpt = 360,NStepsOpt = 100,OptIndep = 4)
+makeRuns(S_LoopsDense,muRange,folder;Nwalkers = 360,NSteps = 4000,NwalkersOpt = 420,NStepsOpt = 100,OptIndep = 4)
 
 ##
 if "TERM_PROGRAM" ∉ keys(ENV)
@@ -317,7 +320,7 @@ let
         L"condensate$$",
         L"ℓ=0",
     # L"ℓ = 1",
-        # L"ℓ = 2",
+        L"ℓ = 2",
         L"diag$$",
         L"stair$$",
         L"plainWeave$$",
@@ -327,7 +330,7 @@ let
     EnergyPlot([
         res_string_condensate_20,
         res_noString_20,
-        # res_two_strings_20,
+        res_two_strings_20,
         res_diag_condensate_20,
         res_stair_20,
         res_plainWeave_20,
@@ -378,13 +381,13 @@ end
 
 
 ##
-μ = 0.2
+μ = 0.7
 # res1 = getRes("temp/LoopSector/L=20/noString/μ=$μ")
 # res1 = getRes("temp/LoopSector/L=20/string_condensate/μ=$μ")
-# res1 = getRes("temp/LoopSector/L=20/diag_condensate/μ=$μ",3600)
-# res1 = getRes("temp/LoopSector/L=20/stair/μ=$μ")
+# res1 = getRes("temp/LoopSector/L=20/diag_condensate/μ=$μ")
+res1 = getRes("temp/LoopSector/L=20/stair/μ=$μ")
 # res1 = getRes("temp/LoopSector/L=20/string_condensate/μ=$μ")
-res1 = getRes("temp/LoopSector/L=20/LoopsDense/μ=$μ")
+# res1 = getRes("temp/LoopSector/L=20/LoopsDense/μ=$μ")
 # res1 = getRes("temp/LoopSector/L=40/plainWeave/μ=$μ")
 # res1 = getRes("temp/LoopSector/L=20/two_strings/μ=$μ")
 ##
@@ -439,7 +442,7 @@ with_theme(theme_SimpleTicks()) do
 
         Sqcut = [Sq(x,y) for (x,y) in p1_points]
         Sqerrcut = [Sqerr(x,y) for (x,y) in p1_points]
-        SqFT = [SqFieldTheory(q,fittingCoefs...) for q in p1_points]
+        SqFT = [SqFieldTheory(q[1],q[2],fittingCoefs...) for q in p1_points]
         
         # SqFT = [SqFieldTheory(q,1,10) for q in qpoints]
         scatter!(ax,p1_points,marker = '∘' ,color = color,markersize = 10)
@@ -463,7 +466,7 @@ with_theme(theme_SimpleTicks()) do
         Sqerrcut = Sqerr.(qpoints)
         
         # SqFT = [SqFieldTheory(q,1,10) for q in qpoints]
-        SqFT = [SqFieldTheory(q,fittingCoefs...) for q in qpoints]
+        SqFT = [SqFieldTheory(q[1],q[2],fittingCoefs...) for q in qpoints]
         scatter!(ax,qpoints,marker = '×' ,color = color)
         scatterlines!(axFT,Point.(qpoints),color = color,linestyle = :dash,marker = '●',markersize = 4)
         qnorms_sq = SW.norm.(qpoints).^2
