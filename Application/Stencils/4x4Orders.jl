@@ -58,67 +58,6 @@ function shuffleSector!(S,N)
     return S
 end
 ##
-L = 20
-println("Starting")
-S = SW.stencilConfig(zeros(L,L),1;
-boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
-)
-μ = 0.3
-CT = SW.ContinuousTimeMethod(0.1,1,-0.266*length(S),SW.Hxx_RK(μ))
-ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
-##
-SW.Random.seed!(1235)
-S = shuffleSector!(S,1000)
-##
-S_LoopsDense = copy(S) .= SW.periodicStateDenseLoops(size(S,1))
-##
-# ψG = SW.localPlaquetteGuidingFunction(S,0.15*(1-μ))
-
-@time resultsLD = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S_LoopsDense,CT,28*5,4000,ψG,equilibration_steps=100,pre_equilibration_steps=20_000,scatter_fraction=0.5) for i in 1:6])
-##
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,28*5,4000,ψG,equilibration_steps=100,pre_equilibration_steps=20_000,scatter_fraction=0.5) for i in 1:6])
-##
-plotEnergies(results,CT;normalize=true,dense=true,τ = 20,color = :red)
-plotEnergies!(resultsLD,CT;normalize=true,dense=true,τ = 20,color = :black)
-current_figure()
-##
-function makeSqFTPlots(SqsGFMC,k=1,b2=0)
-    SqFT_func(x,y)  = SqFieldTheory(x,y,k,b2)
-    with_theme(theme_PiTicks()) do 
-        # Sq = sqrt.(var(real(SqsGFMC))) ./4
-        Sq = mean(SqsGFMC) ./4
-        kx = ky = 2pi .* LinRange(0,1,size(Sq,1))
-        fig = Figure(fontsize = 22,size = (800,400))
-        axMC = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"k_y",title = L"GFMC$$",aspect = 1)
-        axerr = Axis(fig[1,2],xlabel = L"k_x",ylabel = L"k_y",title = L"std error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
-
-        axFT = Axis(fig[1,3],xlabel = L"k_x",ylabel = L"k_y",title = L"U(1) theory$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
-
-        # axDiff = Axis(fig[1,4],xlabel = L"k_x",ylabel = L"k_y",title = L"Difference$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
-
-        # err = abs.(Sq .- SqFieldTheory.(kx,kx'))
-        err = sqrt.(var(SqsGFMC)) ./4
-        hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
-        SqFT = [SqFT_func(x,y) for x in kx, y in ky]
-        hmFT = heatmap!(axFT,kx,ky,SqFT,colormap = :viridis)
-        # heatmap!(axerr,kx,ky,err,colormap = :viridis,colorrange = extrema(!isnan,Sq))
-        hmerr = heatmap!(axerr,kx,ky,err,colormap = :viridis)
-        # heatmap!(axDiff,kx,ky,(Sq ./maximum(Sq)) .- (SqFT ./maximum(SqFT)),colormap = :viridis)
-
-        Colorbar(fig[2,1],hmMC,label = L" \mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
-        Colorbar(fig[2,2],hmerr,label = L"\sigma( \mathcal{S}^{zz}(\textbf{q}))",height = Relative(0.8),vertical=false,width = Relative(0.8),ticks = SimpleTicks())
-        Colorbar(fig[2,3],hmFT,label = L" \mathcal{S}^{zz}(\textbf{q})",height = Relative(0.8), width = Relative(0.8),vertical=false,ticks = SimpleTicks())
-
-        rowsize!(fig.layout,2,Relative(0.1))
-        fig
-    end
-end
-# SqsGFMC = fetch.([Threads.@spawn SW.getSqGFMC(res,round(Int,20÷CT.τ)+2;discardborder=1) for res in results])
-SqsGFMC = SW.getSqsGFMC(results,round(Int,20÷CT.τ);nBra = 1,discardborder=0) 
-
-makeSqFTPlots(SqsGFMC,1,0.1)
-
-##
 function generatePeriodic(L)
     S = SW.stencilConfig(zeros(L,L),1;
     boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
@@ -233,18 +172,34 @@ a_configs = let
     L = 8
     confs = [makeConf(UC,L) for UC in a_st]
 
-    filter!(SW.fulFillsConstraint, confs)
+    # filter!(SW.fulFillsConstraint, confs)
     filter!(x->length(SW.getApplicablePlaquettes(x)) > 0,confs)
+    @assert all(SW.fulFillsConstraint,confs)
     confs
 end
 ##
-res = findEnergies(a_configs,CT,ψG;Nwalkers = 28*1,NSteps = 800)
+μ = -0.3
+
+CT = SW.ContinuousTimeMethod(0.1,1,-0.266length(a_configs[1]),SW.Hxx_RK(μ))
+ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
+
+##
+@time res = findEnergies(a_configs,CT,ψG;Nwalkers = 28*4,NSteps = 800)
+##
+with_theme(theme_SimpleTicks()) do
+    fig = Figure(fontsize = 22)
+    ax = Axis(fig[1,1],xlabel = L"# Config $$",ylabel = L"E_0/N_\text{sites}")
+    Nsites = length(a_configs[1])
+    errorbars!(eachindex(res.en),res.en ./Nsites,res.Δen ./Nsites,whiskerwidth=4,color = :black)
+    scatter!(res.en ./Nsites,marker = '×',color = :black)
+    fig
+end
 ##
 perm = sortperm(res.en)
 # SW.plotApplPlaquettes(a_configs[perm][3])
 
 emin = minimum(res.en)
-numGS = findfirst(>(emin+1e-1),res.en[perm])
+numGS = findfirst(>(emin+3e-1),res.en[perm])
 
 function plotConfs(Confs)
     numGS = length(Confs)
@@ -277,7 +232,7 @@ function getMaxFlipConfs(Configs)
         maxConf = copy(ConfBuff)
         for c in eachslice(res.SaveConfigs,dims=(3,4))
             Sbuff .= c
-            if Sbuff in filterConfs
+            if Sbuff in filterConfs || -Sbuff in filterConfs
                 isNew = false
                 break
             end
@@ -295,6 +250,20 @@ function getMaxFlipConfs(Configs)
     return filterConfs
 end
 
-reducedConfigs = getMaxFlipConfs(a_configs[perm][begin:numGS])
+reducedConfigs = collect(getMaxFlipConfs(a_configs[perm][begin:numGS]))
 ##
-plotConfs(collect(reducedConfigs))
+plotConfs(reducedConfigs)
+##
+μ = -0.1
+
+CT = SW.ContinuousTimeMethod(0.1,1,-0.266length(a_configs[1]),SW.Hxx_RK(μ))
+ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
+
+
+@time results1 = [SW.startManyWalkerGFMC(reducedConfigs[1],CT,28*6,5000,ψG) for _ in 1:10]
+##
+@time results2 = [SW.startManyWalkerGFMC(reducedConfigs[2],CT,28*6,5000,ψG) for _ in 1:10]
+##
+plotEnergies(results1,CT;normalize=true,dense=true,τ = 10,color = :black)
+plotEnergies!(results2,CT;normalize=true,dense=true,τ = 10,color = :red)
+current_figure()
