@@ -93,15 +93,29 @@ function transformSpinsAlongLine!(Conf, org, slope,transformation)
     return Conf
 end
 
-function transformSpinsAlongDiagonal!(Conf, org, slope,transformation)
-    j = org
-    for i in axes(Conf.Mat, 1)
-        j += slope
-        if checkbounds(Bool, Conf, i, j)
-            Conf[i, j] = transformation(Conf[i, j])
-        end
+function transformSpinsAlongDiagonal!(Conf, org, slope,transformation,wrap=false)
+    vec = getDiagonal(Conf,org,slope,wrap)
+    for i in eachindex(vec)
+        vec[i] = transformation(vec[i])
     end
     return Conf
+end
+
+function getDiagonal(Conf,org,slope,wrap = true)
+    j = org
+    diagInds = Int[]
+    for i in axes(Conf.Mat, 1)
+        j += slope
+        i′ = i
+        j′ = j
+        if wrap
+            (i′,j′) = get_wrappend_inds(parent(Conf),(i′,j′))
+        end
+        if checkbounds(Bool, Conf, i′, j′)
+            push!(diagInds,LinearIndices(Conf)[i′, j′])
+        end
+    end
+    return @view Conf[diagInds]
 end
 
 function transformSpinsAlongRow!(Conf, i, transformation,offset = 0)
