@@ -7,8 +7,8 @@ using MakieHelpers
 using SpiderWebModel
 include("plottingUtils.jl")
 ##
-S = SW.stencilConfig(parent(SW.getStairCase(14)),1/2,
-# boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2,
+boundaryCondition = :open
 )
 # S = SW.stencilConfig(SW.constructConfigPath(15,15,SW.ALLGS_S12),1/2)
 HStair = SW.generateHilbertSpace(SW.SpinConfig(S))
@@ -60,12 +60,12 @@ magEx = SW.getMagnetization(HConfs, v0)
 
 nThermal = 500
 # results = [SW.startManyWalkerGFMC(S,2,55_000,3,nThermal,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:35]
-nBra = 5
+nBra = 3
 ##
 SW.Random.seed!(1234)
 DT = SW.DiscreteTimeMethod(0.,nBra,-E0)
 @time resultsDT1 = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,1,200000,ψG,equilibration_steps=nThermal) for i in 1:18])
-@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,25,10000,ψG,equilibration_steps=nThermal) for i in 1:18])
+@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,10000,ψG,equilibration_steps=nThermal) for i in 1:18])
 ##
 # SW.Random.seed!(1234)
 # CT = SW.ContinuousTimeMethod(0.01,10,14.,SW.Hxx_zero())
@@ -88,7 +88,7 @@ current_figure()
 # rm(outfile;recursive=true,force=true)
 # mkpath(outfile)
 # @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,16,50000÷nBra,nBra,ψG,1;equilibration_steps=nThermal,outfile =string(outfile,i,".h5")) for i in 1:8])
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,1,100000,nBra,x->1,1;equilibration_steps=nThermal) for i in 1:42])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,28,3000,SW.RKFunction();equilibration_steps=nThermal) for i in 1:42])
 # @time SW.startManyWalkerGFMC(S,16,nThermal+500_00÷nBra,nBra,ψG,1;outfile = string(outfile,1,".h5"))
 ##
 #___________Observables_______________________
@@ -156,7 +156,7 @@ with_theme(theme_SimpleTicks()) do
     xminorticksvisible=false,
     xticklabelsvisible=false,
     yminorticksvisible=true,
-    ylabel = L"E_0",
+    ylabel = L"E_0/N_\textrm{sites}",
     xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
 
     ax = Axis(fig[2,1],
@@ -169,7 +169,7 @@ with_theme(theme_SimpleTicks()) do
     linkxaxes!(ax,axenergy)
     plotEnergies!(axenergy,resultsDT1,DT.nBranch,p=150,color = :grey,legend = false,label = L"N_w = 1",marker = :rect,markersize = 6 )
     plotEnergies!(axenergy,resultsDT,DT.nBranch,E0,p=150,label = L"N_w = 20",legend = false)
-    ylims!(axenergy,1.001*E0,mean(resultsDT1[1].energies))
+    ylims!(axenergy,1.001*E0/length(S),mean(resultsDT1[1].energies)/length(S))
 
     proj = nBra .*(eachindex(mags1).-1)
     Cols = (:blue,:green,:orange)
@@ -198,7 +198,7 @@ with_theme(theme_SimpleTicks()) do
     hlines!([chiScale*SiSjex],color = :black,label = L"exact $$")
 
     i,j = Tuple.(IJ_SS)
-    text!(ax,Point2(last(proj),chiScale*SiSjex+0.02),color = :black,text = L"%$chiScale \times \langle S^z_{%$i} S^z_{%$j}\rangle",align = (:right,:bottom))
+    text!(ax,Point2(last(proj),chiScale*SiSjex+0.01),color = :black,text = L"%$chiScale \times \langle S^z_{%$i} S^z_{%$j}\rangle",align = (:right,:bottom))
 
     # return fig
 
@@ -217,6 +217,7 @@ with_theme(theme_SimpleTicks()) do
     # axislegend(ax,merge=true,position = :rc,unique=true)
     # xlims!(ax,0.5,last(proj))
     # ylims!(ax,E0-1e-2,E0+3e-2)
+    # ylims!(ax,-1,2)
     save("Application/figs/PaperFigs/GFMCdemo.pdf",fig)
     fig
 end

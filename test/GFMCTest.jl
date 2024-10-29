@@ -47,3 +47,41 @@ end
     @test SW.fulFillsConstraint(Conf)
 
 end
+
+##
+
+function testResults(S,method)
+    HStair = SW.generateHilbertSpace(SW.SpinConfig(S))
+    ExSol = SW.SolveHKrylov(HStair.H)
+    E0 = ExSol.values[1]
+
+    v0 = ExSol.vectors[1]
+    HConfs = SW.spinConfig.(HStair.AllStates,Ref(SW.SpinConfig(S)),Ref(HStair.plaqMapping))
+    ψG = SW.PlaquetteNumberGuidingFunction(0.197)
+    results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,method,12,1200,ψG,equilibration_steps=10,pre_equilibration_steps=100,scatter_fraction=0.5) for i in 1:18])
+    # display(plotEnergies(results,method,E0))
+    @testset "Energy" begin
+        energies = last.(SW.getEnergies.(results,1,20))
+        emean = SW.mean(energies)
+        estd = SW.std(energies)
+        @test emean - estd < E0 < emean + estd
+    end
+    
+    Sqs = SW.getSqsGFMC(results,20,nBra = DT.nBranch) ./ 2
+    SqEx = real(SW.getStructureFac(HConfs,v0).Sq)
+
+    @testset "Structure factor" begin
+        Sqmean = SW.mean(Sqs)
+        SqDiff = abs.(Sqmean .- SqEx)
+        Sqstd = SW.std(Sqs)
+        @test sum(SqDiff .- Sqstd .>= 0) == length(SqDiff)
+    end
+end
+##
+SW.Random.seed!(1234)
+
+S = SW.stencilConfig(parent(SW.getStairCase(10)),1/2,
+boundaryCondition = :periodic
+)
+testResults(S,SW.DiscreteTimeMethod(0.,2,67))
+

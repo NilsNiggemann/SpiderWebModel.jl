@@ -10,7 +10,7 @@ include("plottingUtils.jl")
 meanstd(x) = (mean(x),std(x))
 ##
 
-S = SW.stencilConfig(zeros(18,18),1;
+S = SW.stencilConfig(zeros(24,24),1;
 # boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 # S .= SW.h5read("temp.h5","conf")

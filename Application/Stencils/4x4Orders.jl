@@ -1,6 +1,5 @@
 import Pkg
-Pkg.activate(joinpath(@__DIR__,"../"))
-cd(joinpath(@__DIR__,"../../"))
+
 import SpiderWebModel as SW
 using CairoMakie
 using Statistics
@@ -9,15 +8,7 @@ using SpiderWebModel
 
 include("plottingUtils.jl")
 meanstd(x) = (mean(x),std(x))
-function upscale(Conf,L)
-    S = similar(Conf,L,L)
-    per = SW.PeriodicMatrix(Conf,L,L)
-    for I in CartesianIndices(S)
-        S[I] = per[I]
-    end
-    S
-
-end
+include("4x4Orders_base.jl")
 ##
 function shuffleSector!(S,N)
 
@@ -67,102 +58,13 @@ function shuffleSector!(S,N)
     return S
 end
 ##
-function generatePeriodic(L)
-    S = SW.stencilConfig(zeros(L,L),1;
-    boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
-    )
-    # SW.rand!(S)
-    UCSIt = collect(
-        Iterators.product((-1:1 for i in 1:L,j in 1:L)...)
-    )
-    function isGS(UC)
-        S[:] .= 2 .*UC
-        SW.fulFillsConstraint(S)
-    end
-    UCS = Matrix{Int8}[]
+a = generatePeriodic(4,1)
+a_st = sort!(collect(filterConfs(a,1)),by=x->sum(abs,x))
 
-    for UC in UCSIt
-        isGS(UC) || continue
-        push!(UCS,copy(parent(parent(S))))
-    end
-    return UCS
-end
-a = generatePeriodic(4)
-
-##
-function filterConfs(UCs)
-    Lx,Ly = size(UCs[1])
-    S = SW.stencilConfig(zeros(Lx,Ly),1;
-    boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
-    )
-    S_minus = copy(S)
-    S_flip = copy(S)
-    S_xflip = copy(S)
-    S_yflip = copy(S)
-    SUC = copy(parent(parent(S)))
-
-    aSet = Set(empty(a))
-    moves = empty!([(1,1,1)])
-    function isUnique(UC)
-        # S_periodic = SW.PeriodicMatrix(UC,Lx,Ly)
-        S .= UC
-        S_minus .= -UC
-        S_flip .= UC'
-        S_xflip .= @view UC[end:-1:1,:]
-        S_yflip .= @view UC[:,end:-1:1]
-
-        for S′ in (S,S_minus,S_flip,S_xflip,S_yflip)
-            for T_x in 0:Lx-1, T_y in 0:Ly-1
-
-                # SUC = parent(parent(S′))
-                SUC_per = SW.PeriodicMatrix(parent(parent(S′)))
-                # @info "" size(SUC_per[T_x:T_x+Lx-1,T_y:T_y+Ly-1])
-                SUC .= @view SUC_per[T_x:T_x+Lx-1,T_y:T_y+Ly-1]
-
-                if SUC in aSet
-                    return false
-                end
-                if SUC' in aSet
-                    return false
-                end
-                if -SUC in aSet
-                    return false
-                end
-                if -SUC' in aSet
-                    return false
-                end
-                SW.getMoves!(moves,S′)
-                for (i,j,sgn) in moves
-                    SW.applyPlaquette!(S′,i,j,sgn)
-                    if SUC in aSet
-                        return false
-                    end
-                    SW.applyPlaquette!(S′,i,j,-sgn)
-                end
-            end
-        end
-        return true
-    end
-    for UC in UCs
-        isUnique(UC) || continue
-        push!(aSet,UC)
-    end
-    return aSet
-    
-end
-a_st = sort!(collect(filterConfs(a)),by=x->sum(abs,x))
-##
-function makeConf(UC,L)
-    S = SW.stencilConfig(zeros(L,L),1;
-    boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
-    )
-    S .= SW.getPeriodicState(UC,L,L)
-    return S
-end  
 
 a_configs = let
     L = 4
-    confs = [makeConf(UC,L) for UC in a_st]
+    confs = [makeConf(UC,L,1) for UC in a_st]
 
     # filter!(SW.fulFillsConstraint, confs)
     filter!(x->length(SW.getApplicablePlaquettes(x)) > 0,confs)
@@ -170,119 +72,75 @@ a_configs = let
     confs
 end
 ##
-
-function getMaxFlipConfs(Configs;Nwalkers = 28*2,NSteps = 1000)
-    filterConfs = Set(empty(Configs))
-    mu = -0.8
-    CT = SW.ContinuousTimeMethod(0.5,Hxx = SW.Hxx_RK(mu))
-    ψG = SW.PlaquetteNumberGuidingFunction(0.5)
-    Sbuff = copy(parent(parent(Configs[1])))
-    ConfBuff = copy(Configs[1])
-    moves = empty!([(1,1,1)])
-
-    for S in Configs
-        res = SW.startManyWalkerGFMC(S,CT,Nwalkers,NSteps,ψG)
-        isNew = true
-        maxMoves = 0
-        maxConf = copy(ConfBuff)
-        for c in eachslice(res.SaveConfigs,dims=(3,4))
-            Sbuff .= c
-            if Sbuff in filterConfs || -Sbuff in filterConfs
-                isNew = false
-                break
-            end
-            ConfBuff .= Sbuff
-            SW.getMoves!(moves,ConfBuff)
-            if length(moves) > maxMoves
-                maxConf .= ConfBuff
-                maxMoves = length(moves)
-            end
-        end
-        if isNew
-            push!(filterConfs,maxConf)
-        end
-    end
-    filterConfs_arr = collect(filterConfs)
-
-    sort!(filterConfs_arr,by = x->length(SW.getMoves!(moves,x)),rev = true)
-end
-
 reducedConfigs = getMaxFlipConfs(a_configs;Nwalkers = 28,NSteps = 1) #first reduction
 ##
 reducedConfigs = getMaxFlipConfs(reducedConfigs;Nwalkers = 28,NSteps = 10)
 ##
 reducedConfigs = getMaxFlipConfs(reducedConfigs;Nwalkers = 28,NSteps = 100)
 ##
-reducedConfigs = makeConf.(filterConfs(parent.(parent.(reducedConfigs))),4)
+reducedConfigs = makeConf.(filterConfs(parent.(parent.(reducedConfigs)),1),4,1)
 reducedConfigs = getMaxFlipConfs(reducedConfigs;Nwalkers = 28*1,NSteps = 1000)
+
 ##
-function plotConfs(Confs)
+SW.h5write("Data/reducedConfigs.h5","reducedConfigs",stack(reducedConfigs))
+
+##
+L = 12
+reducedConfigs = makeConf.(collect.(eachslice(SW.h5read("Data/reducedConfigs.h5","reducedConfigs"),dims=3)),4,1)
+AllSectors = makeConf.(reducedConfigs,L,1)
+##
+
+function plotConfs!(fig,Confs; transpose = false)
     numGS = length(Confs)
+
+    ijInds = [(i,j) for i in 1:round(Int,sqrt(numGS),RoundUp),j in 1:round(Int,sqrt(numGS))]
+    if transpose
+        ijInds = [(j,i) for i in 1:round(Int,sqrt(numGS),RoundUp),j in 1:round(Int,sqrt(numGS))]
+    end
+    
     with_theme(theme_SimpleTicks()) do
-        fig = Figure(fontsize = 22,size = length(Confs) .*(12,12))
-        axs = [Axis(fig[i,j],xlabelvisible=false,ylabelvisible=false,xticklabelsvisible=false,yticklabelsvisible=false,aspect=1)
-        for i in 1:round(Int,sqrt(numGS),RoundUp),j in 1:round(Int,sqrt(numGS))]
-        for i  in eachindex(Confs)
-            ax = axs[i]
+
+        axs = [Axis(fig[i,j]; SW.getConfigAxis(Confs[1])...,xlabelvisible=false,ylabelvisible=false,xticklabelsvisible=false,yticklabelsvisible=false,aspect=1,xticks = 1:4,yticks = 1:4) for (i,j) in ijInds[1:length(Confs)]]
+
+        for ind  in eachindex(Confs)
+            ax = axs[ind]
             # newConf = similar(Confs[i],4,4)
             # newConf[1:4,1:4] .= @view Confs[i][1:4,1:4]
-            SW.plotApplPlaquettes!(ax,Confs[i])
-            try
-                rowgap!(fig.layout,i,0.)
-                colgap!(fig.layout,i,0.)
-            catch
-            end
+            SW.plotApplPlaquettes!(ax,Confs[ind])
+
+            i,j = ijInds[ind]
+            Label(fig[i,j, TopLeft()],L"%$ind$$",fontsize = 12,padding = (-15,0,-10,0),color = :black)
+            # Label(fig[1,1, TopLeft()],L"a)$$",padding = (-30,0,-20,0))
+
+            # text!(ax,Point(1,4),text = "$i",color = :lime,fontsize = 15,align = (:center,:center))
+
         end
+        # unique_i = unique(i for (i,j) in ijInds)
+        # unique_j = unique(j for (i,j) in ijInds)
+        # for i in unique_i[1:end-1]
+        #     rowgap!(fig.layout,i,0.)
+        # end
+        # for j in unique_j[1:end-1]
+        #     colgap!(fig.layout,j,10)
+        # end
         return fig
     end 
+
 end
+function plotConfs(Confs;kwargs...)
+    fig = Figure(fontsize = 22,size = length(Confs) .*(12,12))
+    plotConfs!(fig,Confs;kwargs...)
+end
+
 plotConfs(reducedConfigs)
-
-
 ##
-function findFirstMiIndex(arr)
-    minval = arr[begin]
-    i_min = firstindex(arr)
-    for (i,x) in enumerate(arr)
-        if x < minval
-            i_min = i
-            minval = x
-        end
-    end
-    return i_min
-end
-
-function findEnergies(Configs,CT,ψG;Nwalkers = 28*2,NSteps = 2000,equilibration_steps = NSteps ÷8)
-    en = zeros(length(Configs))
-    Δen = zeros(length(Configs))
-
-    Threads.@threads for i in eachindex(Configs,en)
-        S = Configs[i]
-        if length(SW.getApplicablePlaquettes(S)) == 0
-            en[i] = 0
-            Δen[i] = 0
-            continue
-        end
-        results = [SW.startManyWalkerGFMC(S,CT,Nwalkers,NSteps,ψG;equilibration_steps,pre_equilibration_steps=NSteps) for _ in 1:6]
-
-        energies = SW.getEnergies.(results,1,min(NSteps÷3, 300))
-        energiesMean = mean.(energies)
-        energiesStd = std.(energies)
-        e0_index = findFirstMiIndex(energiesMean)
-        en[i] = energiesMean[e0_index]
-        Δen[i] = energiesStd[e0_index]
-    end
-    return (;en,Δen)
-end
-##
-
 μ = 0.95
 
-CT = SW.ContinuousTimeMethod(0.1,1,-0.266length(a_configs[1]),SW.Hxx_RK(μ))
+CT = SW.ContinuousTimeMethod(0.1,1,-0.266length(AllSectors[1]),SW.Hxx_RK(μ))
 ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
 
 ##
-@time res = findEnergies(upscale.(reducedConfigs,12),CT,ψG;Nwalkers = 28*2,NSteps = 1000)
+@time res = findEnergies(AllSectors,CT,ψG;Nwalkers = 20,NSteps = 800)
 ##
 with_theme(theme_SimpleTicks()) do
     fig = Figure(fontsize = 22)
@@ -294,34 +152,68 @@ with_theme(theme_SimpleTicks()) do
 end
 ##
 Allres = empty!([res])
-mus_sectors = -0.1:0.05:0.99
+mus_sectors = LinRange(-0.1,0.99,20)
 for mu in mus_sectors
-    CT = SW.ContinuousTimeMethod(0.1,1,-0.266length(a_configs[1]),SW.Hxx_RK(mu))
+    CT = SW.ContinuousTimeMethod(0.1,1,-0.266length(AllSectors[1]),SW.Hxx_RK(mu))
     ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-mu))
-    res = findEnergies(upscale.(reducedConfigs,8),CT,ψG;Nwalkers = 28*2,NSteps = 800)
+    res = findEnergies(AllSectors,CT,ψG;Nwalkers = 28*6,NSteps = 3000)
     push!(Allres,res)
 end
 
 ##
 with_theme(theme_SimpleTicks()) do 
-    fig = Figure(fontsize = 22)
+    fig = Figure(fontsize = 26,size = 2 .* (700,400))
     E_scal = 0.2
     ens = getproperty.(Allres,:en)
     Δens = getproperty.(Allres,:Δen)
     mus = mus_sectors
     Elin = E_scal .* (mus .-1)
 
-    ax = Axis(fig[2,1:3],xlabel = L"\mu",ylabel = L"E_0/(N_\text{sites}(1 - \mu ))")
+    ax = Axis(fig[1,1],xlabel = L"\mu",ylabel = L"E_0/(N_\text{sites}(1 - \mu ))")
     Nsites = 12*12
 
  
     minsectors = argmin.(ens)
 
+    text_locations = Point2f[]
+
+    linewidths = LinRange(1.2,3.0, length(reducedConfigs))
+
+    function getLS(width)
+        if width < 2
+            return :solid
+        else
+            return :dash
+        end
+    end
+    # Generate all combinations of linestyles and linewidths
+
     for i_sector in eachindex(reducedConfigs)
+        linewidth = linewidths[i_sector]
+        linestyle = getLS(linewidth)
+        
         en = getindex.(ens,i_sector) ./ Nsites ./(1 .-mus)
         Δen = getindex.(Δens,i_sector)./(1 .-mus) ./ Nsites
-        scatterlines!(ax,mus,en ,marker = '×',linewidth = 2)
+        l = scatterlines!(ax,mus,en ,marker = '×';linestyle,linewidth,markersize = 15)
         errorbars!(ax,mus,en ,Δen,whiskerwidth=4)
+        # text!(Point(-0.15,en[1]),text = "%$i_sector")
+
+        # pos = round(Int,length(en)/length(AllSectors) * i_sector)
+        # pos = max(1,pos)
+        # pos = min(length(en),pos)
+
+        # text!(ax,Point(mus[pos],en[pos]-0.01),text = L"%$i_sector", color = l.color[],fontsize = 10)
+        # ppoint = isodd(i_sector) ? Point(mus[1]-0.05,en[begin]) : Point(mus[end]+0.05,en[end])
+        ppoint = Point2f(mus[1]-0.03,en[begin])
+        ppointRd = Point2f(ppoint[1],round(ppoint[2],digits = 2))
+        
+        while ppointRd in text_locations
+            ppoint = Point2f(ppoint[1]+0.02,ppoint[2])
+            ppointRd = Point2f(ppoint[1],round(ppoint[2],digits = 2))
+        end
+        push!(text_locations,ppointRd)
+        
+        text!(ax,ppoint,text = L"%$i_sector", color = l.color[],fontsize = 12,align = (:top,:top))
     end
 
     for i in eachindex(mus)[3:end]
@@ -329,14 +221,25 @@ with_theme(theme_SimpleTicks()) do
             vlines!(ax,mus[i-1],color = :black,linestyle = :dash,linewidth = 0.8)
         end
     end
+    colsize!(fig.layout,1,Relative(0.6))
+    newfig = plotConfs!(fig[:,2:3],reducedConfigs,transpose=true)
     
-    ax2 = Axis(fig[1,1],aspect=1,xticks = 1:2:4,yticks = 1:2:4)
-    ax3 = Axis(fig[1,2],aspect=1,xticks = 1:2:4,yticks = 1:2:4)
-    ax4 = Axis(fig[1,3],aspect=1,xticks = 1:2:4,yticks = 1:2:4)
-    rowsize!(fig.layout,1,Relative(0.3))
-    SW.plotApplPlaquettes!(ax2,reducedConfigs[1])
-    SW.plotApplPlaquettes!(ax3,reducedConfigs[5])
-    SW.plotApplPlaquettes!(ax4,reducedConfigs[6])
+    confaxs = size(newfig.layout)
+    for i in 1:confaxs[1] -1
+        rowgap!(newfig.layout,i,0.)
+    end
+    for i in 2:confaxs[2]-1
+        colgap!(newfig.layout,i,0.)
+    end
+    # fig_confs = GridLayout() = newfig
+    # fig.layout[1,2] = fig_confs
+    # ax2 = Axis(fig[1,1],aspect=1,xticks = 1:2:4,yticks = 1:2:4)
+    # ax3 = Axis(fig[1,2],aspect=1,xticks = 1:2:4,yticks = 1:2:4)
+    # ax4 = Axis(fig[1,3],aspect=1,xticks = 1:2:4,yticks = 1:2:4)
+    # rowsize!(fig.layout,1,Relative(0.3))
+    # SW.plotApplPlaquettes!(ax2,reducedConfigs[1])
+    # SW.plotApplPlaquettes!(ax3,reducedConfigs[5])
+    # SW.plotApplPlaquettes!(ax4,reducedConfigs[6])
     fig
 end
 ##
@@ -362,3 +265,33 @@ CT = SW.ContinuousTimeMethod(0.1,1,-0.266length(a_configs[1]),SW.Hxx_RK(μ))
 plotEnergies(results1,CT;normalize=true,dense=true,τ = 10,color = :black)
 plotEnergies!(results2,CT;normalize=true,dense=true,τ = 10,color = :red)
 current_figure()
+
+##
+S = upscale(reducedConfigs[1],28)
+
+μ = 0.4
+CT = SW.ContinuousTimeMethod(0.1,1,-0.266length(S),SW.Hxx_RK(μ))
+ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
+SW.plotApplPlaquettes(S)
+##
+results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,28*30,10000,ψG) for _ in 1:1])
+##
+plotEnergies(results,CT;normalize=true,dense=true,τ = 20,color = :black)
+##
+Sqs = SW.getSqsGFMC(results, round(Int,10 ÷ CT.τ);nBra = 1)
+with_theme(theme_SimpleTicks()) do
+    fig = Figure(fontsize = 22)
+    ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1)
+    ax2 = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1)
+    SqMat = mean(Sqs)
+    SqErr = std(Sqs)
+    fittingCoefs = optimizeCoeffs(SqMat)
+    Sq = SW.getSqCont(SqMat)
+    qx = qy = trueMomenta(-0.5pi,1.5pi,size(S,1))
+    qs = Iterators.product(qx,qy)
+    heatmap!(ax,qx,qy, Sq.(qs)
+    )
+    SQFT(x) = SqFieldTheory(SVector(x),fittingCoefs)
+    heatmap!(ax2,qx,qy,SQFT.(qs))
+    fig
+end

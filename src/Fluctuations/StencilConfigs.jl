@@ -13,8 +13,39 @@ end
 @inline Base.similar(S::StencilSpinConfig,dims::Vararg{Int64, N}) where { N} = StencilSpinConfig(similar(parent(S),dims...), S.M)
 # @inline Base.similar(S::StencilSpinConfig,dims...) = StencilSpinConfig(similar(parent(S),dims...), S.M)
 # @inline Base.copy(S::StencilSpinConfig) = StencilSpinConfig(copy(parent(S)), S.M)
-function stencilConfig(A::AbstractMatrix{<:AbstractFloat}, S,paddingValue = Int8(typemax(Int8)); kwargs...)
-    return stencilConfig(Int8.(2 .*A), S,paddingValue; kwargs...)
+"""
+create a StencilSpinConfig with Spin magnitude S, initialized by an array of Floats i.e.
+
+    [
+        0.5 -0.5 0.5;
+        -0.5 0.5 -0.5;
+        0.5 -0.5 0.5
+    ] 
+
+for efficient Monte Carlo simulations.
+Supported boundary conditions are 
+
+    :open # Open boundary conditions: No plaquette at the boundary may be flipped.
+    :open_soft # Open boundary conditions: Ignore out-of bounds spins so that plaquettes at the boundary may be flipped. 
+    :periodic # Periodic boundary conditions: the StencilArray is wrapped around the edges.
+Boundary properties of the StencilArray may also be passed directly as kwargs, which will override defaults.
+"""
+function stencilConfig(A::AbstractMatrix{<:AbstractFloat}, S,paddingValue = Int8(typemax(Int8)); boundaryCondition = :open, kwargs...)
+    @assert all(in(-S:S), A) "Spin configuration must be initialized within -S:S"
+    if boundaryCondition == :open
+        paddingValue = Int8(typemax(Int8))
+        boundary = Stencils.Remove(paddingValue)
+        padding = Stencils.Conditional()
+    elseif boundaryCondition == :open_soft
+        boundary = Stencils.Remove(Int8(0))
+        padding = Stencils.Halo(:in)
+    elseif boundaryCondition == :periodic
+        boundary = Stencils.Wrap()
+        padding = Stencils.Conditional()
+    else
+        error("boundaryCondition $boundaryCondition not implemented!")
+    end
+    return stencilConfig(Int8.(2 .*A), S,paddingValue; boundary, padding,kwargs...)
 end
 
 function stencilConfig(A::AbstractMatrix{Int8}, S,paddingValue = Int8(typemax(Int8));boundary = Stencils.Remove(paddingValue),kwargs...)
@@ -31,6 +62,14 @@ end
 stencilConfig(A::SpinConfig; kwargs...) = stencilConfig(parent(A), A.S; kwargs...)
 
 function SpinConfig(S::StencilSpinConfig)
+    boundary = Stencils.boundary(parent(S))
+    return SpinConfig(S, boundary)
+end
+function SpinConfig(S::StencilSpinConfig,::Stencils.Wrap)
+    return SpinConfig(PeriodicMatrix(parent(S)./2), getSpin(S))
+end
+
+function SpinConfig(S::StencilSpinConfig,::Stencils.Any)
     return SpinConfig(parent(S)./2, getSpin(S))
 end
 
@@ -41,18 +80,19 @@ plotSpinConfig(S::StencilSpinConfig; kwargs...) = plotSpinConfig(SpinConfig(S); 
 
 function plaquetteIterator(S::Stencils.StencilArray,shift=false)
     bound = Stencils.boundary(S)
-    return stencil_plaquetteIterator(S,bound,shift)
+    padding = Stencils.padding(S)
+    return stencil_plaquetteIterator(S,bound,padding,shift)
 end
 
-function stencil_plaquetteIterator(S,::Stencils.Wrap,shift=false)
+function stencil_plaquetteIterator(S,::Stencils.Wrap,::Stencils.Conditional,shift=false)
     inboundsInds = Base.Iterators.product(axes(S, 1), axes(S, 2))
     filterInds = Iterators.filter(ind -> isodd(sum(ind)+shift), inboundsInds)
 end
-function stencil_plaquetteIterator(S,::Stencils.Remove,shift=false)
+function stencil_plaquetteIterator(S,::Stencils.Remove,::Stencils.Halo,shift=false)
     inboundsInds = Base.Iterators.product(axes(S, 1), axes(S, 2))
     filterInds = Iterators.filter(ind -> isodd(sum(ind)+shift), inboundsInds)
 end
-stencil_plaquetteIterator(S,::Any,shift=false) = plaquetteIterator(parent(S),shift)
+stencil_plaquetteIterator(S,::Any,::Any,shift=false) = plaquetteIterator(parent(S),shift)
 
 
 @inline Base.@propagate_inbounds getPlaquetteStencil(
