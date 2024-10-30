@@ -326,7 +326,7 @@ end
 divide_elementwise!(x::Number,y::Number) = x / y
 divide_elementwise!(x::AbstractArray,y) = (x ./= y)
 
-function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m=size(Gnp,2)÷2)
+function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m::Integer=size(Gnp,2)÷2)
     N = lastindex(AllConfigs,4)
     exampleConf = @view AllConfigs[:,:,begin,begin]
     Obs = ObsFunc(exampleConf)
@@ -369,9 +369,57 @@ function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m=size(Gnp,2)÷2)
     end
     return divide_elementwise!(num,denom)
 end
-function getObs(result,ObsFunc,p)
+function getObs(result,ObsFunc,p::Integer)
     Gnp = precomputeNormalizedAccWeight(result.TotalWeights,1,p)
     return getObs(Gnp,result.SaveConfigs,result.reconfigurationTable,ObsFunc,p÷2)
+end
+const ABSTRACTCOLLECTION = Union{AbstractRange,AbstractVector,Tuple}
+
+function getObs(result,ObsFunc,m_values::ABSTRACTCOLLECTION)
+    pMax = maximum(m_values)
+    Gnp = precomputeNormalizedAccWeight(result.TotalWeights,1,2pMax)
+    return getObs(Gnp,result.SaveConfigs,result.reconfigurationTable,ObsFunc,m_values)
+end
+
+function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m_values::ABSTRACTCOLLECTION)
+    N = lastindex(AllConfigs,4)
+    exampleConf = @view AllConfigs[:,:,begin,begin]
+    pMax = maximum(m_values)
+
+    Obs = ObsFunc(exampleConf)
+    num_m = [float(zero(Obs)) for _ in m_values]
+    denom = 0.
+    GnO = float(zero(Obs))
+
+    Nw = size(reconfigurationTable,1)
+    p = size(Gnp,2)
+    WalkerMultiplicities = zeros(Int,Nw)
+
+    for n in pMax+1:N
+        Gn = Gnp[n,p]
+        denom += Gn*Nw
+        for (i_m,m) in enumerate(m_values)
+            WalkerMultiplicities .= 0
+            for α in 1:Nw
+                α´ = α
+                for i_m in 1:m
+                    α´ = reconfigurationTable[α´,n-i_m]
+                end
+                WalkerMultiplicities[α´] += 1
+            end
+
+            for α in 1:Nw
+                mult = WalkerMultiplicities[α]
+                mult == 0 && continue
+                conf = @view AllConfigs[:,:,α,n-m]
+                O = ObsFunc(conf)
+                GnO = _set_to!(GnO,O)
+                GnO = mult_elementwise!(GnO,Gn*mult)
+                num = add_elementwise!(num_m[i_m],GnO)
+            end
+        end
+    end
+    return [divide_elementwise!(num,denom) for num in num_m]
 end
 
 function surviving_walker_mapping!(mappingarr,reconfigList)

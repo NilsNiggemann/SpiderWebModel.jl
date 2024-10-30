@@ -244,39 +244,9 @@ with_theme(theme_SimpleTicks()) do
 end
 ##
 
-function getSq(res,p)
-    @views Gnp = SW.precomputeNormalizedAccWeight(res.TotalWeights,1,p)
-    # @views Gnp = ones(length(res.TotalWeights[nThermal:end]),p)
-
-    Conf = @view res.SaveConfigs[:,:,begin,begin]
-    NSites = length(Conf)
-    Sq = similar(Conf, ComplexF64)
-    
-    Si = similar(Conf, ComplexF64)
-
-    plan = SW.FFTW.plan_fft(Si)
-
-    function SqFunc(Conf)
-        Si.= Conf
-        SW.mul!(Sq, plan, Si)
-
-        Sq .= abs2.(Sq)
-    end
-
-    @views resSq = SW.getObs(Gnp,res.SaveConfigs,res.reconfigurationTable,SqFunc,p÷2)
-    
-    newRes = similar(resSq,Float64,size(resSq).+1)
-    newRes[begin:end-1,begin:end-1] .= real.(resSq)
-
-    @views newRes[end,begin:end] .= newRes[begin,:]
-    @views newRes[begin:end,end] .= newRes[:,begin]
-    newRes ./NSites
-    
-    # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
-end
-
 ##
-SqsGFMC = fetch.([Threads.@spawn getSq(res,100÷nBra) for res in results])
+SqsGFMC = fetch.([Threads.@spawn SW.getSqGFMC(res,100÷nBra) for res in results])
+
 ##
 with_theme(theme_PiTicks()) do 
     Sq = mean(real(SqsGFMC)) ./4
@@ -288,6 +258,23 @@ with_theme(theme_PiTicks()) do
     fig
 end
 ##
+
+with_theme(theme_SimpleTicks()) do 
+    prange = 1:2:10
+    Sqm = SW.getSqsGFMC(results,prange)
+    fig = Figure()
+    ax = Axis(fig[1,1])
+    Sqmean = dropdims(mean(Sqm,dims = 4),dims = 4)
+    Sqstd = dropdims(std(Sqm,dims = 4),dims = 4)
+    for I in [(10,10),(10,5),(5,5)]
+        i,j = Tuple(I)
+        scatterlines!(ax,prange,Sqmean[i,j,:])
+        errorbars!(ax,prange,Sqmean[i,j,:],Sqstd[i,j,:],whiskerwidth = 3.5)
+    end
+    fig
+end
+##
+
 #___________Spin-1_______________________
 
 ψG = SW.PlaquetteNumberGuidingFunction(0.13)

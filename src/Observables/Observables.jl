@@ -224,12 +224,11 @@ copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
     return real(newRes ./NSites)
     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
-getSqGFMC(res,p,::Nothing) = getSqGFMC(res,p)
-@views function getSqGFMC(res,p,discardborder::Integer)
-    Gnp = precomputeNormalizedAccWeight(res.TotalWeights,1,p)    # Gnp = ones(length(res.TotalWeights[nThermal:end]),p)
+@views function getSqGFMC(res,m_values::ABSTRACTCOLLECTION)
+    pMax = maximum(m_values)
+    Gnp = precomputeNormalizedAccWeight(res.TotalWeights,1,2pMax)
 
-    Conf = res.SaveConfigs[begin+discardborder:end-discardborder,begin+discardborder:end-discardborder,begin,begin]
-
+    Conf = res.SaveConfigs[:,:,begin,begin]
     NSites = length(Conf)
     Sq = similar(Conf, ComplexF32)
     
@@ -237,44 +236,81 @@ getSqGFMC(res,p,::Nothing) = getSqGFMC(res,p)
     plan = FFTW.plan_fft(Si)
 
     function SqFunc(Conf)
-        # Si .= Conf
-        # copytont!(Si,Conf)
-        copyto!(Si,Conf[begin+discardborder:end-discardborder,begin+discardborder:end-discardborder])
+        copyto!(Si,Conf)
         mul!(Sq, plan, Si)
         for i in eachindex(Sq)
             Sq[i] = abs2(Sq[i])
         end
         Sq
-        # Sq .= abs2.(Sq)
     end
     SaveConfs = res.SaveConfigs
     reconfTable = res.reconfigurationTable
-    res = getObs(Gnp,SaveConfs,reconfTable,SqFunc,p÷2)
-    newRes = similar(res,size(res).+1)
-    newRes[begin:end-1,begin:end-1] .= res
+    res_m = getObs(Gnp,SaveConfs,reconfTable,SqFunc,m_values)
+    newRes_m = [similar(real(res),size(res).+1) for res in res_m]
 
-    @views newRes[end,begin:end] .= newRes[begin,:]
-    @views newRes[begin:end,end] .= newRes[:,begin]
-    return real(newRes ./NSites)
+    for (res,newRes) in zip(res_m,newRes_m)
+        newRes[begin:end-1,begin:end-1] .= res ./NSites
+
+        @views newRes[end,begin:end] .= newRes[begin,:]
+        @views newRes[begin:end,end] .= newRes[:,begin]
+    end
+
+    return newRes_m
     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
+getSqGFMC(res,p,::Nothing) = getSqGFMC(res,p)
+# @views function getSqGFMC(res,p,discardborder::Integer)
+#     Gnp = precomputeNormalizedAccWeight(res.TotalWeights,1,p)    # Gnp = ones(length(res.TotalWeights[nThermal:end]),p)
 
-_getNbra(res,::Nothing) = res.nBra
-_getNbra(res,nBra) = nBra
+#     Conf = res.SaveConfigs[begin+discardborder:end-discardborder,begin+discardborder:end-discardborder,begin,begin]
 
-function getSqsGFMC(Results,p;nBra=nothing,discardborder=nothing)
-    _getSqsGFMC(Results,p,nBra,discardborder)
-end
+#     NSites = length(Conf)
+#     Sq = similar(Conf, ComplexF32)
+    
+#     Si = similar(Conf, ComplexF32)
+#     plan = FFTW.plan_fft(Si)
 
-function _getSqsGFMC(Results,p,nBra,discardborder)
+#     function SqFunc(Conf)
+#         # Si .= Conf
+#         # copytont!(Si,Conf)
+#         copyto!(Si,Conf[begin+discardborder:end-discardborder,begin+discardborder:end-discardborder])
+#         mul!(Sq, plan, Si)
+#         for i in eachindex(Sq)
+#             Sq[i] = abs2(Sq[i])
+#         end
+#         Sq
+#         # Sq .= abs2.(Sq)
+#     end
+#     SaveConfs = res.SaveConfigs
+#     reconfTable = res.reconfigurationTable
+#     res = getObs(Gnp,SaveConfs,reconfTable,SqFunc,p÷2)
+#     newRes = similar(res,size(res).+1)
+#     newRes[begin:end-1,begin:end-1] .= res
+
+#     @views newRes[end,begin:end] .= newRes[begin,:]
+#     @views newRes[begin:end,end] .= newRes[:,begin]
+#     return real(newRes ./NSites)
+#     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
+# end
+
+function getSqsGFMC(Results,p)
     Sqs = Vector{Matrix{Float64}}(undef,length(Results))
     Threads.@threads for i in eachindex(Results,Sqs)
         res = Results[i]
-        _nBra = _getNbra(res,nBra)
-        Sq = getSqGFMC(res,p÷_nBra,discardborder)
+        Sq = getSqGFMC(res,p)
         Sqs[i] = Sq
     end
     return Sqs
+end
+
+function getSqsGFMC(Results,p::ABSTRACTCOLLECTION)
+    Sqs = Vector{Vector{Matrix{Float64}}}(undef,length(Results))
+    Threads.@threads for i in eachindex(Results,Sqs)
+        res = Results[i]
+        Sq = getSqGFMC(res,p)
+        Sqs[i] = Sq
+    end
+    return stack(stack(Sqs))
 end
 # struct SzOperator <: AbstractOperator
 #     I::CartesianIndex{2}
