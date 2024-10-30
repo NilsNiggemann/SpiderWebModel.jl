@@ -339,6 +339,7 @@ function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m::Integer=size(Gnp,
     p = size(Gnp,2)
     # surviving_walker_mapping_list = zeros(Int,Nw)
     WalkerMultiplicities = zeros(Int,Nw)
+
     for n in m+1:N
         Gn = Gnp[n,p]
         # denom += Gn*Nw
@@ -394,10 +395,28 @@ function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m_values::ABSTRACTCO
     Nw = size(reconfigurationTable,1)
     p = size(Gnp,2)
     WalkerMultiplicities = zeros(Int,Nw)
+    ObsBuffer = [float(zero(Obs)) for α in 1:Nw, n in 1:(pMax)]
+    wrap_idx(n) = (n-1) % (pMax) + 1
+    
+    obsBuffer(α,n) = ObsBuffer[α,wrap_idx(n)]
+    function fillBuffer!(nRange)
+        for n in nRange
+            for α in 1:Nw
+                _fillBuffer!(α,n)
+            end
+        end
+    end
+    function _fillBuffer!(α::Int,n::Int)
+        conf = @view AllConfigs[:,:,α,n]
+        O = ObsFunc(conf)
+        _set_to!(obsBuffer(α,n),O)
+    end
+    fillBuffer!(1:pMax)
 
     for n in pMax+1:N
         Gn = Gnp[n,p]
         denom += Gn*Nw
+        fillBuffer!(n-1)
         for (i_m,m) in enumerate(m_values)
             WalkerMultiplicities .= 0
             for α in 1:Nw
@@ -408,17 +427,24 @@ function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m_values::ABSTRACTCO
                 WalkerMultiplicities[α´] += 1
             end
 
+
             for α in 1:Nw
                 mult = WalkerMultiplicities[α]
                 mult == 0 && continue
-                conf = @view AllConfigs[:,:,α,n-m]
-                O = ObsFunc(conf)
+
+                # conf = @view AllConfigs[:,:,α,n-m]
+                # O = ObsFunc(conf)
+                # GnO = _set_to!(GnO,O)
+                O = obsBuffer(α,n-m)
                 GnO = _set_to!(GnO,O)
+
                 GnO = mult_elementwise!(GnO,Gn*mult)
                 num = add_elementwise!(num_m[i_m],GnO)
             end
         end
     end
+    # @info "" length(alpha_nInds) length(unique(alpha_nInds)) Nw*N
+
     return [divide_elementwise!(num,denom) for num in num_m]
 end
 

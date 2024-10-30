@@ -88,7 +88,7 @@ current_figure()
 # rm(outfile;recursive=true,force=true)
 # mkpath(outfile)
 # @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,16,50000÷nBra,nBra,ψG,1;equilibration_steps=nThermal,outfile =string(outfile,i,".h5")) for i in 1:8])
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,28,3000,SW.RKFunction();equilibration_steps=nThermal) for i in 1:42])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,1000,500,SW.RKFunction();equilibration_steps=nThermal) for i in 1:12])
 # @time SW.startManyWalkerGFMC(S,16,nThermal+500_00÷nBra,nBra,ψG,1;outfile = string(outfile,1,".h5"))
 ##
 #___________Observables_______________________
@@ -126,7 +126,7 @@ function getSiSj(results,pmax,I,J)
     obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
 ##
-results = resultsDT
+# results = resultsDT
 nBra = DT.nBranch
 mags1 = getMag(results,150÷nBra,CartesianIndex(3,3)) 
 mags2 = getMag(results,150÷nBra,CartesianIndex(4,1)) 
@@ -260,16 +260,20 @@ end
 ##
 
 with_theme(theme_SimpleTicks()) do 
-    prange = 1:2:10
-    Sqm = SW.getSqsGFMC(results,prange)
+    prange = 1:50
+    Sqm = SW.getSqsGFMC(results,prange) ./4
     fig = Figure()
     ax = Axis(fig[1,1])
     Sqmean = dropdims(mean(Sqm,dims = 4),dims = 4)
     Sqstd = dropdims(std(Sqm,dims = 4),dims = 4)
-    for I in [(10,10),(10,5),(5,5)]
+    for I in [(10,10),(10,5),(5,5),(10,2),argmax(Sqmean)]
+    # for I in [(10,10),(10,5),(5,5),(10,2)]
         i,j = Tuple(I)
-        scatterlines!(ax,prange,Sqmean[i,j,:])
-        errorbars!(ax,prange,Sqmean[i,j,:],Sqstd[i,j,:],whiskerwidth = 3.5)
+        exVal = real(SqEx.Sq[i,j])
+        dat = Sqmean[i,j,:]  ./ exVal
+        l = scatterlines!(ax,prange,dat)
+        errorbars!(ax,prange,dat,Sqstd[i,j,:],whiskerwidth = 3.5)
+        # hlines!(ax,[SqEx.Sq[i,j]],color = l.color[])
     end
     fig
 end
@@ -284,13 +288,29 @@ S = SW.stencilConfig(zeros(20,20),1;
 boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
 )
 # CT = SW.ContinuousTimeMethod(0.003,4,10.,SW.Hxx_SIA(0.0))
-DT = SW.DiscreteTimeMethod(0.,4,67)
-@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,2_000,ψG,equilibration_steps=0,pre_equilibration_steps=10_000,scatter_fraction=0.92) for i in 1:6])
+DT = SW.DiscreteTimeMethod(0.,5,67)
+@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,10,1000,ψG,equilibration_steps=10,pre_equilibration_steps=10_000,scatter_fraction=0.92) for i in 1:6])
 ##
 results = resultsDT
 nBra = DT.nBranch
-plotEnergies(resultsDT,round(Int,DT.nBranch),p=200,nThermal=1000,label = L"discrete time$$")
+plotEnergies(resultsDT,DT,p=100,nThermal=10,label = L"discrete time$$")
 
+##
+# with_theme(theme_SimpleTicks()) do 
+let
+    prange = 1:10
+    Sqm = SW.getSqsGFMC(results,prange)
+    fig = Figure()
+    ax = Axis(fig[1,1])
+    Sqmean = dropdims(mean(Sqm,dims = 4),dims = 4)
+    Sqstd = dropdims(std(Sqm,dims = 4),dims = 4)
+    for I in [(10,10),(10,5),(5,5),argmax(Sqmean)]
+        i,j = Tuple(I)
+        scatterlines!(ax,prange,Sqmean[i,j,:])
+        errorbars!(ax,prange,Sqmean[i,j,:],Sqstd[i,j,:],whiskerwidth = 3.5)
+    end
+    fig
+end
 ##
 # SqsGFMC = fetch.([Threads.@spawn (
 # getSq(res,150÷nBra,1,1) .+ getSq(res,150÷nBra,2,2) .+ getSq(res,150÷nBra,1,2) .+ getSq(res,150÷nBra,2,1)) for res in results])
