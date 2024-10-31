@@ -389,6 +389,9 @@ function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc::FuncType,m_values::
     Obs = ObsFunc(exampleConf)
     return _getObs(Gnp,AllConfigs,reconfigurationTable,Obs,ObsFunc,m_values)
 end
+function _getObs(Gnp,AllConfigs,reconfigurationTable,Obs::Any,ObsFunc,m_values::ABSTRACTCOLLECTION)
+throw(ArgumentError("Only supports observables which are of an array type"))
+end
 
 function _getObs(Gnp,AllConfigs,reconfigurationTable,Obs::T,ObsFunc::FuncType,m_values::ABSTRACTCOLLECTION) where {FuncType,T<:AbstractArray}
     N = lastindex(AllConfigs,4)
