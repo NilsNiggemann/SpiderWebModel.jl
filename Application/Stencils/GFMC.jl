@@ -261,7 +261,7 @@ end
 
 with_theme(theme_SimpleTicks()) do 
     prange = 1:50
-    Sqm = SW.getSqsGFMC(results,prange) ./4
+    Sqm = SW.getSqsGFMC(resultsDT,prange) ./4
     fig = Figure()
     ax = Axis(fig[1,1])
     Sqmean = dropdims(mean(Sqm,dims = 4),dims = 4)

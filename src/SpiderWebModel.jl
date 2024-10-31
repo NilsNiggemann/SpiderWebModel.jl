@@ -21,6 +21,7 @@ import FFTW
 include("SpinConfig.jl")
 include("Constraint.jl")
 include("PeriodicTilings.jl")
+include("Observables/Observables.jl")
 
 include("Fluctuations/StencilConfigs.jl")
 include("Fluctuations/Fluctuations.jl")
@@ -42,7 +43,6 @@ include("GroundStateConstruction/TilingPaths.jl")
 include("GroundStateConstruction/GroundStateConstruction.jl")
 include("GroundStateConstruction/JuMPConstruction.jl")
 
-include("Observables/Observables.jl")
 
 include("explicitStates/PeriodicStates.jl")
 

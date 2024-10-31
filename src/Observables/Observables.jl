@@ -1,3 +1,52 @@
+"""
+Abstract supertype for observables. An observable must be a function that takes a spin configuration and returns an array.
+To define a subtype of O of `AbstractObservable`, one must define the following functions:
+
+- obs(::O) returns the buffer array for the output of the observable.
+- `O(out,Conf)`: Writes the observable for the given configuration to the preallocated array `out`. Returns out.
+- Base.copy(O::O): Returns a copy of the observable.
+
+If no preallocated array is given, the observable defaults to using the buffer array `obs(O)`.
+"""
+abstract type AbstractObservable end
+obs_size(O::AbstractObservable) = size(obs(O))
+(O::AbstractObservable)(Conf) = O(obs(O),Conf)
+Base.show(io::IO,::MIME"text/plain",O::Obs) where {Obs <: AbstractObservable} = print(io, "$Obs,", " ∈ ", obs_size(O))
+Base.display(io::IO,::MIME"text/plain",O::Obs) where {Obs <: AbstractObservable} = print(io, "$Obs,", " ∈ ", obs_size(O))
+
+struct SqFFT{T<:FFTW.FFTWPlan} <: AbstractObservable
+    Si::Matrix{ComplexF32}
+    Sq::Matrix{ComplexF32}
+    plan::T
+end
+"""
+Given the dimension `dims`, allocates a functor that computes the FFT for a given spin configuration of size dims.
+"""
+function SqFFT(dims)
+    Sq = zeros(ComplexF32,dims)
+    Si = zeros(ComplexF32,dims)
+
+    plan = FFTW.plan_fft(Si)
+
+    return SqFFT(Si,Sq,plan)
+end
+
+obs(FFTSq::SqFFT) = FFTSq.Sq
+copy(FFTSq::SqFFT) = SqFFT(copy(FFTSq.Si),copy(FFTSq.Sq),FFTSq.plan)
+
+function (FFTSq::SqFFT)(out,Conf::Matrix{ComplexF32})
+    mul!(out, FFTSq.plan, Conf)
+    @inbounds for i in eachindex(out)
+        out[i] = abs2(out[i])
+    end
+    out
+end
+
+function (FFTSq::SqFFT)(out,Conf)
+    copyto!(FFTSq.Si,Conf)
+    FFTSq(out,FFTSq.Si)
+end
+
 function getStructureFacWeights(AllStates::AbstractVector{<:SpinConfig}, weights, tol = 0)
     # weights = abs2.(Psi)
     # state_weight = collect(zip( AllStates,weights))[inds]
@@ -197,7 +246,7 @@ copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
 
     Conf = res.SaveConfigs[:,:,begin,begin]
     NSites = length(Conf)
-    SqFunc = SqFFT(Conf)
+    SqFunc = SqFFT(size(Conf))
     SaveConfs = res.SaveConfigs
     reconfTable = res.reconfigurationTable
     res = getObs(Gnp,SaveConfs,reconfTable,SqFunc,p÷2)
@@ -210,27 +259,7 @@ copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
 
-struct SqFFT{T<:FFTW.FFTWPlan}
-    Si::Matrix{ComplexF32}
-    Sq::Matrix{ComplexF32}
-    plan::T
-end
-function SqFFT(Conf)
-    Sq = similar(Conf, ComplexF32)
-    
-    Si = similar(Conf, ComplexF32)
-    plan = FFTW.plan_fft(Si)
-
-    return SqFFT(Si,Sq,plan)
-end
-function (FFTSq::SqFFT)(Conf)
-    copyto!(FFTSq.Si,Conf)
-    mul!(FFTSq.Sq, FFTSq.plan, FFTSq.Si)
-    @inbounds for i in eachindex(FFTSq.Sq)
-        FFTSq.Sq[i] = abs2(FFTSq.Sq[i])
-    end
-    FFTSq.Sq
-end
+const ABSTRACTCOLLECTION = Union{AbstractRange,AbstractVector,Tuple}
 
 @views function getSqGFMC(res,m_values::ABSTRACTCOLLECTION)
     pMax = maximum(m_values)
@@ -239,7 +268,7 @@ end
     Conf = res.SaveConfigs[:,:,begin,begin]
     NSites = length(Conf)
 
-    SqFunc = SqFFT(Conf)
+    SqFunc = SqFFT(size(Conf))
     SaveConfs = res.SaveConfigs
     reconfTable = res.reconfigurationTable
     res_m = getObs(Gnp,SaveConfs,reconfTable,SqFunc,m_values)
