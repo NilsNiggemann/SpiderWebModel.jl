@@ -266,14 +266,14 @@ with_theme(theme_SimpleTicks()) do
     ax = Axis(fig[1,1])
     Sqmean = dropdims(mean(Sqm,dims = 4),dims = 4)
     Sqstd = dropdims(std(Sqm,dims = 4),dims = 4)
-    for I in [(10,10),(10,5),(5,5),(10,2),argmax(Sqmean)]
-    # for I in [(10,10),(10,5),(5,5),(10,2)]
+    # for I in [(10,10),(10,5),(5,5),(10,2),argmax(Sqmean)]
+    for I in [(10,10),(10,5),(5,5),(10,2)]
         i,j = Tuple(I)
         exVal = real(SqEx.Sq[i,j])
-        dat = Sqmean[i,j,:]  ./ exVal
+        dat = Sqmean[i,j,:]  #./ exVal
         l = scatterlines!(ax,prange,dat)
         errorbars!(ax,prange,dat,Sqstd[i,j,:],whiskerwidth = 3.5)
-        # hlines!(ax,[SqEx.Sq[i,j]],color = l.color[])
+        hlines!(ax,[SqEx.Sq[i,j]],color = l.color[])
     end
     fig
 end

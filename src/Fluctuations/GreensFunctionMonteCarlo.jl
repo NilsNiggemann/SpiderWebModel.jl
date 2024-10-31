@@ -379,44 +379,39 @@ const ABSTRACTCOLLECTION = Union{AbstractRange,AbstractVector,Tuple}
 function getObs(result,ObsFunc,m_values::ABSTRACTCOLLECTION)
     pMax = maximum(m_values)
     Gnp = precomputeNormalizedAccWeight(result.TotalWeights,1,2pMax)
-    return getObs(Gnp,result.SaveConfigs,result.reconfigurationTable,ObsFunc,m_values)
+    exampleConf = @view result.SaveConfigs[:,:,begin,begin]
+    Obs = ObsFunc(exampleConf)
+    return _getObs(Gnp,result.SaveConfigs,result.reconfigurationTable,Obs,ObsFunc,m_values)
 end
 
-function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m_values::ABSTRACTCOLLECTION)
-    N = lastindex(AllConfigs,4)
+function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc::FuncType,m_values::ABSTRACTCOLLECTION) where {FuncType}
     exampleConf = @view AllConfigs[:,:,begin,begin]
+    Obs = ObsFunc(exampleConf)
+    return _getObs(Gnp,AllConfigs,reconfigurationTable,Obs,ObsFunc,m_values)
+end
+
+function _getObs(Gnp,AllConfigs,reconfigurationTable,Obs::T,ObsFunc::FuncType,m_values::ABSTRACTCOLLECTION) where {FuncType,T<:AbstractArray}
+    N = lastindex(AllConfigs,4)
+
     pMax = maximum(m_values)
 
-    Obs = ObsFunc(exampleConf)
     num_m = [float(zero(Obs)) for _ in m_values]
     denom = 0.
-    GnO = float(zero(Obs))
 
     Nw = size(reconfigurationTable,1)
     p = size(Gnp,2)
     WalkerMultiplicities = zeros(Int,Nw)
     ObsBuffer = [float(zero(Obs)) for α in 1:Nw, n in 1:(pMax)]
-    wrap_idx(n) = (n-1) % (pMax) + 1
     
+    wrap_idx(n) = (n-1) % (pMax) + 1
     obsBuffer(α,n) = ObsBuffer[α,wrap_idx(n)]
-    function fillBuffer!(nRange)
-        for n in nRange
-            for α in 1:Nw
-                _fillBuffer!(α,n)
-            end
-        end
-    end
-    function _fillBuffer!(α::Int,n::Int)
-        conf = @view AllConfigs[:,:,α,n]
-        O = ObsFunc(conf)
-        _set_to!(obsBuffer(α,n),O)
-    end
-    fillBuffer!(1:pMax)
+
+    fill_obs_buffer!(ObsBuffer,1:pMax,ObsFunc,AllConfigs,pMax)
 
     for n in pMax+1:N
         Gn = Gnp[n,p]
         denom += Gn*Nw
-        fillBuffer!(n-1)
+        fill_obs_buffer!(ObsBuffer,n-1,ObsFunc,AllConfigs,pMax)
         for (i_m,m) in enumerate(m_values)
             WalkerMultiplicities .= 0
             for α in 1:Nw
@@ -432,21 +427,35 @@ function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m_values::ABSTRACTCO
                 mult = WalkerMultiplicities[α]
                 mult == 0 && continue
 
-                # conf = @view AllConfigs[:,:,α,n-m]
-                # O = ObsFunc(conf)
-                # GnO = _set_to!(GnO,O)
                 O = obsBuffer(α,n-m)
-                GnO = _set_to!(GnO,O)
-
-                GnO = mult_elementwise!(GnO,Gn*mult)
-                num = add_elementwise!(num_m[i_m],GnO)
+                @. num_m[i_m] += O*Gn*mult
             end
         end
     end
-    # @info "" length(alpha_nInds) length(unique(alpha_nInds)) Nw*N
-
-    return [divide_elementwise!(num,denom) for num in num_m]
+    for i in eachindex(num_m)
+        divide_elementwise!(num_m[i],denom)
+    end
+    return num_m
 end
+
+function fill_obs_buffer!(ObsBuffer,nRange,ObsFunc,AllConfigs,pMax)
+    for n in nRange
+        for α in axes(AllConfigs,3)
+            _fill_obs_buffer!(ObsBuffer,α,n,ObsFunc,AllConfigs,pMax)
+        end
+    end
+    return
+end
+
+function _fill_obs_buffer!(ObsBuffer,α::Int,n::Int,ObsFunc,AllConfigs,pMax)
+    conf = @view AllConfigs[:,:,α,n]
+    O = ObsFunc(conf)
+    wrap_idx(n) = (n-1) % (pMax) + 1
+    obsBuffer(α,n) = ObsBuffer[α,wrap_idx(n)]
+    _set_to!(obsBuffer(α,n),O)
+    return
+end
+
 
 function surviving_walker_mapping!(mappingarr,reconfigList)
     fill!(mappingarr,0)

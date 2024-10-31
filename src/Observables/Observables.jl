@@ -197,22 +197,7 @@ copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
 
     Conf = res.SaveConfigs[:,:,begin,begin]
     NSites = length(Conf)
-    Sq = similar(Conf, ComplexF32)
-    
-    Si = similar(Conf, ComplexF32)
-    plan = FFTW.plan_fft(Si)
-
-    function SqFunc(Conf)
-        # Si .= Conf
-        # copytont!(Si,Conf)
-        copyto!(Si,Conf)
-        mul!(Sq, plan, Si)
-        for i in eachindex(Sq)
-            Sq[i] = abs2(Sq[i])
-        end
-        Sq
-        # Sq .= abs2.(Sq)
-    end
+    SqFunc = SqFFT(Conf)
     SaveConfs = res.SaveConfigs
     reconfTable = res.reconfigurationTable
     res = getObs(Gnp,SaveConfs,reconfTable,SqFunc,p÷2)
@@ -224,25 +209,37 @@ copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
     return real(newRes ./NSites)
     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
+
+struct SqFFT{T<:FFTW.FFTWPlan}
+    Si::Matrix{ComplexF32}
+    Sq::Matrix{ComplexF32}
+    plan::T
+end
+function SqFFT(Conf)
+    Sq = similar(Conf, ComplexF32)
+    
+    Si = similar(Conf, ComplexF32)
+    plan = FFTW.plan_fft(Si)
+
+    return SqFFT(Si,Sq,plan)
+end
+function (FFTSq::SqFFT)(Conf)
+    copyto!(FFTSq.Si,Conf)
+    mul!(FFTSq.Sq, FFTSq.plan, FFTSq.Si)
+    @inbounds for i in eachindex(FFTSq.Sq)
+        FFTSq.Sq[i] = abs2(FFTSq.Sq[i])
+    end
+    FFTSq.Sq
+end
+
 @views function getSqGFMC(res,m_values::ABSTRACTCOLLECTION)
     pMax = maximum(m_values)
     Gnp = precomputeNormalizedAccWeight(res.TotalWeights,1,2pMax)
 
     Conf = res.SaveConfigs[:,:,begin,begin]
     NSites = length(Conf)
-    Sq = similar(Conf, ComplexF32)
-    
-    Si = similar(Conf, ComplexF32)
-    plan = FFTW.plan_fft(Si)
 
-    function SqFunc(Conf)
-        copyto!(Si,Conf)
-        mul!(Sq, plan, Si)
-        for i in eachindex(Sq)
-            Sq[i] = abs2(Sq[i])
-        end
-        Sq
-    end
+    SqFunc = SqFFT(Conf)
     SaveConfs = res.SaveConfigs
     reconfTable = res.reconfigurationTable
     res_m = getObs(Gnp,SaveConfs,reconfTable,SqFunc,m_values)
