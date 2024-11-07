@@ -63,6 +63,12 @@ function getOx_k(ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker,k)
     return getOx_k_plaqs(ψG,Walker.n_x,k)
 end
 
+function getNonSymmetric(ψG::AbstractGuidingFunction)
+    indicesMapping = collect(eachindex(ψG.params))
+    uniqueInds = collect(indicesMapping)
+    return SymmetryReducedWaveFunction(ψG,indicesMapping,uniqueInds)
+end
+
 function getDistReduction(S,ψG::FullVariationalGuidingFunction)
     
     AllDists = Dict{SVector{2,Int},Int}()

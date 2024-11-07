@@ -17,6 +17,11 @@ get_params(P::SymmetryReducedWaveFunction) = get_params(P.psi)
 variational_parameters(P::AbstractGuidingFunction) = Dict([:params=>P.params])
 variational_parameters(P::Function) = Dict([x => getproperty(P,x) for x in propertynames(P)])
 
+"""Allocates a buffer for the guiding wave function to be used for efficient computation. Can be anything depending on the model"""
+allocate_GWF_buffer(ψG::AbstractGuidingFunction,S::Any) = precomputeAffectedPlaquettes(S)
+
+# allocate_GWF_buffer(ψG::AbstractGuidingFunction,S::StencilSpinConfig) = nothing
+
 @inline guidingfuncRatio(ψG::AbstractGuidingFunction,Walker::SpiderWebWalker,move,affectedPlaquettes) = exp(guidingfuncRatio_exponent(ψG,Walker,move,affectedPlaquettes))
 function _guidingfuncRatio_exponent(α::AbstractVector,β::AbstractMatrix,Walker::SpiderWebWalker,affectedPlaquettes)
 
@@ -114,4 +119,15 @@ function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::T,
         push!(weights,Λ)
     end
     return weights
+end
+
+function _getParamsTypeAndIndex(A::RecursiveArrayTools.ArrayPartition,i)
+    @boundscheck checkbounds(A, i)
+    @inbounds for j in 1:length(A.x)
+        i -= length(A.x[j])
+        if i <= 0
+            return (j,length(A.x[j]) + i)
+        end
+    end
+    throw(BoundsError(A, i))
 end

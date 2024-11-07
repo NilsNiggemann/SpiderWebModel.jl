@@ -1,5 +1,8 @@
 using StaticArrays
 using Optim
+dropmean(A; dims=:) = dropdims(mean(A; dims=dims); dims=dims)
+dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
+
 
 _getkwargs(::Any) = (;xlabel = L"projection order $$")
 _getkwargs(m::SW.ContinuousTimeMethod) = (;xlabel = L"\tau")

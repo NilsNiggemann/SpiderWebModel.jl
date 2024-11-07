@@ -153,7 +153,7 @@ initialize_forward_walking!(Problem::AbstractGFMCProblem,O::AbstractOperator,Con
 
 function straight_forward_walking!(prob::AbstractGFMCProblem,TotalWeights,reconfigurationList)
     
-    (;Walkers,weights,AffectedPlaquetteList,reconfiguration_buffer,ψG,method) = prob
+    (;Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,ψG,method) = prob
 
     NSteps = size(TotalWeights,1)
     Operator_weight = mean(weights)
@@ -166,7 +166,7 @@ function straight_forward_walking!(prob::AbstractGFMCProblem,TotalWeights,reconf
     end
     for i in 1:NSteps
         
-        propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method)
+        propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method)
         
         TotalWeights[i] = mean(weights)
 
@@ -192,7 +192,7 @@ function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveCo
     setup = setup_many_walker_GFMC(InitialState,Nwalkers)
     results = setup_operatorObservables(mProj,length(AllPlaqs),NSteps,O,outfile)
 
-    Problem = SpiderwebGFMCProblem(method,InitialState,ψG,setup.Walkers,setup.weights,setup.AffectedPlaquetteList,setup.reconfiguration_buffer,results)
+    Problem = SpiderwebGFMCProblem(method,InitialState,ψG,setup.Walkers,setup.weights,setup.Guiding_function_buffer,setup.reconfiguration_buffer,results)
 
     reconfigurationList = zeros(Int,length(Problem.Walkers))
     for n in 1:NSteps

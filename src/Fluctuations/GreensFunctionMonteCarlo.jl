@@ -45,13 +45,13 @@ ContinuousTimeMethod(τ,nBranch::Integer,w_avg_estimate=1.,Hxx=Hxx_zero()) = Con
 ContinuousTimeMethod(τ;nBranch=1,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(τ,nBranch,float(w_avg_estimate),Hxx)
 
 abstract type AbstractGFMCProblem end
-struct SpiderwebGFMCProblem{MethodType<:AbstractGFMCMethod,T<:AbstractFloat,C,F,W,O} <: AbstractGFMCProblem
+struct SpiderwebGFMCProblem{MethodType<:AbstractGFMCMethod,T<:AbstractFloat,BufferType,C,F,W,O} <: AbstractGFMCProblem
     method::MethodType
     InitialState::C
     ψG::F
     Walkers::Vector{W}
     weights::Vector{T}
-    AffectedPlaquetteList::Matrix{OrderedSet{Int}}
+    Guiding_function_buffer::BufferType
     reconfiguration_buffer::Vector{T}
     Observables::O
 end
@@ -67,13 +67,14 @@ end
 
 function _setup_GFMC_problem(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,NSteps::Integer,ψG,outfile)
     setup = setup_many_walker_GFMC(InitialState,Nwalkers)
-    (;AffectedPlaquetteList,Walkers,weights,reconfiguration_buffer) = setup
+    Guiding_function_buffer = allocate_GWF_buffer(ψG,InitialState)
+    (;Walkers,weights,reconfiguration_buffer) = setup
     ObsSetup = setupObservables(InitialState,Nwalkers,NSteps,outfile)
     (;energies,SaveConfigs,TotalWeights,reconfigurationTable) = ObsSetup
 
     Observables = GFMCObservables(energies,SaveConfigs,TotalWeights,reconfigurationTable,outfile)
 
-    return SpiderwebGFMCProblem(method,InitialState,ψG,Walkers,weights,AffectedPlaquetteList,reconfiguration_buffer,Observables)
+    return SpiderwebGFMCProblem(method,InitialState,ψG,Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,Observables)
 end
 
 function setup_GFMC_problem(InitialState::ConfType, method::AbstractGFMCMethod, Nwalkers::Integer, NSteps::Integer, ψG;
@@ -461,7 +462,6 @@ function splitIntoBins(array,binsize)
 end
 
 function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers::Integer) where {ConfType <: StencilSpinConfig}
-    AffectedPlaquetteList = precomputeAffectedPlaquettes(InitialState)
     plaquettePositions = collect(plaquetteIterator(InitialState))
     Walkers = Vector{SpiderWebWalker{ConfType}}(undef,Nwalkers)
     Threads.@threads for α in eachindex(Walkers)
@@ -470,7 +470,7 @@ function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers::Integer) where 
     weights = ones(Nwalkers)
     reconfiguration_buffer = zeros(Nwalkers)
     
-    return (;AffectedPlaquetteList,Walkers,weights,reconfiguration_buffer)
+    return (;Walkers,weights,reconfiguration_buffer)
 end
 
 function setupObservables(InitConfig,NWalkers,NSteps,outfile::Nothing)
@@ -595,7 +595,7 @@ end
 
 function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8))
     
-    (;AffectedPlaquetteList,Walkers,weights,reconfiguration_buffer,Observables,method,ψG) = prob
+    (;Guiding_function_buffer,Walkers,weights,reconfiguration_buffer,Observables,method,ψG) = prob
     (;outfile,reconfigurationTable) = Observables
 
     saveParameters(outfile,equilibration_steps,method,ψG)
@@ -605,14 +605,14 @@ function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0,initial
     #fill buffers for available steps and weights
     reconfigurationList = @view reconfigurationTable[:,1]
     for _ in 1:equilibration_steps
-        propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method)
+        propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method)
         reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
     end
 
     return prob,Observables
 end
 
-function startManyWalkerGFMC(prob::AbstractGFMCProblem,equilibration_steps::Int,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8))
+function startManyWalkerGFMC!(prob::AbstractGFMCProblem,equilibration_steps::Int,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8))
     initializeGFMC!(prob,equilibration_steps,initializer)
     runGFMC!(prob)
 end
@@ -623,16 +623,16 @@ end
 
 function startManyWalkerGFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,ψG; equilibration_steps = 0, pre_equilibration_steps = equilibration_steps ÷ 5, scatter_fraction = 0.8,initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),kwargs...)
     prob = setup_GFMC_problem(InitialState,method,Nwalkers,nSteps,ψG;kwargs...)
-    startManyWalkerGFMC(prob,equilibration_steps,initializer)
+    startManyWalkerGFMC!(prob,equilibration_steps,initializer)
 end
 
 function runGFMC!(prob::AbstractGFMCProblem,range,reconfigure::Bool=true)
-    (;Walkers,weights,AffectedPlaquetteList,reconfiguration_buffer,Observables,ψG,method) = prob
+    (;Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,Observables,ψG,method) = prob
     (;energies,SaveConfigs,outfile,TotalWeights, reconfigurationTable) = Observables
     
     for i in range
         # for (α,Config) in enumerate(Walkers)
-        propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method)
+        propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method)
 
         energies[i] = getLocalEnergyWalkers_before(weights,Walkers,method)
         TotalWeights[i] = mean(weights)
@@ -648,7 +648,7 @@ end
 runGFMC!(prob::AbstractGFMCProblem;reconfigure=true) = runGFMC!(prob,eachindex(prob.Observables.TotalWeights),reconfigure)
 runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int;reconfigure=true) = runGFMC!(prob,eachindex(prob.Observables.TotalWeights)[1:Nsteps],reconfigure)
 
-function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::DiscreteTimeMethod)
+function propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method::DiscreteTimeMethod)
     (;Λ,nBranch,w_avg_estimate) = method
 
     w_avg_estimate⁻¹ = 1. / w_avg_estimate
@@ -656,23 +656,23 @@ function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::Dis
         Walker = Walkers[α]
         w = 1.
         for step in 1:nBranch
-            weightList = updateWeightList!(Walker,AffectedPlaquetteList,ψG,Λ)
+            weightList = updateWeightList!(Walker,Guiding_function_buffer,ψG,Λ)
             bx = sum(weightList)*w_avg_estimate⁻¹
             w *= bx
             performMarkovStep!(Walker)
         end
         weights[α] = w
-        updateWeightList!(Walker,AffectedPlaquetteList,ψG,Λ)
+        updateWeightList!(Walker,Guiding_function_buffer,ψG,Λ)
     end
 end
 
-function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::ContinuousTimeMethod)
+function propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method::ContinuousTimeMethod)
     (;Hxx,nBranch,τ,w_avg_estimate) = method
     
     Threads.@threads for α in eachindex(Walkers)
         Walker = Walkers[α]
         log_w = 0.
-        weightList = updateWeightList!(Walker,AffectedPlaquetteList,ψG)
+        weightList = updateWeightList!(Walker,Guiding_function_buffer,ψG)
         H_xx = Hxx(Walker)
         el_x = H_xx + getLocalEnergy(weightList)
         for _ in 1:nBranch
@@ -685,7 +685,7 @@ function propagateWalkers!(Walkers,weights,AffectedPlaquetteList,ψG,method::Con
                 log_w += -dτ*el_x
                 if βleft > 0 
                     performMarkovStep!(Walker)
-                    updateWeightList!(Walker,AffectedPlaquetteList,ψG)
+                    updateWeightList!(Walker,Guiding_function_buffer,ψG)
 
                     H_xx = Hxx(Walker)
                     el_x = H_xx + getLocalEnergy(weightList)

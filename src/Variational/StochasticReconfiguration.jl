@@ -55,7 +55,7 @@ function reconf_obs(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,c
     inequivParams=eachindex(get_params(ψG))
     )
     plaqs = collect(plaquetteIterator(InitialState))
-    AffectedPlaquetteList = precomputeAffectedPlaquettes(InitialState)
+    Guiding_function_buffer = allocate_GWF_buffer(ψG, InitialState)
     
     NThreads = Threads.nthreads()
 
@@ -70,7 +70,7 @@ function reconf_obs(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,c
 
         for (i,iconf) in enumerate(chunkinds)
             get_config(Walker) .= configs[iconf]
-            updateWeightList!(Walker,AffectedPlaquetteList,ψG)
+            updateWeightList!(Walker,Guiding_function_buffer,ψG)
             elocal = getLocalEnergy(Walker,method)
             @inbounds for (ik,k) in enumerate(inequivParams)
                 O_xk = getOx_k(ψG,Walker,k)
@@ -84,7 +84,7 @@ function reconf_obs(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,c
     # Walker = spiderWebWalker(InitialState,plaqs)
     # for (iconf) in eachindex(IndexLinear(),configs)
     #     get_config(Walker) .= configs[iconf]
-    #     updateWeightList!(Walker,AffectedPlaquetteList,ψG)
+    #     updateWeightList!(Walker,Guiding_function_buffer,ψG)
     #     elocal = getLocalEnergy(Walker,method)
     #     for (ik,k) in enumerate(inequivParams)
     #         O_xk = getOx_k(ψG,Walker,k)
