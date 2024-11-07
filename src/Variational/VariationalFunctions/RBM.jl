@@ -1,7 +1,27 @@
-struct RBM{A<:AbstractArray} <: AbstractGuidingFunction
-    params::A
+
+struct RBM{T<:Number} <: AbstractGuidingFunction
+    α_i::Vector{T}
+    b_j::Vector{T}
+    W_ij::Matrix{T}
     N::Int
     hidden_density::Int
+end
+function RBM(N::Int,hidden_density::Int,Type = Float32)
+    α_i = zeros(Type,N)
+    M = N*hidden_density
+    b_j = zeros(Type,M)
+    W_ij = zeros(Type,N,M)
+
+    # return (α_i,b_j,W_ij,N,hidden_density)
+    return RBM(α_i,b_j,W_ij,N,hidden_density)
+end
+RBM(S::StencilSpinConfig,hidden_density::Int,Type = Float32) = RBM(length(S),hidden_density,Type)
+
+get_alpha_i(ψG::RBM) = ψG.α_i
+get_b_j(ψG::RBM) = ψG.b_j
+get_W_ij(ψG::RBM) = ψG.W_ij
+function get_params(ψG::RBM)
+    return RecursiveArrayTools.ArrayPartition(ψG.α_i,ψG.b_j,ψG.W_ij)
 end
 
 function RBM(x::AbstractMatrix,hidden_density::Int)
@@ -13,25 +33,6 @@ function RBM(x::AbstractMatrix,hidden_density::Int)
     # params = zeros(Float32,NParams)
     ψ = RBM(params,N,hidden_density)
     return ψ
-end
-
-function get_alpha_i(ψG::RBM)
-    N = ψG.N
-    return @view ψG.params[1:N]
-end
-
-function get_b_j(ψG::RBM)
-    N = ψG.N
-    M = N * ψG.hidden_density
-    bparams = @view ψG.params[N+1:N+M,:]
-    return reshape(bparams,M)
-end
-
-function get_W_ij(ψG::RBM)
-    N = ψG.N
-    M = N * ψG.hidden_density
-    Wparams = @view ψG.params[N+M+1:end]
-    return reshape(Wparams,N,M)
 end
 
 function getParameterType(ψG::RBM,k)
@@ -71,14 +72,19 @@ end
 
 function get_theta_j(x::AbstractMatrix,j,b,W)
     θj = b[j]
-    for i in axes(W,1)
+    N = length(x)
+    # @inbounds @simd for i in axes(W,1)
+    # for i in eachindex(IndexLinear(),x)
+    # LoopVectorization.@turbo for i in axes(W,1)
+    # for i in 1:N
+    @inbounds @simd for i in 1:N
         θj += W[i,j]*x[i]
     end
     return θj
 end
 
 function getOx_k(ψG::RBM,x::AbstractMatrix,k)
-    par = ψG.params
+    par = get_params(ψG)
 
     paramtype = getParameterType(ψG,k)
 

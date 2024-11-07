@@ -1,6 +1,6 @@
 import LinearMaps, IterativeSolvers
-struct QuantumMetric{T} <: LinearMaps.LinearMap{T}
-    O_km::Matrix{T}
+struct QuantumMetric{T,T2<:AbstractMatrix{T}} <: LinearMaps.LinearMap{T}
+    O_km::T2
     size::Dims{2}
 end
 Base.size(S::QuantumMetric) = S.size
@@ -11,8 +11,11 @@ Base.:(==)(S1::QuantumMetric, S2::QuantumMetric) = S1.O_km == S2.O_km
 
 function QuantumMetric(O_km)
     O_k_avg = reshape(mean(O_km,dims=1),size(O_km,2))
-    for i in eachindex(O_k_avg)
-        O_km[:,i] .-= O_k_avg[i]
+    @inbounds for i in eachindex(O_k_avg)
+        for j in axes(O_km,1)
+            O_km[j,i] -= O_k_avg[i]
+        end
+        # O_km[:,i] .-= O_k_avg[i]
     end
     Nparams = size(O_km,2)
     return QuantumMetric(O_km,Dims((Nparams,Nparams)))
@@ -46,19 +49,21 @@ function LinearMaps._unsafe_mul!(y, S::QuantumMetric, v::AbstractVector)
 
 end
 
-function reconf_obs(InitialState::ConfType,method::AbstractGFMCMethod,configs,ψG,inequivParams=eachindex(ψG.params)) where {ConfType}
+function reconf_obs(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,configs,ψG,
+    Ok_i = zeros(Float32,length(configs),Nparams),
+    E_i = zeros(Float32,length(configs)),
+    inequivParams=eachindex(get_params(ψG))
+    )
     plaqs = collect(plaquetteIterator(InitialState))
     AffectedPlaquetteList = precomputeAffectedPlaquettes(InitialState)
     
     NThreads = Threads.nthreads()
 
     Nparams = length(inequivParams)
-    Ok_i = zeros(Float32,length(configs),Nparams)
-    E_i = zeros(Float32,length(configs))
+
+
     WorkChunks = ChunkSplitters.chunks(eachindex(IndexLinear(),configs),n=NThreads)
     
-    # println("collecting obs")
-    # @time Threads.@threads for (ichunk,chunkinds) in enumerate(WorkChunks)
     Threads.@threads for (ichunk,chunkinds) in enumerate(WorkChunks)
 
         Walker = spiderWebWalker(InitialState,plaqs)
@@ -75,6 +80,19 @@ function reconf_obs(InitialState::ConfType,method::AbstractGFMCMethod,configs,ψ
         end
 
     end
+
+    # Walker = spiderWebWalker(InitialState,plaqs)
+    # for (iconf) in eachindex(IndexLinear(),configs)
+    #     get_config(Walker) .= configs[iconf]
+    #     updateWeightList!(Walker,AffectedPlaquetteList,ψG)
+    #     elocal = getLocalEnergy(Walker,method)
+    #     for (ik,k) in enumerate(inequivParams)
+    #         O_xk = getOx_k(ψG,Walker,k)
+    #         Ok_i[iconf,ik] = O_xk
+    #     end
+    #     E_i[iconf] = elocal
+    # end
+
     N = length(configs)
 
     EL_avg = mean(E_i)
@@ -124,7 +142,7 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
     
     (;psi,indicesMapping,uniqueInds) = GWF
     ψG = deepcopy(psi)
-    params = ψG.params
+    params = get_params(ψG)
 
     convergedSteps = 0
 
@@ -139,6 +157,11 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
     results = get_stoch_rec_Observables(n,ψG,outfile)
 
     ind = 0
+    Nparams = length(uniqueInds)
+
+    All_Ok_i = zeros(Float32,maxNSteps*Nwalkers,Nparams)
+    All_E_i = zeros(Float32,maxNSteps*Nwalkers)
+
     for i in 1:n
         
         range = eachindex(prob.Observables.TotalWeights)[1:NSteps[i]]
@@ -152,8 +175,10 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
 
         resSlice = @view res.SaveConfigs[:,:,:,range]
         confs = eachslice( resSlice,dims=(3,4))
-        
-        observables = reconf_obs(InitialState,method,confs,ψG,uniqueInds)
+        Ok_i = @view All_Ok_i[1:NSteps[i]*Nwalkers,:]
+        E_i = @view All_E_i[1:NSteps[i]*Nwalkers]
+
+        observables = reconf_obs(InitialState,method,confs,ψG,Ok_i,E_i,uniqueInds)
         # (;EL_avg,EL_err ) = observables
         # return observables
         δα = stochastic_reconfiguration_step(observables.E_i,observables.Ok_i,solver)
@@ -169,10 +194,10 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
         # push!(params_steps, copy(params))
         selectdim(results.params_steps,arraydim(results.params_steps),i) .= params
 
-        α = get_alpha_i(ψG)
+        # α = get_alpha_i(ψG)
         w_avg = mean(res.TotalWeights[range])
         if verbose && i % report_steps == 0
-            @info "optimization step $i" dt[i] NSteps[i] "|δα|" = normDelta δα[1] E0 ΔE0 = ΔE0 convergedSteps mean(α) w_avg
+            @info "optimization step $i" dt[i] numConfigs = NSteps[i]*Nwalkers "|δα|" = normDelta δα[1] E0 ΔE0 = ΔE0 convergedSteps w_avg
         end
         ind = i
         if normDelta < rel_tolerance
@@ -218,7 +243,7 @@ makeVec(f::Function,len) = f.(1:len)
 function get_stoch_rec_Observables(Nsteps,ψG,::Nothing)
     E0 = zeros(Nsteps)
     ΔE = zeros(Nsteps)
-    params = zeros(size(ψG.params)...,Nsteps)
+    params = zeros(size(get_params(ψG))...,Nsteps)
     return (;E0 = E0,ΔE = ΔE,params_steps = params)
 end
 
@@ -226,7 +251,7 @@ function get_stoch_rec_Observables(Nsteps,ψG,outfile::AbstractString)
     h5open(outfile,"cw") do file
         E0 = createMMapArray(file,"E0",Float64,(Nsteps,))
         ΔE = createMMapArray(file,"ΔE",Float64,(Nsteps,))
-        params = createMMapArray(file,"params_steps",Float32,(size(ψG.params)...,Nsteps))
+        params = createMMapArray(file,"params_steps",Float32,(size(get_params(ψG))...,Nsteps))
         E0 .= 0
         ΔE .= 0
         params .= 0

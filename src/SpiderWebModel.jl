@@ -17,6 +17,7 @@ import MathOptInterface as MOI
 import Stencils
 import StatsBase
 import FFTW
+import RecursiveArrayTools
 
 include("SpinConfig.jl")
 include("Constraint.jl")

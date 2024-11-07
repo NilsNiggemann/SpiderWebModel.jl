@@ -201,16 +201,29 @@ function plotVarEn(stochReconfRes;normalization=1)
     fig = Figure(theme = theme_SimpleTicks())
 
     ax = Axis(fig[1, 1], xlabel = "Iteration", ylabel = "Energy",xlabelvisible=false,xticklabelsvisible=false)
+    axVar = Axis(fig[1,1], ylabel = "σE", yaxisposition=:right,yticklabelcolor=:red,ylabelcolor = :red,ygridstyle = :dash,xgridvisible = false,xticksvisible = false,xticklabelsvisible = false)
+
     ax2 = Axis(fig[2,1], xlabel = "Iteration", ylabel = "α")
+    ax2norm = Axis(fig[2,1], ylabel = "||Δα||", yaxisposition=:right,yticklabelcolor=:red,ylabelcolor = :red,ygridstyle = :dash,xgridvisible = false,xticksvisible = false,xticklabelsvisible = false)
+    linkxaxes!(ax,axVar, ax2,ax2norm)
 
     Epl =stochReconfRes.E0 ./ normalization
     x = eachindex(Epl)
-    errorbars!(ax,x,Epl,stochReconfRes.ΔE./ normalization,whiskerwidth=5)
-    lines!(ax,x,Epl)
+    # errorbars!(ax,x,Epl,stochReconfRes.ΔE./ normalization,whiskerwidth=5,color = :black)
+    Delta = stochReconfRes.ΔE./ normalization
+    band!(ax,x,Epl .-Delta, Epl .+ Delta,color = (:black,0.3))
+    lines!(ax,x,Epl,color = :black)
+    lines!(axVar,x,Delta,color = :red,linewidth = 1)
+
     parsteps = stochReconfRes.params_steps
     parslice = getLastSlice(parsteps)
 
-    lines!(ax2,x,parslice)
+    lines!(ax2,x,parslice,color = :black)
+    lastdim = length(size(stochReconfRes.params_steps))
+
+    diffs = diff(stochReconfRes.params_steps,dims = lastdim)
+    norms = SW.norm.(eachslice(diffs,dims = lastdim))
+    lines!(ax2norm,x[2:end],norms,color = :red)
     fig
 end
 function trueMomenta(kmin,kmax,L)

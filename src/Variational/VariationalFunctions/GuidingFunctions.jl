@@ -12,6 +12,8 @@ end
 guidingfunc_name(F::Function) = string(typeof(F))
 guidingfunc_name(F::AbstractGuidingFunction) = string(typeof(F))
 
+get_params(P::AbstractGuidingFunction) = P.params
+get_params(P::SymmetryReducedWaveFunction) = get_params(P.psi)
 variational_parameters(P::AbstractGuidingFunction) = Dict([:params=>P.params])
 variational_parameters(P::Function) = Dict([x => getproperty(P,x) for x in propertynames(P)])
 
