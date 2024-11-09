@@ -67,7 +67,7 @@ end
 
 function _setup_GFMC_problem(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,NSteps::Integer,ψG,outfile)
     setup = setup_many_walker_GFMC(InitialState,Nwalkers)
-    Guiding_function_buffer = allocate_GWF_buffer(ψG,InitialState)
+    Guiding_function_buffer = fetch.([Threads.@spawn allocate_GWF_buffer(ψG,InitialState) for _ in 1:Threads.nthreads()])
     (;Walkers,weights,reconfiguration_buffer) = setup
     ObsSetup = setupObservables(InitialState,Nwalkers,NSteps,outfile)
     (;energies,SaveConfigs,TotalWeights,reconfigurationTable) = ObsSetup
@@ -652,49 +652,60 @@ function propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method::D
     (;Λ,nBranch,w_avg_estimate) = method
 
     w_avg_estimate⁻¹ = 1. / w_avg_estimate
-    Threads.@threads for α in eachindex(Walkers)
-        Walker = Walkers[α]
-        w = 1.
-        for step in 1:nBranch
-            weightList = updateWeightList!(Walker,Guiding_function_buffer,ψG,Λ)
-            bx = sum(weightList)*w_avg_estimate⁻¹
-            w *= bx
-            performMarkovStep!(Walker)
+
+    batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads(), split = :batch)
+
+    Threads.@threads for (i_chunk,αinds) in enumerate(batches)
+        GWFBuffer = Guiding_function_buffer[i_chunk]
+        for α in αinds
+            Walker = Walkers[α]
+            w = 1.
+            for step in 1:nBranch
+                weightList = updateWeightList!(Walker,GWFBuffer,ψG,Λ)
+                bx = sum(weightList)*w_avg_estimate⁻¹
+                w *= bx
+                performMarkovStep!(Walker)
+            end
+            weights[α] = w
+            updateWeightList!(Walker,Guiding_function_buffer,ψG,Λ)
         end
-        weights[α] = w
-        updateWeightList!(Walker,Guiding_function_buffer,ψG,Λ)
     end
 end
 
 function propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method::ContinuousTimeMethod)
     (;Hxx,nBranch,τ,w_avg_estimate) = method
     
-    Threads.@threads for α in eachindex(Walkers)
-        Walker = Walkers[α]
-        log_w = 0.
-        weightList = updateWeightList!(Walker,Guiding_function_buffer,ψG)
-        H_xx = Hxx(Walker)
-        el_x = H_xx + getLocalEnergy(weightList)
-        for _ in 1:nBranch
-            βleft = τ
-            while βleft > 0
-                ξ = rand()
-                # dτ = log(1-ξ)/(el_x - H_xx)
-                dτ = min(βleft,log(1-ξ)/(el_x - H_xx))
-                βleft -= dτ
-                log_w += -dτ*el_x
-                if βleft > 0 
-                    performMarkovStep!(Walker)
-                    updateWeightList!(Walker,Guiding_function_buffer,ψG)
+    batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads(), split = :batch)
 
-                    H_xx = Hxx(Walker)
-                    el_x = H_xx + getLocalEnergy(weightList)
+    Threads.@threads for (i_chunk,αinds) in enumerate(batches)
+        GWFBuffer = Guiding_function_buffer[i_chunk]
+        for α in αinds
+            Walker = Walkers[α]
+            log_w = 0.
+            weightList = updateWeightList!(Walker,GWFBuffer,ψG)
+            H_xx = Hxx(Walker)
+            el_x = H_xx + getLocalEnergy(weightList)
+            for _ in 1:nBranch
+                βleft = τ
+                while βleft > 0
+                    ξ = rand()
+                    # dτ = log(1-ξ)/(el_x - H_xx)
+                    dτ = min(βleft,log(1-ξ)/(el_x - H_xx))
+                    βleft -= dτ
+                    log_w += -dτ*el_x
+                    if βleft > 0 
+                        performMarkovStep!(Walker)
+                        updateWeightList!(Walker,GWFBuffer,ψG)
+
+                        H_xx = Hxx(Walker)
+                        el_x = H_xx + getLocalEnergy(weightList)
+                    end
                 end
             end
+            w = exp(log_w - nBranch*τ* w_avg_estimate)
+            # w = exp(log_w)
+            weights[α] = w
         end
-        w = exp(log_w - nBranch*τ* w_avg_estimate)
-        # w = exp(log_w)
-        weights[α] = w
     end
 end
 

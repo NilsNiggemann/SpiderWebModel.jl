@@ -64,19 +64,25 @@ function guidingfuncRatio_exponent(ψG::OrderGuidingFunction,Walker::SpiderWebWa
     sites = safe_parent_indices(Mat, (i, j))
     LI = LinearIndices(Mat)
 
-    exp_m = zero(exp_α)
     x = get_config(Walker)
     # for (ij,s) in zip(sites,P1_STENCIL)
+    SpinNormalization = 1. /(2getSpin(x))
+    exp_m = zero(exp_α)
+    exp_M = zero(exp_α)
+    
     @inbounds @simd for idx in eachindex(sites)
         i,j = sites[idx]
-        s = P1_STENCIL[idx]*opSign
+        s = P1_STENCIL[idx]*opSign *0.5
         I = LI[i,j]
         # exp_m += m[I]*s + M[I] * (2s*x[I] + s^2)
-        exp_m += m[I]*s + M[I] * ((x[I] - s*x[I]))^2 - (x[I]^2)
+        exp_m += m[I]*s 
+        # exp_M += M[I] * ((x[I] - s*x[I]))^2 - (x[I]^2)
+        exp_M += M[I] * (-2x[I]*s +s^2)
     end
-    return exp_α + exp_m
+
+    return exp_α  + exp_m *SpinNormalization + exp_M * SpinNormalization^2
 end
-# @inline updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::OrderGuidingFunction,Λ=0) = updateWeightList_plaqs!(Walker,AffectedPlaquetteList,ψG,Λ)
+@inline updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::OrderGuidingFunction,Λ=0) = updateWeightList_plaqs!(Walker,AffectedPlaquetteList,ψG,Λ)
 
 
 function getOx_k(ψG::OrderGuidingFunction,Walker::SpiderWebWalker,k)

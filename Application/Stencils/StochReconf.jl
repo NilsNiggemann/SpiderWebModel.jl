@@ -8,43 +8,67 @@ using MakieHelpers
 include("plottingUtils.jl")
 ##
 S = SW.stencilConfig(zeros(12,12),1;
-boundaryCondition = :periodic
+boundaryCondition = :open
 )
 S .= SW.periodicStateDenseLoops(size(S,1))
-# S = SW.stencilConfig(SW.getStairCase(12),1/2;
+# S = SW.stencilConfig(SW.getStairCase(20),1/2;
 # boundaryCondition = :periodic
 # )
 # S = SW.stencilConfig(SW.getStairCase(12),1/2;
 # boundaryCondition = :open,
 # )
 
-# ψG = SW.fullVariationalFunction(S,0.12)
+# ψG = SW.fullVariationalFunction(S,0.04)
 # ψGold = SW.PlaquetteNumberGuidingFunction(0.12)
-ψG = SW.orderGuidingFunction(S,0.12)
-ψG.M_i .= 1e-6
+# ψG = SW.orderGuidingFunction(S,0.12)
+# ψG.M_i .= 1e-6
 # ψG = SW.localPlaquetteGuidingFunction(S,0.001)
-# ψGSymm = SW.getNonSymmetric(ψG)
-# ψG = SW.RBMSpin1(S,1)
+ψG = SW.RBMSpin1(S,1,Float64)
+ψGSymm = SW.getNonSymmetric(ψG)
+SW.Random.seed!(1234)
 # ψGSymm = SW.symmetrize(S,ψG,(4,4))
 # ψG = SW.RBM(S,1)
-# SW.rand!(SW.get_params(ψG))
-# SW.get_params(ψG) .*= 0.00001
+SW.rand!(SW.get_params(ψG))
+SW.get_params(ψG) .*= 1e-5
 # ψGSymm = SW.symmetrize(S,ψG,(4,4))
 ψGold = SW.PlaquetteNumberGuidingFunction(0.12)
-nThermal = 100
+nThermal = 1000
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
-CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.1))
-CTSR = SW.ContinuousTimeMethod(2,Hxx = CT.Hxx)
+CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.5))
+CTSR = SW.ContinuousTimeMethod(3,Hxx = CT.Hxx)
+
+let 
+    Buff = SW.allocate_GWF_buffer(ψG,S)
+    W = SW.spiderWebWalker(copy(S),collect(SW.plaquetteIterator(S)))
+    SW.getMoves!(W)
+    for m in W.moves
+        (i,j,op) = m
+
+        SW.fill_GWF_buffer!(Buff,ψG,copy(S))
+        ratio1 = SW.guidingfuncRatio(ψG,W,m,Buff)
+        
+        Spr = copy(S)
+        SW.applyPlaquette!(Spr,i,j,op)
+        
+
+        a = ratio1 - ψG(Spr)/ψG(S)
+        
+        # SW.applyPlaquette!(Spr,i,j,op)
+        println(a)
+    end
+    
+end
 ##
 cappedGrowth(x,start,stop,offset,growth) = start + 0.5(stop-start)* (1 +tanh(growth *(x -offset)))
 numSteps(i) = round(Int,cappedGrowth(i,10,30,100,-0.02))
-learningRate(i) = cappedGrowth(i,0.3,0.005,80,0.04)
-lines(1:200,learningRate.(1:200))
+learningRate(i) = cappedGrowth(i,0.1,0.0005,200,0.04)
+SRSteps = 300
+# lines(1:SRSteps,learningRate.(1:SRSteps))
 ##
 
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,50 ,ψG,300,learningRate,SW.IterativeSRSolver();Nwalkers = 3*28,reconfigure=true,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
-report_steps = 5,
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,6 ,ψGSymm,SRSteps,2e-4,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+report_steps = 10,
 reset = false,
 # outfile = "tempSR/SR2.h5"
 )
@@ -56,16 +80,20 @@ plotVarEn(stochReconfRes)
 ##
 
 SW.Random.seed!(1234)
+NWalkers = 12
+NSteps = 2000
+@time resultsNaive = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψGold;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
 
-@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,28,1000,ψG;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
+@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψG;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
 ##
-
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,28,1000,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
+SW.Random.seed!(1234)
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
 ##
 
 # plotEnergies(results,nBra,-20.35;Emin=-20.5,Emax=-19.8) # L=10
-plotEnergies(resultsOld,CT,normalize=false,dense=true,τ = 5)
-plotEnergies!(results,CT;color=:red,normalize=false,dense=true,τ = 5) # L=15
+plotEnergies(resultsNaive,CT,normalize=false,dense=true,τ = 20)
+# plotEnergies!(resultsOld,CT,normalize=false,dense=true,τ = 20,color = :blue)
+plotEnergies!(results,CT;color=:red,normalize=false,dense=true,τ = 20) # L=15
 # plotEnergies!(resultsPlaq,CT;nThermal=100,p=30,color=:blue,normalize=false,dense=true,τ = 20) # L=15
 # plotEnergies(results,DT.nBranch;nThermal=1,p=1000,color=:red) # L=15
 current_figure()

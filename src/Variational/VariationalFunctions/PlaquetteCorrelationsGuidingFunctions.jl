@@ -64,7 +64,7 @@ function getOx_k(ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker,k)
 end
 
 function getNonSymmetric(ψG::AbstractGuidingFunction)
-    indicesMapping = collect(eachindex(ψG.params))
+    indicesMapping = collect(eachindex(get_params(ψG)))
     uniqueInds = collect(indicesMapping)
     return SymmetryReducedWaveFunction(ψG,indicesMapping,uniqueInds)
 end

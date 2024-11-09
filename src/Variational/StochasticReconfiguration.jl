@@ -55,7 +55,7 @@ function reconf_obs(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,c
     inequivParams=eachindex(get_params(ψG))
     )
     plaqs = collect(plaquetteIterator(InitialState))
-    Guiding_function_buffer = allocate_GWF_buffer(ψG, InitialState)
+    Guiding_function_buffers = [allocate_GWF_buffer(ψG, InitialState) for _ in 1:Threads.nthreads()]
     
     NThreads = Threads.nthreads()
 
@@ -65,7 +65,7 @@ function reconf_obs(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,c
     WorkChunks = ChunkSplitters.chunks(eachindex(IndexLinear(),configs),n=NThreads)
     
     Threads.@threads for (ichunk,chunkinds) in enumerate(WorkChunks)
-
+        Guiding_function_buffer = Guiding_function_buffers[ichunk]
         Walker = spiderWebWalker(InitialState,plaqs)
 
         for (i,iconf) in enumerate(chunkinds)

@@ -32,9 +32,13 @@ function get_params(ψG::RBMSpin1)
 end
 
 function allocate_GWF_buffer(ψG::RBMSpin1,S::AbstractMatrix) 
-    Θ = similar(get_b_j(ψG))
-    ΔΘ = similar(get_b_j(ψG))
-    x² = zeros(eltype(get_params(ψG)),length(S))
+    # Θ = similar(get_b_j(ψG))
+    # ΔΘ = similar(get_b_j(ψG))
+    # x² = zeros(eltype(get_params(ψG)),length(S))
+
+    Θ = zeros(size(get_b_j(ψG)))
+    ΔΘ = zeros(size(get_b_j(ψG)))
+    x² = zeros(length(S))
     return (;Θ,ΔΘ,x²)
 end
 
@@ -45,7 +49,10 @@ end
 
 guidingfunc_name(F::RBMSpin1) = "RBMSpin1"
 
-Base.@propagate_inbounds function (ψG::RBMSpin1)(x::AbstractMatrix)
+# _get_Spin_normalization(x::StencilSpinConfig) = 1/(2*getSpin(x))
+_get_Spin_normalization(x::StencilSpinConfig) = 1
+
+Base.@propagate_inbounds function (ψG::RBMSpin1)(x::StencilSpinConfig)
     a = get_alpha_i(ψG)
     A = get_A_i(ψG)
     b = get_b_j(ψG)
@@ -58,25 +65,31 @@ Base.@propagate_inbounds function (ψG::RBMSpin1)(x::AbstractMatrix)
 
 
     aiσi = 0.
+    SpinNormalization = _get_Spin_normalization(x)
+    # SpinNormalization = 1/2
+
     for i in axes(W,1)
-        aiσi += a[i] * x[i] + A[i] * x[i]^2
+        xi = x[i]*SpinNormalization
+        aiσi += a[i] * xi + A[i] * xi^2
     end
-    exp_term = exp(aiσi)
-
-    coshprod = 1.
-    cosh1inv = 1/cosh(1.)
-
+    # exp_term = exp(aiσi)
+    
+    # coshprod = 1.
+    # cosh1inv = 1/cosh(1.)
+    # logcosh1inv = log(1/cosh(1.))
+    logcoshprod = 0.
     @inbounds for j in axes(W,2)
         Θ = get_Θ_j(x,j,b,w,W)
-        coshprod *= 2cosh(Θ)
-        # coshprod *= cosh(Θ)*cosh1inv # get rid of factor 2 since it is just a global rescaling
+        # coshprod *= 2cosh(Θ)
+        logcoshprod += log(cosh(Θ)) # get rid of factor 2 since it is just a global rescaling
     end
-
-    return exp_term * coshprod
+    return exp(aiσi + logcoshprod)
+    # return (aiσi + logcoshprod)
 end
 
-Base.@propagate_inbounds function get_Θ_j(x::AbstractMatrix,j,b,w,W)
+Base.@propagate_inbounds function get_Θ_j(Config::StencilSpinConfig,j,b,w,W)
     θj = b[j]
+    x = parent(Config)
     N = length(x)
     Is = CartesianIndices(x)
 
@@ -84,17 +97,20 @@ Base.@propagate_inbounds function get_Θ_j(x::AbstractMatrix,j,b,w,W)
     @boundscheck checkbounds(W,1:N,j)
     @boundscheck checkbounds(w,1:N,j)
 
+    SpinNormalization = _get_Spin_normalization(Config)
     @inbounds @simd for i in 1:N
+
         I = Is[i]
-        xi = x[I]
-        # θj += (w[i,j] + W[i,j]*xi) * xi
-        θj += muladd(W[i,j],xi,w[i,j]) * xi
+        xi = x[I] * SpinNormalization
+        θj += (w[i,j] + W[i,j]*xi) * xi
+        # θj += muladd(W[i,j],xi,w[i,j]) * xi
     end
     return θj
 end
 
-function fill_GWF_buffer!(Buffer,ψG::RBMSpin1,Config::AbstractMatrix)
+function fill_GWF_buffer!(Buffer,ψG::RBMSpin1,Config::StencilSpinConfig)
     Θ = Buffer.Θ
+    b = get_b_j(ψG)
     x = reshape(Config,length(Config))
     x² = Buffer.x²
 
@@ -102,17 +118,18 @@ function fill_GWF_buffer!(Buffer,ψG::RBMSpin1,Config::AbstractMatrix)
     W_ij = get_W_ij(ψG)
     w_ij = get_w_ij(ψG)
     x² = Buffer.x²
-    mul!(Θ, w_ij, x)
-    for j in eachindex(Θ)
-        Θj = Θ[j]
-        for i in eachindex(x)
-            Θj += W_ij[i,j] * x²[i]
-        end
-        Θ[j] = Θj
-    end
-    return Θ
+    mul!(Θ, w_ij', x)
+    SpinNormalization = _get_Spin_normalization(Config)
 
-    x² .= x.*x
+    x² .= x.*x .* SpinNormalization^2
+    for j in eachindex(Θ)
+        Θj_2 = zero(Θ[j])
+        LoopVectorization.@turbo for i in eachindex(x)
+            Θj_2 += W_ij[i,j] * x²[i]
+        end
+        Θ[j] = Θ[j]*SpinNormalization + Θj_2 +b[j]
+    end
+    return
 end
 
 function _guidingfuncRatioRBM(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buffer)
@@ -122,69 +139,75 @@ function _guidingfuncRatioRBM(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,
     w = get_w_ij(ψG)
     W = get_W_ij(ψG)
 
-    (;Θ,x²,ΔΘ) = Buffer
-    
+    (;Θ,ΔΘ) = Buffer
     x = get_config(Walker)
     Mat = parent(x)
 
     i,j,opSign = move
     
+
     sites = safe_parent_indices(Mat, (i, j))
 
     LI = LinearIndices(Mat)
 
-    exp_m = zero(eltype(Θ))
+    exp_a = zero(eltype(Θ))
+    exp_A = zero(eltype(Θ))
+    # exp_a = 0.
+    # exp_A = 0.
+    SpinNormalization = _get_Spin_normalization(x)
+
+    opSign *= SpinNormalization
 
     @inbounds @simd for idx in eachindex(sites)
         i,j = sites[idx]
         s = P1_STENCIL[idx]*opSign
         I = LI[i,j]
-        exp_m += a[I]*s + A[I] * (2s*x[I] + s^2)
+        xi = x[I]*SpinNormalization
+        exp_a += a[I]*s
+        exp_A += A[I] * (2s*xi + s^2)
     end
-
-    for j in eachindex(Θ)
+    @inbounds @simd for j in eachindex(Θ)
+    # for j in eachindex(Θ)
         ΔΘj = zero(eltype(Θ))
+        # for idx in eachindex(sites)
         for idx in eachindex(sites)
-        # @inbounds @simd for idx in eachindex(sites)
             I_x,I_y = sites[idx]
             I = LI[I_x,I_y]
             s = P1_STENCIL[idx]*opSign
-            ΔΘj += w[I,j]*s + W[I,j]*(2*s*x[I] + s^2)
+            xi = x[I]*SpinNormalization
+
+            ΔΘj += w[I,j]*s + W[I,j]*(2*s*xi + s^2)
         end
         ΔΘ[j] = ΔΘj
     end
-    coshprod = 1.
 
-    for j in eachindex(Θ)
+    logcoshprod = 0.
+    LoopVectorization.@turbo for j in eachindex(Θ)
         Θj = Θ[j]
         ΔΘj = ΔΘ[j]
-        coshprod *= cosh(Θj + ΔΘj)/cosh(Θj)
+        logcoshprod += log(cosh(Θj + ΔΘj)/cosh(Θj))
     end
-    return exp(exp_m)* coshprod
+    return exp(exp_a + exp_A + logcoshprod)
 end
 
 guidingfuncRatio(ψG::RBMSpin1,Walker::SpiderWebWalker,move,Buffer) = _guidingfuncRatioRBM(ψG,Walker,move,Buffer) 
 
-# function updateWeightList!(Walker::SpiderWebWalker,Buffer,ψG::RBMSpin1,Λ=0)
-#     (;Config,weights) = Walker
-#     empty!(weights)
-#     moves = getMoves!(Walker)
-    
-#     x = parent(parent(Config))
-#     # x = parent(parent(get_config(Walker)))
-#     fill_GWF_buffer!(Buffer,ψG,x)
+function updateWeightList!(Walker::SpiderWebWalker,Buffer,ψG::RBMSpin1,Λ=0)
 
-#     for operator in moves
-#         i,j,opNum = operator
-#         weight = guidingfuncRatio(ψG,Walker,operator,Buffer)
-#         push!(weights,weight)
-#     end
-#     if Λ != 0
-#         push!(moves, (0,0,0))
-#         push!(weights,Λ)
-#     end
-#     return weights
-# end
+    (;Config,weights) = Walker
+    empty!(weights)
+    moves = getMoves!(Walker)
+    fill_GWF_buffer!(Buffer,ψG,Config)
+    for operator in moves
+        weight = guidingfuncRatio(ψG,Walker,operator,Buffer)
+        push!(weights,weight)
+    end
+    if Λ != 0
+        push!(moves, (0,0,0))
+        push!(weights,Λ)
+    end
+    return weights
+end
 
 
 function getOx_k(ψG::RBMSpin1,x::AbstractMatrix,k)
