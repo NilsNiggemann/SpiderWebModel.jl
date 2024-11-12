@@ -160,15 +160,16 @@ function precomputeAffectedPlaquettes(Config)
 end
 
 # Assumes that length(n_plaq) == length(plaquetteIterator(Config))
-function getNPlaq!(Walker::SpiderWebWalker)
-    (;n_x,Config) = Walker
-    for (i,I) in enumerate(plaquetteIterator(Walker))
+function getNPlaq!(n_x::AbstractVector,Config::StencilSpinConfig)
+    for (i,I) in enumerate(plaquetteIterator(Config))
         @inbounds applPlus, applMinus = P_applicable(Config, I)
         n = applPlus + applMinus
         n_x[i] = n
     end
     return n_x
 end
+getNPlaq!(Walker::SpiderWebWalker) = getNPlaq!(Walker.n_x,Walker.Config)
+getNPlaq(Config::StencilSpinConfig) = getNPlaq!(zeros(length(collect(plaquetteIterator(Config)))),Config)
 
 function getNPlaq!(Walker::SpiderWebWalker,affected_indices)
     (;n_x´,Config,Plaquette_positions) = Walker
@@ -190,9 +191,6 @@ end
 
 function getNPlaqfilled!(Walker::SpiderWebWalker,affected_indices)
     (;n_x,n_x´,Config,Plaquette_positions) = Walker
-    # println(affected_indices)
-    # empty!(n_x´)
-    # resize!(n_x´,length(n_x))
     n_x´ .= n_x
 
     for PlaqIndex in affected_indices
@@ -201,8 +199,6 @@ function getNPlaqfilled!(Walker::SpiderWebWalker,affected_indices)
         n = applPlus + applMinus
         n_x´[PlaqIndex] = n
     end
-    # println(n_x´)
-    # error("")
     return n_x´
 end
 
@@ -667,7 +663,7 @@ function propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method::D
                 performMarkovStep!(Walker)
             end
             weights[α] = w
-            updateWeightList!(Walker,Guiding_function_buffer,ψG,Λ)
+            updateWeightList!(Walker,GWFBuffer,ψG,Λ)
         end
     end
 end

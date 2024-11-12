@@ -3,10 +3,10 @@ struct FullVariationalGuidingFunction{A<:AbstractArray} <: AbstractGuidingFuncti
 end
 guidingfunc_name(F::FullVariationalGuidingFunction) = "FullVariationalGuidingFunction"
 
-function fullVariationalFunction(State,α::Real=0.1)
+function fullVariationalFunction(State,α::Real=0.1,type=Float32)
     plaqs = collect(plaquetteIterator(State))
     N = length(plaqs)
-    params = zeros(N,N+1)
+    params = zeros(type,N,N+1)
     ψ = FullVariationalGuidingFunction(params)
     get_alpha_i(ψ) .= α
     return ψ
@@ -20,26 +20,61 @@ function get_beta_ij(ψG::FullVariationalGuidingFunction)
     return @view ψG.params[:,begin+1:end]
 end
 
-function (ψG::FullVariationalGuidingFunction)(N□::AbstractArray) 
+function (ψG::FullVariationalGuidingFunction)(N□::AbstractVector) 
+    return exp(guidingfunc_exponent(ψG,N□))
+end
+function (ψG::FullVariationalGuidingFunction)(S::StencilSpinConfig) 
+    N□ = getNPlaq(S)
     return exp(guidingfunc_exponent(ψG,N□))
 end
 
-function guidingfunc_exponent(ψG::FullVariationalGuidingFunction,N□::AbstractArray) 
+function guidingfunc_exponent(ψG::FullVariationalGuidingFunction,N□::AbstractVector) 
     α = get_alpha_i(ψG)
     β = get_beta_ij(ψG)
     exponent = α' * N□ + dot(N□,β,N□)
     return exponent
 end
 
-@inline guidingfuncRatio(ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker,move) = exp(guidingfuncRatio_exponent(ψG,n,n´,move))
+function fill_GWF_buffer!(Buffer,ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker) 
+    getNPlaq!(Walker)
+    return Buffer
+end
+# function fill_GWF_buffer!(Buffer,ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker) 
+#     ψG(Walker)
+# end
 
-function guidingfuncRatio_exponent(ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker,move,affectedPlaquettes)
+function guidingfuncRatio(ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker,move,AffectedPlaquetteList::AbstractMatrix)
     α = get_alpha_i(ψG)
     β = get_beta_ij(ψG)
-    _guidingfuncRatio_exponent(α,β,Walker,affectedPlaquettes)
-end
 
-@inline updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::FullVariationalGuidingFunction,Λ=0) = updateWeightList_plaqs!(Walker,AffectedPlaquetteList,ψG,Λ)
+    i,j,opNum = move
+    affectedPlaquettes = AffectedPlaquetteList[i,j]
+
+    Config = get_config(Walker)
+
+    applyPlaquette!(Config, i, j, opNum)
+    getNPlaqfilled!(Walker,affectedPlaquettes)
+    applyPlaquette!(Config, i, j, -opNum)
+
+    n = Walker.n_x
+    n´ = Walker.n_x´
+
+    exponent = zero(eltype(α))
+    exponent = dot(n,α) + dot(n,β,n) - dot(n´,α) - dot(n´,β,n´)
+    return exp(-exponent)
+
+    for i in affectedPlaquettes
+        Δn = n´[i] - n[i]
+        iszero(Δn) && continue
+        
+        exp_i = α[i]
+        LoopVectorization.@turbo for j in eachindex(n,n´)
+            exp_i += β[j,i]*(n´[j] + n[j])
+        end
+        exponent += exp_i*Δn
+    end
+    return exp(exponent)
+end
 
 function getOx_k_plaqs(ψG::FullVariationalGuidingFunction,n::AbstractArray,k)
     par = ψG.params
@@ -60,6 +95,7 @@ end
 
 
 function getOx_k(ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker,k)
+    getNPlaq!(Walker)
     return getOx_k_plaqs(ψG,Walker.n_x,k)
 end
 

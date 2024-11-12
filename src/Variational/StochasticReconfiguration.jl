@@ -55,7 +55,7 @@ function reconf_obs(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,c
     inequivParams=eachindex(get_params(ψG))
     )
     plaqs = collect(plaquetteIterator(InitialState))
-    Guiding_function_buffers = [allocate_GWF_buffer(ψG, InitialState) for _ in 1:Threads.nthreads()]
+    Guiding_function_buffers = fetch.([Threads.@spawn allocate_GWF_buffer(ψG, InitialState) for _ in 1:Threads.nthreads()])
     
     NThreads = Threads.nthreads()
 
@@ -197,7 +197,7 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
         # α = get_alpha_i(ψG)
         w_avg = mean(res.TotalWeights[range])
         if verbose && i % report_steps == 0
-            @info "optimization step $i" dt[i] numConfigs = NSteps[i]*Nwalkers "|δα|" = normDelta δα[1] E0 ΔE0 = ΔE0 convergedSteps w_avg
+            @info "optimization step $i" dt[i] numConfigs = NSteps[i]*Nwalkers "max(|α|)" = maximum(abs,params) "||δα||" = normDelta δα[1] E0 ΔE0 = ΔE0 convergedSteps w_avg 
         end
         ind = i
         if normDelta < rel_tolerance

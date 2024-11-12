@@ -67,7 +67,7 @@ function testResults(S,method)
         @test emean - estd < E0 < emean + estd
     end
     
-    Sqs = SW.getSqsGFMC(results,20,nBra = DT.nBranch) ./ 2
+    Sqs = SW.getSqsGFMC(results,20) ./ 2
     SqEx = real(SW.getStructureFac(HConfs,v0).Sq)
 
     @testset "Structure factor" begin

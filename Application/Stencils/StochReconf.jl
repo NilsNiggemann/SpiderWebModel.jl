@@ -7,7 +7,7 @@ using MakieHelpers
 # using MKL
 include("plottingUtils.jl")
 ##
-S = SW.stencilConfig(zeros(12,12),1;
+S = SW.stencilConfig(zeros(8,8),1;
 boundaryCondition = :open
 )
 S .= SW.periodicStateDenseLoops(size(S,1))
@@ -29,45 +29,29 @@ SW.Random.seed!(1234)
 # ψGSymm = SW.symmetrize(S,ψG,(4,4))
 # ψG = SW.RBM(S,1)
 SW.rand!(SW.get_params(ψG))
-SW.get_params(ψG) .*= 1e-5
+SW.get_params(ψG) .*= 1e-3
 # ψGSymm = SW.symmetrize(S,ψG,(4,4))
 ψGold = SW.PlaquetteNumberGuidingFunction(0.12)
 nThermal = 1000
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
 CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.5))
-CTSR = SW.ContinuousTimeMethod(3,Hxx = CT.Hxx)
+CTSR = SW.ContinuousTimeMethod(4,Hxx = CT.Hxx)
 
-let 
-    Buff = SW.allocate_GWF_buffer(ψG,S)
-    W = SW.spiderWebWalker(copy(S),collect(SW.plaquetteIterator(S)))
-    SW.getMoves!(W)
-    for m in W.moves
-        (i,j,op) = m
-
-        SW.fill_GWF_buffer!(Buff,ψG,copy(S))
-        ratio1 = SW.guidingfuncRatio(ψG,W,m,Buff)
-        
-        Spr = copy(S)
-        SW.applyPlaquette!(Spr,i,j,op)
-        
-
-        a = ratio1 - ψG(Spr)/ψG(S)
-        
-        # SW.applyPlaquette!(Spr,i,j,op)
-        println(a)
-    end
-    
-end
 ##
 cappedGrowth(x,start,stop,offset,growth) = start + 0.5(stop-start)* (1 +tanh(growth *(x -offset)))
-numSteps(i) = round(Int,cappedGrowth(i,10,30,100,-0.02))
-learningRate(i) = cappedGrowth(i,0.1,0.0005,200,0.04)
+numSteps(i) = round(Int,cappedGrowth(i,10,30,100,0.02))
+learningRate(i) = cappedGrowth(i,0.01,0.005,150,0.02)
 SRSteps = 300
-# lines(1:SRSteps,learningRate.(1:SRSteps))
+lines(1:SRSteps,learningRate.(1:SRSteps))
+lines!(1:SRSteps,numSteps.(1:SRSteps))
+current_figure()
+##
+learningRate(i) = i > 450 ? 1e-4 : 1e-4
+numSteps(i) = i > 500 ? 200 : 10
 ##
 
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,6 ,ψGSymm,SRSteps,2e-4,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,10 ,ψGSymm,SRSteps,learningRate,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
 report_steps = 10,
 reset = false,
 # outfile = "tempSR/SR2.h5"

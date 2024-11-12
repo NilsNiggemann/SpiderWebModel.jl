@@ -31,6 +31,12 @@ function get_params(ψG::RBMSpin1)
     return RecursiveArrayTools.ArrayPartition(ψG.a_i,ψG.A_i,ψG.b_j,ψG.w_ij,ψG.W_ij)
 end
 
+struct RBMSpin1Buffer{T}
+    Θ::Vector{T}
+    ΔΘ::Vector{T}
+    x²::Vector{T}
+end
+
 function allocate_GWF_buffer(ψG::RBMSpin1,S::AbstractMatrix) 
     # Θ = similar(get_b_j(ψG))
     # ΔΘ = similar(get_b_j(ψG))
@@ -39,7 +45,7 @@ function allocate_GWF_buffer(ψG::RBMSpin1,S::AbstractMatrix)
     Θ = zeros(size(get_b_j(ψG)))
     ΔΘ = zeros(size(get_b_j(ψG)))
     x² = zeros(length(S))
-    return (;Θ,ΔΘ,x²)
+    return RBMSpin1Buffer(Θ,ΔΘ,x²)
 end
 
 function getParameterType(ψG::RBMSpin1,k)
@@ -108,7 +114,8 @@ Base.@propagate_inbounds function get_Θ_j(Config::StencilSpinConfig,j,b,w,W)
     return θj
 end
 
-function fill_GWF_buffer!(Buffer,ψG::RBMSpin1,Config::StencilSpinConfig)
+function fill_GWF_buffer!(Buffer::RBMSpin1Buffer,ψG::RBMSpin1,Walker::SpiderWebWalker)
+    Config = get_config(Walker)
     Θ = Buffer.Θ
     b = get_b_j(ψG)
     x = reshape(Config,length(Config))
@@ -129,10 +136,10 @@ function fill_GWF_buffer!(Buffer,ψG::RBMSpin1,Config::StencilSpinConfig)
         end
         Θ[j] = Θ[j]*SpinNormalization + Θj_2 +b[j]
     end
-    return
+    return Buffer
 end
 
-function _guidingfuncRatioRBM(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buffer)
+function guidingfuncRatio(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buffer::RBMSpin1Buffer)
     a = get_alpha_i(ψG)
     A = get_A_i(ψG)
     b = get_b_j(ψG)
@@ -189,26 +196,6 @@ function _guidingfuncRatioRBM(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,
     end
     return exp(exp_a + exp_A + logcoshprod)
 end
-
-guidingfuncRatio(ψG::RBMSpin1,Walker::SpiderWebWalker,move,Buffer) = _guidingfuncRatioRBM(ψG,Walker,move,Buffer) 
-
-function updateWeightList!(Walker::SpiderWebWalker,Buffer,ψG::RBMSpin1,Λ=0)
-
-    (;Config,weights) = Walker
-    empty!(weights)
-    moves = getMoves!(Walker)
-    fill_GWF_buffer!(Buffer,ψG,Config)
-    for operator in moves
-        weight = guidingfuncRatio(ψG,Walker,operator,Buffer)
-        push!(weights,weight)
-    end
-    if Λ != 0
-        push!(moves, (0,0,0))
-        push!(weights,Λ)
-    end
-    return weights
-end
-
 
 function getOx_k(ψG::RBMSpin1,x::AbstractMatrix,k)
     par = get_params(ψG)

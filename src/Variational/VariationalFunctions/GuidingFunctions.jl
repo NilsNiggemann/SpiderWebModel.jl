@@ -20,105 +20,40 @@ variational_parameters(P::Function) = Dict([x => getproperty(P,x) for x in prope
 """Allocates a buffer for the guiding wave function to be used for efficient computation. Can be anything depending on the model"""
 allocate_GWF_buffer(ψG::AbstractGuidingFunction,S::Any) = precomputeAffectedPlaquettes(S)
 
+"""precomputes the guiding wave function for the given configuration. Can be overloaded for more complex wavefunctions in which case a Buffer is filled. In this case the buffer needs to be returned"""
+fill_GWF_buffer!(Buff,ψG::AbstractGuidingFunction,Walker) = ψG(Walker)
+
 # allocate_GWF_buffer(ψG::AbstractGuidingFunction,S::StencilSpinConfig) = nothing
 
-@inline guidingfuncRatio(ψG::AbstractGuidingFunction,Walker::SpiderWebWalker,move,affectedPlaquettes) = exp(guidingfuncRatio_exponent(ψG,Walker,move,affectedPlaquettes))
-function _guidingfuncRatio_exponent(α::AbstractVector,β::AbstractMatrix,Walker::SpiderWebWalker,affectedPlaquettes)
-
-    exponent = zero(eltype(α))
-    n = Walker.n_x
-    n´ = Walker.n_x´
-    for i in affectedPlaquettes
-        Δn = n´[i] - n[i]
-        iszero(Δn) && continue
-        
-        exp_i = α[i]
-        LoopVectorization.@turbo for j in eachindex(n,n´)
-            exp_i += β[j,i]*(n´[j] + n[j])
-        end
-        exponent += exp_i*Δn
-    end
-    return exponent
-end
-
-guidingfuncRatio_exponent(ψG::AbstractGuidingFunction,Walker::SpiderWebWalker,move) = guidingfuncRatio_exponent(ψG,eachindex(Walker.n,Walker.n´),move)
-
-function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::AbstractGuidingFunction,Λ=0)
-    (;Config,weights) = Walker
+function updateWeightList!(Walker::SpiderWebWalker,Buffer,ψG::AbstractGuidingFunction)
+    weights = Walker.weights
     empty!(weights)
     moves = getMoves!(Walker)
-    ψx = ψG(Walker)
+    newBuff = fill_GWF_buffer!(Buffer,ψG,Walker)
+
     for operator in moves
-        i,j,opNum = operator
-        applyPlaquette!(Config, i, j, opNum)
-        
-        ψx´ = ψG(Walker)
-        
-        weight = ψx´/ψx
+        weight = guidingfuncRatio(ψG,Walker,operator,newBuff)
         push!(weights,weight)
-        applyPlaquette!(Config, i, j, -opNum)
     end
-    if Λ != 0
-        push!(moves, (0,0,0))
-        push!(weights,Λ)
-    end
+
     return weights
 end
-
-function updateWeightList_plaqs!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::AbstractGuidingFunction,Λ=0)
-    (;Config,weights) = Walker
-    empty!(weights)
-    moves = getMoves!(Walker)
-    n_x = getNPlaq!(Walker)
-    
-    for operator in moves
-        i,j,opNum = operator
-        indices = AffectedPlaquetteList[i,j]
-        applyPlaquette!(Config, i, j, opNum)
-        
-        n_x´ = getNPlaqfilled!(Walker,indices)
-        
-        weight = guidingfuncRatio(ψG,Walker,operator,indices)
-        push!(weights,weight)
-        applyPlaquette!(Config, i, j, -opNum)
-    end
+function updateWeightList!(Walker::SpiderWebWalker,Buffer,ψG::AbstractGuidingFunction,Λ::Real)
+    res = updateWeightList!(Walker,Buffer,ψG)
     if Λ != 0
-        push!(moves, (0,0,0))
-        push!(weights,Λ)
+        push!(Walker.moves, DIAGONAL_MOVE_ID)
+        push!(Walker.weights,Λ)
     end
-    return weights
+    return res
 end
 
-
-function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::T,Λ=0) where T
-    (;Config,weights,moves,n_x,n_x´) = Walker
-    isempty(weights) && isempty(moves) || return weights #return if weights are already computed
-    
-    getMoves!(Walker)
-    # getNPlaq!(Walker)
-    
-    psix_inv = 1/ψG(get_config(Walker))
-    
-    for operator in moves
-        i,j,opNum = operator
-        indices = AffectedPlaquetteList[i,j]
-        applyPlaquette!(Config, i, j, opNum)
-        
-        # getNPlaq!(Walker,indices)
-        
-        # N□ = getNPlaq_difference(n_x,n_x´,indices) 
-        weight = ψG(get_config(Walker)) * psix_inv
-
-        push!(weights,weight)
-        applyPlaquette!(Config, i, j, -opNum)
-    end
-
-    
-    if Λ != 0
-        push!(moves, DIAGONAL_MOVE_ID)
-        push!(weights,Λ)
-    end
-    return weights
+function guidingfuncRatio(ψG::AbstractGuidingFunction,Walker,operator,ψx::Number)
+    i,j,opNum = operator
+    Config = get_config(Walker)
+    applyPlaquette!(Config, i, j, opNum)
+    ψx´ = ψG(Walker)
+    applyPlaquette!(Config, i, j, -opNum)
+    return ψx´/ψx
 end
 
 function _getParamsTypeAndIndex(A::RecursiveArrayTools.ArrayPartition,i)
