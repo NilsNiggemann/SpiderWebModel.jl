@@ -161,15 +161,12 @@ function guidingfuncRatio(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buff
     exp_A = zero(eltype(Θ))
     # exp_a = 0.
     # exp_A = 0.
-    SpinNormalization = _get_Spin_normalization(x)
-
-    opSign *= SpinNormalization
 
     @inbounds @simd for idx in eachindex(sites)
         i,j = sites[idx]
         s = P1_STENCIL[idx]*opSign
         I = LI[i,j]
-        xi = x[I]*SpinNormalization
+        xi = x[I]
         exp_a += a[I]*s
         exp_A += A[I] * (2s*xi + s^2)
     end
@@ -181,7 +178,7 @@ function guidingfuncRatio(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buff
             I_x,I_y = sites[idx]
             I = LI[I_x,I_y]
             s = P1_STENCIL[idx]*opSign
-            xi = x[I]*SpinNormalization
+            xi = x[I]
 
             ΔΘj += w[I,j]*s + W[I,j]*(2*s*xi + s^2)
         end
@@ -198,7 +195,6 @@ function guidingfuncRatio(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buff
 end
 
 function getOx_k(ψG::RBMSpin1,x::AbstractMatrix,k)
-    par = get_params(ψG)
     paramtype = getParameterType(ψG,k)
 
     N = ψG.N

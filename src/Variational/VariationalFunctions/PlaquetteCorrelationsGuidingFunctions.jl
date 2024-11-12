@@ -60,6 +60,7 @@ function guidingfuncRatio(ψG::FullVariationalGuidingFunction,Walker::SpiderWebW
     n´ = Walker.n_x´
 
     exponent = zero(eltype(α))
+    @warn "optimize guidingfunc for FullVariationalGuidingFunction" maxlog= 1
     exponent = dot(n,α) + dot(n,β,n) - dot(n´,α) - dot(n´,β,n´)
     return exp(-exponent)
 

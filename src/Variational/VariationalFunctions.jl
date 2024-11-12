@@ -7,6 +7,7 @@ include("VariationalFunctions/PlaquetteCorrelationsGuidingFunctions.jl")
 include("VariationalFunctions/PlaquetteNumberGuidingFunctions.jl")
 include("VariationalFunctions/RBM.jl")
 include("VariationalFunctions/RBMSpin1.jl")
+include("VariationalFunctions/PlaquetteRBM.jl")
 include("VariationalFunctions/RKFunction.jl")
 
 include("StochasticReconfiguration.jl")
