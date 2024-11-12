@@ -42,5 +42,10 @@ S .= SW.periodicStateDenseLoops(size(S,1))
     SW.rand!(SW.get_params(ψFull))
     SW.get_params(ψFull) .*= 1e-2
 
-    TestWFRatio(ψFull,S)
+    ψMag = SW.orderGuidingFunction(S,0.,Float64)
+    SW.rand!(SW.get_params(ψMag))
+    SW.get_params(ψMag) .*= 1e-2
+
+
+    TestWFRatio(ψMag,S)
 end
