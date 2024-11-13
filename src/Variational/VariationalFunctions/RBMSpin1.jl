@@ -33,7 +33,8 @@ end
 
 struct RBMSpin1Buffer{T}
     Θ::Vector{T}
-    coshΘ::Vector{T}
+    oneplustanhΘ::Vector{T}
+    oneminustanhΘ::Vector{T}
     ΔΘ::Vector{T}
     x²::Vector{T}
     wji::Matrix{T}
@@ -46,14 +47,15 @@ function allocate_GWF_buffer(ψG::RBMSpin1,S::AbstractMatrix)
     # x² = zeros(eltype(get_params(ψG)),length(S))
 
     Θ = zeros(size(get_b_j(ψG)))
-    coshΘ = zeros(size(get_b_j(ψG)))
+    oneplustanhΘ = zeros(size(get_b_j(ψG)))
+    oneminustanhΘ = zeros(size(get_b_j(ψG)))
     ΔΘ = zeros(size(get_b_j(ψG)))
     x² = zeros(length(S))
 
     wji = Array(get_w_ij(ψG)')
     Wji = Array(get_W_ij(ψG)')
 
-    return RBMSpin1Buffer(Θ,coshΘ,ΔΘ,x²,wji,Wji)
+    return RBMSpin1Buffer(Θ,oneplustanhΘ,oneminustanhΘ,ΔΘ,x²,wji,Wji)
 end
 
 function getParameterType(ψG::RBMSpin1,k)
@@ -129,11 +131,14 @@ function fill_GWF_buffer!(Buffer::RBMSpin1Buffer,ψG::RBMSpin1,Walker::SpiderWeb
     x = reshape(Config,length(Config))
     x² = Buffer.x²
 
+
     Is = CartesianIndices(x)
     W_ij = get_W_ij(ψG)
-    w_ij = get_w_ij(ψG)
+    # w_ij = get_w_ij(ψG)
+    wji = Buffer.wji
+
     x² = Buffer.x²
-    mul!(Θ, w_ij', x)
+    mul!(Θ, wji, x)
 
     x² .= x.*x 
     for j in eachindex(Θ)
@@ -143,8 +148,10 @@ function fill_GWF_buffer!(Buffer::RBMSpin1Buffer,ψG::RBMSpin1,Walker::SpiderWeb
         end
         Θ[j] = Θ[j] + Θj_2 +b[j]
     end
-    Buffer.coshΘ .= cosh.(Θ)
-
+    Buffer.oneminustanhΘ .= tanh.(Θ)
+    Buffer.oneplustanhΘ .= 1 .+ Buffer.oneminustanhΘ
+    Buffer.oneminustanhΘ .= 1 .- Buffer.oneminustanhΘ
+    
     return Buffer
 end
 
@@ -153,7 +160,7 @@ function guidingfuncRatio(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buff
     A = get_A_i(ψG)
     b = get_b_j(ψG)
 
-    (;Θ,ΔΘ,coshΘ,wji,Wji) = Buffer
+    (;Θ,ΔΘ,oneplustanhΘ,oneminustanhΘ,wji,Wji) = Buffer
     x = get_config(Walker)
     Mat = parent(x)
 
@@ -189,18 +196,22 @@ function guidingfuncRatio(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buff
         end
     end
 
-    # logcoshprod = 0.
     coshprod = 1.
     LoopVectorization.@turbo for j in eachindex(Θ)
         Θj = Θ[j]
-        coshΘj = coshΘ[j]
+        oneplustanhΘj = oneplustanhΘ[j]
+        oneminustanhΘj = oneminustanhΘ[j]
+        
         ΔΘj = ΔΘ[j]
-        # logcoshprod += log(cosh(Θj + ΔΘj)/cosh(Θj))
-        # logcoshprod += log(cosh(Θj + ΔΘj)/coshΘj)
-        coshprod *= cosh(Θj + ΔΘj)/coshΘj
+
+        eᶿ = exp(ΔΘj)
+        e⁻ᶿ = inv(eᶿ)
+
+        # coshprod *= 0.5*(eᶿ*(tanhΘj + 1) - e⁻ᶿ*(tanhΘj - 1))
+        coshprod *= (eᶿ*oneplustanhΘj + e⁻ᶿ*oneminustanhΘj)
     end
-    # return exp(exp_a + exp_A + logcoshprod)
-    return exp(exp_a + exp_A) *coshprod
+    prefac = 1 / (2. ^ length(Θ))
+    return exp(exp_a + exp_A) *coshprod*prefac
 end
 
 function getOx_k(ψG::RBMSpin1,x::AbstractMatrix,k)
