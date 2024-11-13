@@ -33,6 +33,7 @@ end
 
 struct RBMSpin1Buffer{T}
     Θ::Vector{T}
+    coshΘ::Vector{T}
     ΔΘ::Vector{T}
     x²::Vector{T}
 end
@@ -43,9 +44,10 @@ function allocate_GWF_buffer(ψG::RBMSpin1,S::AbstractMatrix)
     # x² = zeros(eltype(get_params(ψG)),length(S))
 
     Θ = zeros(size(get_b_j(ψG)))
+    coshΘ = zeros(size(get_b_j(ψG)))
     ΔΘ = zeros(size(get_b_j(ψG)))
     x² = zeros(length(S))
-    return RBMSpin1Buffer(Θ,ΔΘ,x²)
+    return RBMSpin1Buffer(Θ,coshΘ,ΔΘ,x²)
 end
 
 function getParameterType(ψG::RBMSpin1,k)
@@ -126,16 +128,17 @@ function fill_GWF_buffer!(Buffer::RBMSpin1Buffer,ψG::RBMSpin1,Walker::SpiderWeb
     w_ij = get_w_ij(ψG)
     x² = Buffer.x²
     mul!(Θ, w_ij', x)
-    SpinNormalization = _get_Spin_normalization(Config)
 
-    x² .= x.*x .* SpinNormalization^2
+    x² .= x.*x 
     for j in eachindex(Θ)
         Θj_2 = zero(Θ[j])
         LoopVectorization.@turbo for i in eachindex(x)
             Θj_2 += W_ij[i,j] * x²[i]
         end
-        Θ[j] = Θ[j]*SpinNormalization + Θj_2 +b[j]
+        Θ[j] = Θ[j] + Θj_2 +b[j]
     end
+    Buffer.coshΘ .= cosh.(Θ)
+
     return Buffer
 end
 
@@ -146,7 +149,7 @@ function guidingfuncRatio(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buff
     w = get_w_ij(ψG)
     W = get_W_ij(ψG)
 
-    (;Θ,ΔΘ) = Buffer
+    (;Θ,ΔΘ,coshΘ) = Buffer
     x = get_config(Walker)
     Mat = parent(x)
 
@@ -170,28 +173,30 @@ function guidingfuncRatio(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buff
         exp_a += a[I]*s
         exp_A += A[I] * (2s*xi + s^2)
     end
-    @inbounds @simd for j in eachindex(Θ)
-    # for j in eachindex(Θ)
-        ΔΘj = zero(eltype(Θ))
-        # for idx in eachindex(sites)
-        for idx in eachindex(sites)
-            I_x,I_y = sites[idx]
-            I = LI[I_x,I_y]
-            s = P1_STENCIL[idx]*opSign
-            xi = x[I]
-
-            ΔΘj += w[I,j]*s + W[I,j]*(2*s*xi + s^2)
+    fill!(ΔΘ,zero(eltype(ΔΘ)))
+    for idx in eachindex(sites)
+        I_x,I_y = sites[idx]
+        I = LI[I_x,I_y]
+        s = P1_STENCIL[idx]*opSign
+        xi = x[I]
+        fac = (2*s*xi + s^2)
+        @inbounds @simd for j in eachindex(Θ)
+            ΔΘ[j] += w[I,j]*s + W[I,j]*fac
         end
-        ΔΘ[j] = ΔΘj
     end
 
-    logcoshprod = 0.
+    # logcoshprod = 0.
+    coshprod = 1.
     LoopVectorization.@turbo for j in eachindex(Θ)
         Θj = Θ[j]
+        coshΘj = coshΘ[j]
         ΔΘj = ΔΘ[j]
-        logcoshprod += log(cosh(Θj + ΔΘj)/cosh(Θj))
+        # logcoshprod += log(cosh(Θj + ΔΘj)/cosh(Θj))
+        # logcoshprod += log(cosh(Θj + ΔΘj)/coshΘj)
+        coshprod *= cosh(Θj + ΔΘj)/coshΘj
     end
-    return exp(exp_a + exp_A + logcoshprod)
+    # return exp(exp_a + exp_A + logcoshprod)
+    return exp(exp_a + exp_A) *coshprod
 end
 
 function getOx_k(ψG::RBMSpin1,x::AbstractMatrix,k)
