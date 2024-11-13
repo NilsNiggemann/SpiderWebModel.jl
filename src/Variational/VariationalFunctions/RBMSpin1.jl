@@ -36,6 +36,8 @@ struct RBMSpin1Buffer{T}
     coshΘ::Vector{T}
     ΔΘ::Vector{T}
     x²::Vector{T}
+    wji::Matrix{T}
+    Wji::Matrix{T}
 end
 
 function allocate_GWF_buffer(ψG::RBMSpin1,S::AbstractMatrix) 
@@ -47,7 +49,11 @@ function allocate_GWF_buffer(ψG::RBMSpin1,S::AbstractMatrix)
     coshΘ = zeros(size(get_b_j(ψG)))
     ΔΘ = zeros(size(get_b_j(ψG)))
     x² = zeros(length(S))
-    return RBMSpin1Buffer(Θ,coshΘ,ΔΘ,x²)
+
+    wji = Array(get_w_ij(ψG)')
+    Wji = Array(get_W_ij(ψG)')
+
+    return RBMSpin1Buffer(Θ,coshΘ,ΔΘ,x²,wji,Wji)
 end
 
 function getParameterType(ψG::RBMSpin1,k)
@@ -146,10 +152,8 @@ function guidingfuncRatio(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buff
     a = get_alpha_i(ψG)
     A = get_A_i(ψG)
     b = get_b_j(ψG)
-    w = get_w_ij(ψG)
-    W = get_W_ij(ψG)
 
-    (;Θ,ΔΘ,coshΘ) = Buffer
+    (;Θ,ΔΘ,coshΘ,wji,Wji) = Buffer
     x = get_config(Walker)
     Mat = parent(x)
 
@@ -180,8 +184,8 @@ function guidingfuncRatio(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buff
         s = P1_STENCIL[idx]*opSign
         xi = x[I]
         fac = (2*s*xi + s^2)
-        @inbounds @simd for j in eachindex(Θ)
-            ΔΘ[j] += w[I,j]*s + W[I,j]*fac
+        LoopVectorization.@turbo for j in eachindex(Θ)
+            ΔΘ[j] += wji[j,I]*s + Wji[j,I]*fac
         end
     end
 
