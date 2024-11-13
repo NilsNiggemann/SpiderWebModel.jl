@@ -56,6 +56,10 @@ struct SpiderwebGFMCProblem{MethodType<:AbstractGFMCMethod,T<:AbstractFloat,Buff
     Observables::O
 end
 
+function get_Guiding_function_buffer(problem::SpiderwebGFMCProblem)
+    return problem.Guiding_function_buffer
+end
+
 abstract type AbstractGFMCObservables end
 struct GFMCObservables{DT<:AbstractFloat,T,T2} <: AbstractGFMCObservables
     energies::Vector{DT}
@@ -67,7 +71,8 @@ end
 
 function _setup_GFMC_problem(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,NSteps::Integer,ψG,outfile)
     setup = setup_many_walker_GFMC(InitialState,Nwalkers)
-    Guiding_function_buffer = fetch.([Threads.@spawn allocate_GWF_buffer(ψG,InitialState) for _ in 1:Threads.nthreads()])
+    Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState)
+    
     (;Walkers,weights,reconfiguration_buffer) = setup
     ObsSetup = setupObservables(InitialState,Nwalkers,NSteps,outfile)
     (;energies,SaveConfigs,TotalWeights,reconfigurationTable) = ObsSetup

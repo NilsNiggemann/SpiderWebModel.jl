@@ -7,7 +7,7 @@ using MakieHelpers
 # using MKL
 include("plottingUtils.jl")
 ##
-S = SW.stencilConfig(zeros(10,10),1;
+S = SW.stencilConfig(zeros(12,12),1;
 boundaryCondition = :open
 )
 S .= SW.periodicStateDenseLoops(size(S,1))
@@ -36,14 +36,14 @@ SW.get_params(ψG) .*= 1e-3
 nThermal = 1000
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
-CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.1))
+CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.5))
 CTSR = SW.ContinuousTimeMethod(8,Hxx = CT.Hxx)
 
 ##
 cappedGrowth(x,start,stop,offset,growth) = start + 0.5(stop-start)* (1 +tanh(growth *(x -offset)))
 numSteps(i) = round(Int,cappedGrowth(i,10,30,100,0.02))
 learningRate(i) = cappedGrowth(i,2e-3,5e-4,500,0.005)
-SRSteps = 400
+SRSteps = 200
 lines(1:SRSteps,learningRate.(1:SRSteps))
 # lines!(1:SRSteps,numSteps.(1:SRSteps))
 current_figure()
@@ -52,7 +52,7 @@ current_figure()
 # numSteps(i) = i > 500 ? 200 : 10
 ##
 
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,100 ,ψGSymm,SRSteps,1e-3,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=0,
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,10 ,ψGSymm,SRSteps,1e-3,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=0,
 report_steps = 10,
 reset = false,
 # outfile = "tempSR/SR2.h5"

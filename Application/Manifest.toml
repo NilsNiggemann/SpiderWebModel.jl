@@ -1641,7 +1641,7 @@ weakdeps = ["ChainRulesCore"]
     SpecialFunctionsChainRulesCoreExt = "ChainRulesCore"
 
 [[deps.SpiderWebModel]]
-deps = ["Arpack", "BitIntegers", "CairoMakie", "ChunkSplitters", "CircularArrays", "DataStructures", "Dictionaries", "FFTW", "Gurobi", "H5Zblosc", "HDF5", "IterativeSolvers", "JuMP", "KrylovKit", "LinearAlgebra", "LinearMaps", "LoopVectorization", "MathOptInterface", "OrderedCollections", "ProgressMeter", "Random", "RecursiveArrayTools", "SparseArrays", "StaticArrays", "Statistics", "StatsBase", "Stencils", "Test"]
+deps = ["Accessors", "Arpack", "BitIntegers", "CairoMakie", "ChunkSplitters", "CircularArrays", "DataStructures", "Dictionaries", "FFTW", "Gurobi", "H5Zblosc", "HDF5", "IterativeSolvers", "JuMP", "KrylovKit", "LinearAlgebra", "LinearMaps", "LoopVectorization", "MathOptInterface", "OrderedCollections", "ProgressMeter", "Random", "RecursiveArrayTools", "SparseArrays", "StaticArrays", "Statistics", "StatsBase", "Stencils", "Test"]
 path = ".."
 uuid = "8e1b84da-b1d7-4311-a21b-52324f990117"
 version = "0.3.7"

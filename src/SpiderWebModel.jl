@@ -18,6 +18,7 @@ import Stencils
 import StatsBase
 import FFTW
 import RecursiveArrayTools
+import Accessors
 
 include("SpinConfig.jl")
 include("Constraint.jl")

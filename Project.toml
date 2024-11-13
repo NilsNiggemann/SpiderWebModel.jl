@@ -4,6 +4,7 @@ authors = ["Nils Niggemann <nils.niggemann@fu-berlin.de>"]
 version = "0.3.7"
 
 [deps]
+Accessors = "7d9f7c33-5ae7-4f3b-8dc6-eff91059b697"
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 BitIntegers = "c3b6d118-76ef-56ca-8cc7-ebb389d030a1"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
