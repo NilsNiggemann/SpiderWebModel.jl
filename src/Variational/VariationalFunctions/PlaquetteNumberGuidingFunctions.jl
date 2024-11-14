@@ -1,7 +1,7 @@
 struct PlaquetteNumberGuidingFunction <: AbstractGuidingFunction
     α::Float64
 end
-function fill_GWF_buffer!(Buffer,ψG::PlaquetteNumberGuidingFunction,Walker::SpiderWebWalker) 
+function compute_GWF_buffer!(Buffer,ψG::PlaquetteNumberGuidingFunction,Walker::SpiderWebWalker) 
     getNPlaq!(Walker)
     return Buffer
 end
@@ -13,7 +13,7 @@ get_params(ψG::PlaquetteNumberGuidingFunction) = ψG.α
 guidingfunc_name(F::PlaquetteNumberGuidingFunction) = "PlaquetteNumberGuidingFunction"
 variational_parameters(P::PlaquetteNumberGuidingFunction) = Dict([:alpha=>P.α])
 
-function guidingfuncRatio(ψG::PlaquetteNumberGuidingFunction,Walker::SpiderWebWalker,move,AffectedPlaquetteList)
+function guidingfuncRatio(ψG::PlaquetteNumberGuidingFunction,Walker::SpiderWebWalker,move,AffectedPlaquetteList::T) where T
 
     i,j,opNum = move
     affectedPlaquettes = AffectedPlaquetteList[i,j]

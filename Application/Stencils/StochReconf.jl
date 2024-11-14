@@ -7,10 +7,10 @@ using MakieHelpers
 # using MKL
 include("plottingUtils.jl")
 ##
-S = SW.stencilConfig(zeros(10,10),1;
+S = SW.stencilConfig(zeros(20,20),1;
 boundaryCondition = :periodic
 )
-# S .= SW.periodicStateDenseLoops(size(S,1))
+S .= SW.periodicStateDenseLoops(size(S,1))
 # S = SW.stencilConfig(SW.getStairCase(20),1/2;
 # boundaryCondition = :periodic
 # )
@@ -23,36 +23,39 @@ boundaryCondition = :periodic
 # ψG = SW.orderGuidingFunction(S,0.12)
 # ψG.M_i .= 1e-6
 # ψG = SW.localPlaquetteGuidingFunction(S,0.001)
-ψG = SW.RBMSpin1(S,1,Float64)
+# ψG = SW.RBMSpin1(S,1,Float64)
+# ψG = SW.NaiveFunction(SW.JastrowFunction(S,Float64))
+ψG = SW.JastrowFunction(S,Float64)
 # ψG = SW.PlaquetteRBM(S,1,Float64)
 ψGSymm = SW.getNonSymmetric(ψG)
 SW.Random.seed!(1234)
 # ψGSymm = SW.symmetrize(S,ψG,(4,4))
 # ψG = SW.RBM(S,1)
-SW.rand!(SW.get_params(ψG))
-SW.get_params(ψG) .*= 1e-3
+SW.rand!(SW.get_params(ψG)) .*= 1e-3
+# ψG.α .= 0.1
+
 # ψGSymm = SW.symmetrize(S,ψG,(4,4))
 ψGold = SW.PlaquetteNumberGuidingFunction(0.12)
 nThermal = 1000
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
-CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.8))
+CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.5))
 CTSR = SW.ContinuousTimeMethod(8,Hxx = CT.Hxx)
 
 ##
 cappedGrowth(x,start,stop,offset,growth) = start + 0.5(stop-start)* (1 +tanh(growth *(x -offset)))
-numSteps(i) = round(Int,cappedGrowth(i,10,30,100,0.02))
-learningRate(i) = cappedGrowth(i,2e-3,5e-4,500,0.005)
-SRSteps = 500
+numSteps(i) = round(Int,cappedGrowth(i,10,30,180,009))
+learningRate(i) = cappedGrowth(i,8e-3,8e-4,180,0.009)
+SRSteps = 100
 lines(1:SRSteps,learningRate.(1:SRSteps))
 # lines!(1:SRSteps,numSteps.(1:SRSteps))
 current_figure()
 ##
 # learningRate(i) = i > 450 ? 1e-3 : 1e-3
-numSteps(i) = i > SRSteps ÷2 ? 200 : 20
+# numSteps(i) = i > SRSteps ÷2 ? 30 : 20
 ##
 
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,numSteps ,ψGSymm,SRSteps,1e-3,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,20 ,ψGSymm,SRSteps,learningRate,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
 report_steps = 10,
 reset = false,
 # outfile = "tempSR/SR2.h5"
@@ -63,12 +66,13 @@ SW.get_params(ψGnew) .= stochReconfRes.params
 plotVarEn(stochReconfRes)
 ##
 
+
 SW.Random.seed!(1234)
 NWalkers = 28
 NSteps = 2000
 @time resultsNaive = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψGold;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
 
-@time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψG;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
+# @time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψG;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
 ##
 SW.Random.seed!(1234)
 @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])

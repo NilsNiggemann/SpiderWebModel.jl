@@ -165,7 +165,7 @@ Base.@propagate_inbounds function get_Θ_j(Config::StencilSpinConfig,j,b,w,W)
     return θj
 end
 
-function fill_GWF_buffer!(Buffer::RBMSpin1Buffer,ψG::RBMSpin1,Walker::SpiderWebWalker)
+function compute_GWF_buffer!(Buffer::RBMSpin1Buffer,ψG::RBMSpin1,Walker::SpiderWebWalker)
     Config = get_config(Walker)
     Θ = Buffer.Θ
     b = get_b_j(ψG)

@@ -17,7 +17,7 @@ get_m_i(ψG::JastrowFunction) = ψG.m_i
 get_v_ij(ψG::JastrowFunction) = ψG.v_ij
 
 function get_params(ψG::JastrowFunction)
-    return RecursiveArrayTools.ArrayPartition(ψG.α,ψG.m_i,ψG.v_ij)
+    return RecursiveArrayTools.ArrayPartition(ψG.α,ψG.m_i,get_v_ij(ψG))
 end
 
 function (ψG::JastrowFunction)(x::StencilSpinConfig)
@@ -47,17 +47,19 @@ function _evaluate_jastrow(ψG,x::AbstractMatrix,n)
     return exp(exp_α + exp_m + exp_v)
 end
 
-struct Jastrow_GWF_Buffer_3{T1<:AbstractVector,D,L}
-    h_i::T1
+struct Jastrow_GWF_Buffer{T<:Number,D,L}
+    x_i::Vector{T}
+    h_i::Vector{T}
     prefac_moves::D
     AffectedPlaquetteList::L
 end
 
-function allocate_GWF_buffer(ψG::JastrowFunction,S::AbstractMatrix)
-    h_i = zeros(length(S))
+function allocate_GWF_buffer(ψG::JastrowFunction{T},S::AbstractMatrix) where T
+    x_i = zeros(T,length(S))
+    h_i = zeros(T,length(S))
     prefac_moves = _precompute_prefac_moves(ψG,S)
     AffectedPlaquetteList = precomputeAffectedPlaquettes(S)
-    return Jastrow_GWF_Buffer_3(h_i,prefac_moves,AffectedPlaquetteList)
+    return Jastrow_GWF_Buffer(x_i,h_i,prefac_moves,AffectedPlaquetteList)
 end
 
 
@@ -89,21 +91,58 @@ function _precompute_jastrow_weight(vij,move,Conf::StencilSpinConfig)
 end
 
 
-function fill_GWF_buffer!(Buffer::Jastrow_GWF_Buffer_3,ψG::JastrowFunction,Walker::SpiderWebWalker) 
+function premove_update_GWF_buffer!(Buffer::Jastrow_GWF_Buffer,ψG::JastrowFunction,Walker::SpiderWebWalker) 
     getNPlaq!(Walker)
-    x = get_config(Walker)
+    return Buffer
+end
+
+function compute_GWF_buffer!(Buffer::Jastrow_GWF_Buffer,ψG::JastrowFunction,Walker::SpiderWebWalker)
+
+    getNPlaq!(Walker)
+    x = Buffer.x_i
+
+    x .= reshape(get_config(Walker),length(x))
+
     v = get_v_ij(ψG)
-    fill!(Buffer.h_i,0.0)
-    for j in axes(v,2)
-        for i in axes(v,1)
-            Buffer.h_i[j] += x[i]*v[i,j]
+    h = Buffer.h_i
+    # fill!(h,0.0)
+
+    for i in axes(v,1)
+        hi = 0.
+        LoopVectorization.@turbo for j in axes(v,2)
+            hi += x[j]*v[j,i]
+        end
+        h[i] = hi
+    end
+    # mul!(h,v,x) 
+    return Buffer
+end
+
+function post_move_update_GWF_buffer!(Buffer::Jastrow_GWF_Buffer,ψG::JastrowFunction,Walker::SpiderWebWalker,move::Tuple)
+    Config = get_config(Walker)
+
+    i,j,opSign = move
+
+    affected_sites = safe_parent_indices(parent(Config), (i, j))
+
+    v = get_v_ij(ψG)
+    h = Buffer.h_i
+
+    LI = LinearIndices(Config)
+    
+    for (index,site) in enumerate(affected_sites)
+
+        i = LI[CartesianIndex(site)]
+        s = P1_STENCIL[index]*opSign
+
+        for j in eachindex(h)
+            h[j] += v[j,i]*s
         end
     end
     return Buffer
 end
 
-
-function guidingfuncRatio(ψG::JastrowFunction,Walker::SpiderWebWalker,move::Tuple,Buffer::Jastrow_GWF_Buffer_3)
+function guidingfuncRatio(ψG::JastrowFunction,Walker::SpiderWebWalker,move::Tuple,Buffer::Jastrow_GWF_Buffer)
     α = get_alpha_i(ψG)
     m = get_m_i(ψG)
 

@@ -25,7 +25,13 @@ function allocate_GWF_buffers_threads(ψG::AbstractGuidingFunction,InitialState)
 end
 
 """precomputes the guiding wave function for the given configuration. Can be overloaded for more complex wavefunctions in which case a Buffer is filled. In this case the buffer needs to be returned"""
-fill_GWF_buffer!(Buff,ψG::AbstractGuidingFunction,Walker) = ψG(Walker)
+compute_GWF_buffer!(Buff,ψG::AbstractGuidingFunction,Walker) = ψG(Walker)
+
+"""Like compute_GWF_buffer! but can be overloaded to allow for more efficient computation. Is only called before a move is made. Falls back to compute_GWF_buffer!"""
+premove_update_GWF_buffer!(Buff,ψG::AbstractGuidingFunction,Walker) = compute_GWF_buffer!(Buff,ψG,Walker)
+
+"""Like compute_GWF_buffer! but can be overloaded to allow for more efficient computation. Is only called after a move is accepted. Defaults to doing nothing."""
+post_move_update_GWF_buffer!(Buff,ψG::AbstractGuidingFunction,Walker,move) = Buff
 
 # allocate_GWF_buffer(ψG::AbstractGuidingFunction,S::StencilSpinConfig) = nothing
 
@@ -33,28 +39,10 @@ function updateWeightList!(Walker::SpiderWebWalker,Buffer,ψG::AbstractGuidingFu
     weights = Walker.weights
     empty!(weights)
     moves = getMoves!(Walker)
-    newBuff = fill_GWF_buffer!(Buffer,ψG,Walker)
+    newBuff = premove_update_GWF_buffer!(Buffer,ψG,Walker)
 
     for operator in moves
         weight = guidingfuncRatio(ψG,Walker,operator,newBuff)
-        push!(weights,weight)
-    end
-
-    return weights
-end
-
-function updateWeightList_naive!(Walker::SpiderWebWalker,Buffer,ψG::AbstractGuidingFunction)
-    weights = Walker.weights
-    empty!(weights)
-    moves = getMoves!(Walker)
-    for operator in moves
-        psix = ψG(Walker)
-        i,j,opsign = operator
-        applyPlaquette!(get_config(Walker),i,j,opsign)
-        psix´ = ψG(Walker)
-        applyPlaquette!(get_config(Walker),i,j,-opsign)
-        weight = psix´/psix
-
         push!(weights,weight)
     end
 
@@ -70,8 +58,8 @@ function updateWeightList!(Walker::SpiderWebWalker,Buffer,ψG::AbstractGuidingFu
     return res
 end
 
-function guidingfuncRatio(ψG::AbstractGuidingFunction,Walker,operator,ψx::Number)
-    i,j,opNum = operator
+function guidingfuncRatio(ψG::AbstractGuidingFunction,Walker,move,ψx::Number)
+    i,j,opNum = move
     Config = get_config(Walker)
     applyPlaquette!(Config, i, j, opNum)
     ψx´ = ψG(Walker)

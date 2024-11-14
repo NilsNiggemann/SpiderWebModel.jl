@@ -6,8 +6,8 @@ function TestWFRatio(ψG,S;tol=1e-10)
     W = SW.spiderWebWalker(copy(S),collect(SW.plaquetteIterator(S)))
     SW.getMoves!(W)
     psiname = SW.guidingfunc_name(ψG)
-    
-    SW.fill_GWF_buffer!(Buff,ψG,W)
+
+    SW.compute_GWF_buffer!(Buff,ψG,W)
     @testset "$psiname ψ(x´) / ψ(x)" begin
         for m in W.moves
             (i,j,op) = m

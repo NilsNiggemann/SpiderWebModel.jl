@@ -55,7 +55,7 @@ function (ψ::OrderGuidingFunction)(S::StencilSpinConfig)
     _evaluate_order_guiding_function(ψ,S,n)
 end
 
-function fill_GWF_buffer!(Buffer,ψG::OrderGuidingFunction,Walker::SpiderWebWalker) 
+function compute_GWF_buffer!(Buffer,ψG::OrderGuidingFunction,Walker::SpiderWebWalker) 
     getNPlaq!(Walker)
     return Buffer
 end

@@ -12,7 +12,7 @@ function localPlaquetteGuidingFunction(State,α::Real=0.1,type=Float32)
     get_alpha_i(ψ) .= α
     return ψ
 end
-function fill_GWF_buffer!(Buffer,ψG::LocalPlaquetteGuidingFunction,Walker::SpiderWebWalker) 
+function compute_GWF_buffer!(Buffer,ψG::LocalPlaquetteGuidingFunction,Walker::SpiderWebWalker) 
     getNPlaq!(Walker)
     return Buffer
 end

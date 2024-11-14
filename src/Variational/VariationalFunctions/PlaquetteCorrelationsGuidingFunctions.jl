@@ -35,11 +35,11 @@ function guidingfunc_exponent(ψG::FullVariationalGuidingFunction,N□::Abstract
     return exponent
 end
 
-function fill_GWF_buffer!(Buffer,ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker) 
+function compute_GWF_buffer!(Buffer,ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker) 
     getNPlaq!(Walker)
     return Buffer
 end
-# function fill_GWF_buffer!(Buffer,ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker) 
+# function compute_GWF_buffer!(Buffer,ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker) 
 #     ψG(Walker)
 # end
 

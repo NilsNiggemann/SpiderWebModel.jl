@@ -682,6 +682,7 @@ function propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method::C
         GWFBuffer = Guiding_function_buffer[i_chunk]
         for α in αinds
             Walker = Walkers[α]
+            compute_GWF_buffer!(GWFBuffer,ψG,Walker)
             log_w = 0.
             weightList = updateWeightList!(Walker,GWFBuffer,ψG)
             H_xx = Hxx(Walker)
@@ -695,7 +696,8 @@ function propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method::C
                     βleft -= dτ
                     log_w += -dτ*el_x
                     if βleft > 0 
-                        performMarkovStep!(Walker)
+                        last_move = performMarkovStep!(Walker)
+                        post_move_update_GWF_buffer!(GWFBuffer,ψG,Walker,last_move)
                         updateWeightList!(Walker,GWFBuffer,ψG)
 
                         H_xx = Hxx(Walker)

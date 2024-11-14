@@ -94,7 +94,7 @@ end
 # __getTheta(W,ψG) = [get_θ_j_plaq(W.n_x,j,get_b_j(ψG),get_w_ij(ψG)) for j in 1:length(get_b_j(ψG))]
 
 
-function fill_GWF_buffer!(Buffer,ψG::PlaquetteRBM,Walker::SpiderWebWalker)
+function compute_GWF_buffer!(Buffer,ψG::PlaquetteRBM,Walker::SpiderWebWalker)
     Θ = Buffer.Θ
     b = get_b_j(ψG)
     w_ij = get_w_ij(ψG)
