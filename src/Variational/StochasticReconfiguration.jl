@@ -70,6 +70,7 @@ function reconf_obs(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,c
 
         for (i,iconf) in enumerate(chunkinds)
             get_config(Walker) .= configs[iconf]
+            compute_GWF_buffer!(Guiding_function_buffer,ψG,Walker)
             updateWeightList!(Walker,Guiding_function_buffer,ψG)
             elocal = getLocalEnergy(Walker,method)
             @inbounds for (ik,k) in enumerate(inequivParams)

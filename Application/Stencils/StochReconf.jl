@@ -7,7 +7,7 @@ using MakieHelpers
 # using MKL
 include("plottingUtils.jl")
 ##
-S = SW.stencilConfig(zeros(20,20),1;
+S = SW.stencilConfig(zeros(12,12),1;
 boundaryCondition = :periodic
 )
 S .= SW.periodicStateDenseLoops(size(S,1))
@@ -39,14 +39,15 @@ SW.rand!(SW.get_params(ψG)) .*= 1e-3
 nThermal = 1000
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
-CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.5))
+CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.0))
 CTSR = SW.ContinuousTimeMethod(8,Hxx = CT.Hxx)
 
 ##
 cappedGrowth(x,start,stop,offset,growth) = start + 0.5(stop-start)* (1 +tanh(growth *(x -offset)))
-numSteps(i) = round(Int,cappedGrowth(i,10,30,180,009))
-learningRate(i) = cappedGrowth(i,8e-3,8e-4,180,0.009)
 SRSteps = 100
+
+numSteps(i) = round(Int,cappedGrowth(i,10,30,SRSteps÷2,1))
+learningRate(i) = cappedGrowth(i,8e-3,3e-4,SRSteps÷2,0.1)
 lines(1:SRSteps,learningRate.(1:SRSteps))
 # lines!(1:SRSteps,numSteps.(1:SRSteps))
 current_figure()

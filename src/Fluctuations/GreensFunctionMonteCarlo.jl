@@ -153,13 +153,14 @@ function findAffectedPlaquettes!(Plaq_indices,Config,i,j,::Stencils.Wrap,::Stenc
 end
 
 function precomputeAffectedPlaquettes(Config)
-    AffPlaqMatrix = Matrix{OrderedSet{Int}}(undef,size(Config))
+    # AffPlaqMatrix = Matrix{OrderedSet{Int}}(undef,size(Config))
+    AffPlaqMatrix = Matrix{Vector{Int}}(undef,size(Config))
 
     for I in plaquetteIterator(Config)
         i,j = I
         AffPlaqs = OrderedSet{Int}()
         findAffectedPlaquettes!(AffPlaqs,Config,i,j)
-        AffPlaqMatrix[i,j] = AffPlaqs
+        AffPlaqMatrix[i,j] = collect(AffPlaqs)
     end
     return AffPlaqMatrix
 end
