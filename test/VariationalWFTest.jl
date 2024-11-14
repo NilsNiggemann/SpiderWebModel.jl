@@ -32,8 +32,7 @@ end
     S .= SW.periodicStateDenseLoops(size(S,1))
 
     ψRBM = SW.RBMSpin1(S,1,Float64)
-    SW.rand!(SW.get_params(ψRBM))
-    SW.get_params(ψRBM) .*= 1e-2
+    SW.rand!(SW.get_params(ψRBM))  .*= 1e-2
     TestWFRatio(ψRBM,S)
     
     ψLocalPlaqs = SW.localPlaquetteGuidingFunction(S,0.,Float64)
@@ -41,17 +40,20 @@ end
     TestWFRatio(ψLocalPlaqs,S)
 
     ψFull = SW.fullVariationalFunction(S,0.,Float64)
-    SW.rand!(SW.get_params(ψFull))
-    SW.get_params(ψFull) .*= 1e-2
+    SW.rand!(SW.get_params(ψFull))  .*= 1e-2
     TestWFRatio(ψFull,S)
 
     ψMag = SW.orderGuidingFunction(S,0.,Float64)
-    SW.rand!(SW.get_params(ψMag))
-    SW.get_params(ψMag) .*= 1e-2
+    SW.rand!(SW.get_params(ψMag))  .*= 1e-2
     TestWFRatio(ψMag,S)
 
     ψPlaqRBM = SW.PlaquetteRBM(S,1,Float64)
-    SW.rand!(SW.get_params(ψPlaqRBM))
-    SW.get_params(ψPlaqRBM) .*= 1e-2
+    SW.rand!(SW.get_params(ψPlaqRBM))  .*= 1e-2
     TestWFRatio(ψPlaqRBM,S)
+
+    ψJastrow = SW.JastrowFunction(S,Float64)
+    SW.rand!(SW.get_params(ψJastrow))  .*= 1e-2
+    TestWFRatio(ψJastrow,S)
+
+
 end
