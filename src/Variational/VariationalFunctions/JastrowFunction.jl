@@ -31,7 +31,7 @@ guidingfunc_name(F::JastrowFunction) = "JastrowFunction"
 function _evaluate_jastrow(ψG,x::AbstractMatrix,n)
     α = get_alpha_i(ψG)
     m = get_m_i(ψG)
-    W = get_v_ij(ψG)
+    v = get_v_ij(ψG)
 
     exp_α = zero(eltype(α))
     for i in eachindex(n)
@@ -42,8 +42,9 @@ function _evaluate_jastrow(ψG,x::AbstractMatrix,n)
         exp_m += m[i] * x[i]
     end
     x_lin = reshape(x, length(x))
-    exp_W = dot(x_lin,W,x_lin)
-    return exp(exp_α + exp_m + exp_W)
+    exp_v = 0.5*dot(x_lin,v,x_lin)
+
+    return exp(exp_α + exp_m + exp_v)
 end
 
 struct Jastrow_GWF_Buffer_3{T1<:AbstractVector,D,L}
@@ -84,17 +85,17 @@ function _precompute_jastrow_weight(vij,move,Conf::StencilSpinConfig)
             exponent += 0.5*vij[a_k,a_k´]*F_k*F_k´
         end
     end
-    return exp(exponent)
+    return exponent
 end
 
 
-function fill_GWF_buffer!(Buffer,ψG::JastrowFunction,Walker::SpiderWebWalker) 
+function fill_GWF_buffer!(Buffer::Jastrow_GWF_Buffer_3,ψG::JastrowFunction,Walker::SpiderWebWalker) 
     getNPlaq!(Walker)
     x = get_config(Walker)
     v = get_v_ij(ψG)
     for j in axes(v,2)
         for i in axes(v,1)
-            Buffer.h_i[j] = x[i]*v[i,j]
+            Buffer.h_i[j] += x[i]*v[i,j]
         end
     end
     return Buffer
@@ -139,11 +140,12 @@ function guidingfuncRatio(ψG::JastrowFunction,Walker::SpiderWebWalker,move::Tup
         s = P1_STENCIL[idx]*opSign
         I = LI[i,j]
         exp_h += h_i[I]*s
-        exp_m += m[I]*x[I]
+        exp_m += m[I]*s
     end
 
-    return exp(exp_α + exp_h + exp_m)
+    return exp(exp_α + exp_h + exp_m + prefac)
 end
+
 function getOx_k(ψG::JastrowFunction,W::SpiderWebWalker,k)
     par = get_params(ψG)
     x = get_config(W)

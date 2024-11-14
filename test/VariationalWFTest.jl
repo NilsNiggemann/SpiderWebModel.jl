@@ -53,6 +53,7 @@ end
 
     ψJastrow = SW.JastrowFunction(S,Float64)
     SW.rand!(SW.get_params(ψJastrow))  .*= 1e-2
+    SW.get_v_ij(ψJastrow) .= SW.Symmetric(SW.get_v_ij(ψJastrow))
     TestWFRatio(ψJastrow,S)
 
 
