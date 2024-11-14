@@ -93,6 +93,7 @@ function fill_GWF_buffer!(Buffer::Jastrow_GWF_Buffer_3,ψG::JastrowFunction,Walk
     getNPlaq!(Walker)
     x = get_config(Walker)
     v = get_v_ij(ψG)
+    fill!(Buffer.h_i,0.0)
     for j in axes(v,2)
         for i in axes(v,1)
             Buffer.h_i[j] += x[i]*v[i,j]
@@ -164,7 +165,7 @@ function getOx_k(ψG::JastrowFunction,W::SpiderWebWalker,k)
     
     if paramtype == 3
         i,j = Tuple(CartesianIndices(vij)[k])
-        return x[i] * x[j]
+        return 0.5*x[i] * x[j]
     end
     error("Invalid parameter type")
 end
