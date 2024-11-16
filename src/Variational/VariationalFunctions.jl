@@ -82,6 +82,7 @@ end
 
 function add_reconstructedFullParams!(ψG,indicesMapping,trimmedparams)
     params = get_params(ψG)
+
     for (i,k) in enumerate(indicesMapping)
         params[i] += trimmedparams[k]
     end

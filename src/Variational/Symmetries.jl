@@ -1,3 +1,20 @@
+
+"""Contains guiding wave function and information about symmetry equivalent parameters"""
+struct SymmetryReducedWaveFunction{F<:AbstractGuidingFunction} <: AbstractGuidingFunction
+    psi::F
+    indicesMapping::Vector{Int}
+    uniqueInds::Vector{Int}
+end
+
+@inline get_params(P::SymmetryReducedWaveFunction) = get_params(P.psi)
+(psi::SymmetryReducedWaveFunction)(W::SpiderWebWalker) = psi.psi(W)
+
+@inline guidingfunc_name(F::SymmetryReducedWaveFunction) = guidingfunc_name(F.psi)
+@inline guidingfuncRatio(F::SymmetryReducedWaveFunction,Walker,move,Buffer) = guidingfuncRatio(F.psi,Walker,move,Buffer)
+
+@inline getOx_k(ψG::SymmetryReducedWaveFunction,W,k) = getOx_k(ψG.psi,W,k)
+
+
 abstract type AbstractSymop end
 struct TranslationalSymmetry{T} <: AbstractSymop
     a1::T
@@ -15,15 +32,20 @@ function reduceParams!(ψSymm::SymmetryReducedWaveFunction,Symm::AbstractSymop,S
         type,k = _getParamsTypeAndIndex(params,par)
         equivalent_params = generate_equivalent(type,k,Symm,ψSymm.psi,S)
         equivalent_params .= remap_index.(type,equivalent_params,Ref(params))
+        # indicesMapping[equivalent_params] .= par
         indicesMapping[equivalent_params] .= minimum(equivalent_params)
     end
     empty!(uniqueInds)
     append!(uniqueInds,findFirstUniqueIndices(indicesMapping))
 
+    for i in eachindex(indicesMapping)
+        ind = findfirst(==(indicesMapping[i]),uniqueInds)
+        indicesMapping[i] = ind
+    end
     return ψSymm
 end
 
-generate_equivalent(type,k,Symm::T1,ψSymm::T2,S) where {T1 <:AbstractSymop, T2 <: AbstractGuidingFunction}= error("Symmetry $T1 not implemented for wavefunction $T2")
+generate_equivalent(type,k,Symm::T1,ψSymm::T2,S) where {T1 <:AbstractSymop, T2 <: AbstractGuidingFunction} = error("Symmetry $T1 not implemented for wavefunction $T2")
 
 function generate_equivalent_sites(site::siteType,T::TranslationalSymmetry,S::AbstractMatrix) where {siteType}
     (;a1,a2) = T
@@ -57,8 +79,8 @@ function generate_equivalent_site_pairs(I::siteType,J::siteType,T::Translational
             translation = n1*a1 + n2*a2
             I´ = _translateAndWrap(I,translation,Lx,Ly)
             J´ = _translateAndWrap(J,translation,Lx,Ly)
-
             push!(newPairs,(I´,J´))
+            push!(newPairs,(J´,I´))
         end
     end
     return collect(newPairs)
@@ -88,4 +110,18 @@ Base.@propagate_inbounds function remap_index(partition,k,params::RecursiveArray
     lens = length.(params.x[1:partition])
     Base.@boundscheck k > sum(lens) && error("Index out of bounds")
     return sum(lens[1:end-1]) + k
+end
+
+
+"""given arr, return the indices of all the first unique elements"""
+function findFirstUniqueIndices(arr::AbstractArray{T}) where T
+    uniqueInds = Int[]
+    uniqueVals = Set{T}()
+    for (i,val) in enumerate(arr)
+        if val ∉ uniqueVals
+            push!(uniqueVals,val)
+            push!(uniqueInds,i)
+        end
+    end
+    return uniqueInds
 end

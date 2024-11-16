@@ -176,16 +176,3 @@ function symmetrize(S,ψG::OrderGuidingFunction,unitcell::Tuple{Int,Int})
     # for I in CartesianIndices(S)
 
 end
-
-"""given arr, return the indices of all the first unique elements"""
-function findFirstUniqueIndices(arr::AbstractArray{T}) where T
-    uniqueInds = Int[]
-    uniqueVals = Set{T}()
-    for (i,val) in enumerate(arr)
-        if val ∉ uniqueVals
-            push!(uniqueVals,val)
-            push!(uniqueInds,i)
-        end
-    end
-    return uniqueInds
-end

@@ -28,13 +28,15 @@ S .= SW.periodicStateDenseLoops(size(S,1))
 ψG = SW.JastrowFunction(S,Float64)
 # ψG = SW.PlaquetteRBM(S,1,Float64)
 ψGSymm = SW.getNonSymmetric(ψG)
-SW.reduceParams!(ψGSymm,SW.TranslationalSymmetry(4,4),S)
+# SW.reduceParams!(ψGSymm,SW.TranslationalSymmetry(SA[1,1],SA[1,-1]),S)
+SW.reduceParams!(ψGSymm,SW.TranslationalSymmetry(SA[2,2],SA[2,-2]),S)
 
 SW.Random.seed!(1234)
 # ψGSymm = SW.symmetrize(S,ψG,(4,4))
 # ψG = SW.RBM(S,1)
-SW.rand!(SW.get_params(ψG)) .*= 1e-3
-# ψG.v_ij .= SW.Symmetric(ψG.v_ij)
+# SW.rand!(SW.get_params(ψG)) .*= 1e-3
+SW.add_reconstructedFullParams!(ψGSymm,ψGSymm.indicesMapping,rand(length(ψGSymm.uniqueInds)) .* 1e-3)
+ψG.v_ij .= SW.Symmetric(ψG.v_ij)
 # ψG.α .= 0.1
 
 # ψGSymm = SW.symmetrize(S,ψG,(4,4))
@@ -47,10 +49,10 @@ CTSR = SW.ContinuousTimeMethod(8,Hxx = CT.Hxx)
 
 ##
 cappedGrowth(x,start,stop,offset,growth) = start + 0.5(stop-start)* (1 +tanh(growth *(x -offset)))
-SRSteps = 100
+SRSteps = 200
 
-numSteps(i) = round(Int,cappedGrowth(i,10,10,SRSteps - SRSteps÷2,10/SRSteps))
-learningRate(i) = cappedGrowth(i,8e-3,4e-4,SRSteps - SRSteps÷2,5/SRSteps)
+numSteps(i) = round(Int,cappedGrowth(i,20,20,SRSteps - SRSteps÷2,10/SRSteps))
+learningRate(i) = cappedGrowth(i,8e-1,4e-1,SRSteps - SRSteps÷2,5/SRSteps)
 lines(1:SRSteps,5000*learningRate.(1:SRSteps))
 lines!(1:SRSteps,numSteps.(1:SRSteps))
 current_figure()
@@ -59,7 +61,7 @@ current_figure()
 # numSteps(i) = i > SRSteps ÷2 ? 30 : 20
 ##
 
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,numSteps ,ψGSymm,SRSteps,5e-4,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,numSteps ,ψGSymm,SRSteps,3e-4,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
 report_steps = 10,
 reset = false,
 # outfile = "tempSR/SR2.h5"
