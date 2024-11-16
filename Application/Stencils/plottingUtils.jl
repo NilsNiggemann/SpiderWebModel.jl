@@ -200,7 +200,7 @@ function getBranchingHistory!(BranchingMatrix::AbstractMatrix,reconfigurationTab
     return BranchingMatrix
 end
 
-function plotVarEn(stochReconfRes;normalization=1)
+function plotVarEn(stochReconfRes;normalization=1,movavg = 1,E_exact = NaN)
     fig = Figure(theme = theme_SimpleTicks())
 
     ax = Axis(fig[1, 1], xlabel = "Iteration", ylabel = "Energy",xlabelvisible=false,xticklabelsvisible=false)
@@ -211,21 +211,34 @@ function plotVarEn(stochReconfRes;normalization=1)
     linkxaxes!(ax,axVar, ax2,ax2norm)
 
     Epl =stochReconfRes.E0 ./ normalization
+
+
     x = eachindex(Epl)
     # errorbars!(ax,x,Epl,stochReconfRes.ΔE./ normalization,whiskerwidth=5,color = :black)
     Delta = stochReconfRes.ΔE./ normalization
-    band!(ax,x,Epl .-Delta, Epl .+ Delta,color = (:black,0.3))
-    lines!(ax,x,Epl,color = :black)
-    lines!(axVar,x,Delta,color = :red,linewidth = 1)
+    
+
 
     parsteps = stochReconfRes.params_steps
     parslice = getLastSlice(parsteps)
-
-    lines!(ax2,x,parslice,color = :black)
     lastdim = length(size(stochReconfRes.params_steps))
 
     diffs = diff(stochReconfRes.params_steps,dims = lastdim)
     norms = SW.norm.(eachslice(diffs,dims = lastdim))
+
+    if movavg > 1
+        Epl = movingaverage(Epl,movavg)
+        Delta = movingaverage(Delta,movavg)
+        norms = movingaverage(norms,movavg)
+        parslice = movingaverage(parslice,movavg)
+    end
+
+    hlines!(ax,E_exact,color = :black,linestyle = :dash,linewidth = 2)
+
+    band!(ax,x,Epl .-Delta, Epl .+ Delta,color = (:black,0.3))
+    lines!(ax,x,Epl,color = :black)
+    lines!(axVar,x,Delta,color = :red,linewidth = 1)
+    lines!(ax2,x,parslice,color = :black)
     lines!(ax2norm,x[2:end],norms,color = :red)
     fig
 end
