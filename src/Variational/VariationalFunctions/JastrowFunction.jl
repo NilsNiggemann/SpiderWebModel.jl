@@ -208,3 +208,28 @@ function getOx_k(ψG::JastrowFunction,W::SpiderWebWalker,k)
     end
     error("Invalid parameter type")
 end
+
+function generate_equivalent(type,k,T::TranslationalSymmetry,ψ::JastrowFunction,S::AbstractMatrix) 
+    
+    if type == 1
+        AllPlaqs = collect(plaquetteIterator(S))
+
+        site = AllPlaqs[k]
+        sites = generate_equivalent_sites(site,T,S)
+        
+        return plaquette_to_index.(sites,Ref(AllPlaqs))
+    elseif type == 2
+        site = index_to_site(k,S)
+        sites = generate_equivalent_sites(site,T,S)
+        return site_to_index.(sites,Ref(S))
+    elseif type == 3
+        siteI,siteJ = index_to_site_pair(k,S,ψ.v_ij)
+        sites = generate_equivalent_site_pairs(siteI,siteJ,T,S)
+        i_sites = getindex.(sites,1)
+        j_sites = getindex.(sites,2)
+        return site_pair_to_index.(i_sites,j_sites,Ref(S),Ref(ψ.v_ij))
+    else
+        error("Invalid type")
+    end
+
+end

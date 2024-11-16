@@ -1,6 +1,22 @@
 import SpiderWebModel as SW
 using Test
 
+@testset "utils" begin
+    ψG = SW.JastrowFunction(SW.stencilConfig(zeros(4,4),1),Float64)
+
+    params = SW.get_params(ψG)
+    @test length(params) == length(ψG.m_i) + length(ψG.v_ij) + length(ψG.α)
+
+    @testset "indexMapping" failfast = true begin
+        for i in eachindex(params)
+            type,k = SW._getParamsTypeAndIndex(params,i )
+            @test SW.remap_index(type,k,params) == i
+        end
+    end
+
+
+end
+##
 function TestWFRatio(ψG,S;tol=1e-10)
     Buff = SW.allocate_GWF_buffer(ψG,S)
     W = SW.spiderWebWalker(copy(S),collect(SW.plaquetteIterator(S)))

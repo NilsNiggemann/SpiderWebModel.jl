@@ -28,10 +28,13 @@ S .= SW.periodicStateDenseLoops(size(S,1))
 ψG = SW.JastrowFunction(S,Float64)
 # ψG = SW.PlaquetteRBM(S,1,Float64)
 ψGSymm = SW.getNonSymmetric(ψG)
+SW.reduceParams!(ψGSymm,SW.TranslationalSymmetry(4,4),S)
+
 SW.Random.seed!(1234)
 # ψGSymm = SW.symmetrize(S,ψG,(4,4))
 # ψG = SW.RBM(S,1)
 SW.rand!(SW.get_params(ψG)) .*= 1e-3
+# ψG.v_ij .= SW.Symmetric(ψG.v_ij)
 # ψG.α .= 0.1
 
 # ψGSymm = SW.symmetrize(S,ψG,(4,4))
@@ -39,24 +42,24 @@ SW.rand!(SW.get_params(ψG)) .*= 1e-3
 nThermal = 1000
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
-CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.0))
+CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.3))
 CTSR = SW.ContinuousTimeMethod(8,Hxx = CT.Hxx)
 
 ##
 cappedGrowth(x,start,stop,offset,growth) = start + 0.5(stop-start)* (1 +tanh(growth *(x -offset)))
 SRSteps = 100
 
-numSteps(i) = round(Int,cappedGrowth(i,10,30,SRSteps÷2,1))
-learningRate(i) = cappedGrowth(i,8e-3,3e-4,SRSteps÷2,0.1)
-lines(1:SRSteps,learningRate.(1:SRSteps))
-# lines!(1:SRSteps,numSteps.(1:SRSteps))
+numSteps(i) = round(Int,cappedGrowth(i,10,10,SRSteps - SRSteps÷2,10/SRSteps))
+learningRate(i) = cappedGrowth(i,8e-3,4e-4,SRSteps - SRSteps÷2,5/SRSteps)
+lines(1:SRSteps,5000*learningRate.(1:SRSteps))
+lines!(1:SRSteps,numSteps.(1:SRSteps))
 current_figure()
 ##
 # learningRate(i) = i > 450 ? 1e-3 : 1e-3
 # numSteps(i) = i > SRSteps ÷2 ? 30 : 20
 ##
 
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,20 ,ψGSymm,SRSteps,learningRate,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,numSteps ,ψGSymm,SRSteps,5e-4,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
 report_steps = 10,
 reset = false,
 # outfile = "tempSR/SR2.h5"
@@ -64,7 +67,7 @@ reset = false,
 
 ψGnew = deepcopy(ψG)
 SW.get_params(ψGnew) .= stochReconfRes.params
-plotVarEn(stochReconfRes)
+plotVarEn(stochReconfRes,movavg = 10)
 ##
 
 
@@ -79,6 +82,7 @@ SW.Random.seed!(1234)
 @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
 ##
 
+
 # plotEnergies(results,nBra,-20.35;Emin=-20.5,Emax=-19.8) # L=10
 plotEnergies(resultsNaive,CT,normalize=true,dense=true,τ = 20)
 # plotEnergies!(resultsOld,CT,normalize=true,dense=true,τ = 20,color = :blue)
@@ -88,38 +92,50 @@ plotEnergies!(results,CT;color=:red,normalize=true,dense=true,τ = 20) # L=15
 current_figure()
 # plotEnergies(results,nBra,-49.7;Emin=-50.5,Emax=-46)
 ## 
-SqsGFMC = SW.getSqsGFMC(resultsOld,1:30)
+@time resultsHighAcc = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,5NWalkers,2NSteps,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
+plotEnergies!(resultsHighAcc,CT;color=:darkblue,normalize=true,dense=true,τ = 20) # L=15
+current_figure()
+##
+plotVarEn(stochReconfRes,movavg = 10,E_exact = mean(last.(SW.getEnergies.(resultsNaive,1,50))))
+##
+SqsGFMCNaive = SW.getSqsGFMC(resultsNaive,1:50)
+SqsGFMC = SW.getSqsGFMC(results,1:50)
 ##
 with_theme(theme_SimpleTicks()) do 
-    Sqmean = dropmean(SqsGFMC,dims = 4)
-    Sqerr = dropstd(SqsGFMC,dims = 4)
-
-    inds = [
-        (4,5),
-        (5,5),
-        (6,5),
-        (5,4),
-        (5,6),
-        Tuple(argmax(Sqmean[:,:,end]))
-    ]
-    fig = Figure(fontsize = 22,size = (800,400))
+    fig = Figure(fontsize = 22,size = (500,400))
     ax = Axis(fig[1,1],xlabel = L"\tau",ylabel = L"\mathcal{S}^{zz}(\textbf{q})")
-    x = axes(SqsGFMC)[3] .* CT.τ
-    for (i,j) in inds
-        sqm = Sqmean[i,j,:]
-        sqe = Sqerr[i,j,:]
-        
-        l = lines!(x,sqm)
-        band!(x,sqm .- sqe,sqm .+ sqe ,color = (l.color[],0.2))
+    
+    linestyles = [:solid,:dash,:dot,:dashdot,:dashdotdot]
+    colors = [:black,:red,:green,:purple,:orange]
+    for (linestyle,SqsGFMC,color) in zip(linestyles,(SqsGFMC,SqsGFMCNaive),colors)
 
-        fig
+        Sqmean = dropmean(SqsGFMC,dims = 4)
+        Sqerr = dropstd(SqsGFMC,dims = 4)
+
+        inds = [
+            (4,5),
+            # (5,5),
+            # (6,5),
+            # (5,4),
+            # (5,6),
+            Tuple(argmax(Sqmean[:,:,end]))
+        ]
+
+        x = axes(SqsGFMC)[3] .* CT.τ
+        for (i,j) in inds
+            sqm = Sqmean[i,j,:]
+            sqe = Sqerr[i,j,:]
+            
+            l = lines!(x,sqm;linestyle,color)
+            band!(x,sqm .- sqe,sqm .+ sqe ,color = (l.color[],0.2))
+
+        end
     end
-
-    current_figure()
+    fig
 end
 ##
 with_theme(theme_PiTicks()) do 
-    Sq = dropmean(SqsGFMC,dims=4)[:,:,end] ./4
+    Sq = dropmean(SqsGFMC,dims=4)[:,:,10] ./4
     kx = ky = 2pi .* LinRange(0,1,size(Sq,1))
     fig = Figure(fontsize = 22,size = (800,400))
     axMC = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"k_y",title = L"GFMC$$",aspect = 1)
@@ -127,9 +143,12 @@ with_theme(theme_PiTicks()) do
 
     axFT = Axis(fig[1,3],xlabel = L"k_x",ylabel = L"k_y",title = L"U(1) theory$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
 
-    err = dropstd(SqsGFMC,dims=4)[:,:,end] ./4
+    err = dropstd(SqsGFMC,dims=4)[:,:,10] ./4
     hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
-    SqFT = [SqFieldTheory(x,y) for x in kx, y in ky]
+
+    fittingcoefs = optimizeCoeffs(Sq)
+
+    SqFT = [SqFieldTheory(x,y,fittingcoefs...) for x in kx, y in ky]
     hmFT = heatmap!(axFT,kx,ky,SqFT,colormap = :viridis)
     hmerr = heatmap!(axerr,kx,ky,err,colormap = :viridis)
 

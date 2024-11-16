@@ -1,6 +1,9 @@
 # module VariationalFunctions
 
+
 include("VariationalFunctions/GuidingFunctions.jl")
+include("Symmetries.jl")
+
 include("VariationalFunctions/LocalPlaquetteGuidingFunction.jl")
 include("VariationalFunctions/OrderGuidingFunction.jl")
 include("VariationalFunctions/PlaquetteCorrelationsGuidingFunctions.jl")
@@ -13,6 +16,7 @@ include("VariationalFunctions/JastrowFunction.jl")
 include("VariationalFunctions/NaiveFunction.jl")
 
 include("StochasticReconfiguration.jl")
+# include("SymmetryDetection.jl")
 
 # export AbstractGuidingFunction
 # export FullVariationalGuidingFunction, fullVariationalFunction
