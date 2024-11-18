@@ -176,6 +176,10 @@ initializer = getInitializer(parentState,μ,ψG;NWalkers=3*NWalkers,NSteps = 400
 
 ##
 outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/L=$(L)/periodic_RK_Full_$(SECTOR_NAME)/mu_$(μ)/"
+outfileTotal = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/eval/L=$(L)/mu=$(μ)/Spin1GFMC_Eval_periodic_$(SECTOR_NAME)_mu$(μ)_L$(L)_$(i_arg).h5"
+mkpath(dirname(outfileTotal))
+# rm(outfileTotal,force=true)
+@assert !isfile(outfileTotal) "file already exists!"
 
 Threads.@threads for run in 1:NRuns
     outfile = joinpath(outfileDIR,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run).h5")
@@ -196,10 +200,7 @@ resFiles = [joinpath(root,file) for (root,_,files) in walkdir(outfileDIR) for fi
 
 AllResults = vcat(SW.readResults.(resFiles,NSteps÷NBinsEval)...);
 ## 
-outfileTotal = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/eval/L=$(L)/mu=$(μ)/Spin1GFMC_Eval_periodic_$(SECTOR_NAME)_mu$(μ)_L$(L)_$(i_arg).h5"
-mkpath(dirname(outfileTotal))
-rm(outfileTotal,force=true)
-@assert !isfile(outfileTotal) "file already exists!"
+
 function getEns(results)
     en = [SW.getEnergies(res.TotalWeights,res.energies,1,500÷res.nBra) for res in results]
 end
