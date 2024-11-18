@@ -1,14 +1,22 @@
 # module VariationalFunctions
 
+
 include("VariationalFunctions/GuidingFunctions.jl")
+include("Symmetries.jl")
+
 include("VariationalFunctions/LocalPlaquetteGuidingFunction.jl")
 include("VariationalFunctions/OrderGuidingFunction.jl")
 include("VariationalFunctions/PlaquetteCorrelationsGuidingFunctions.jl")
 include("VariationalFunctions/PlaquetteNumberGuidingFunctions.jl")
 include("VariationalFunctions/RBM.jl")
+include("VariationalFunctions/RBMSpin1.jl")
+include("VariationalFunctions/PlaquetteRBM.jl")
 include("VariationalFunctions/RKFunction.jl")
+include("VariationalFunctions/JastrowFunction.jl")
+include("VariationalFunctions/NaiveFunction.jl")
 
 include("StochasticReconfiguration.jl")
+# include("SymmetryDetection.jl")
 
 # export AbstractGuidingFunction
 # export FullVariationalGuidingFunction, fullVariationalFunction
@@ -33,7 +41,7 @@ isperiodic(S::StencilSpinConfig) = isperiodic(parent(S))
 
 function getDistReduction(S,ψG::AbstractGuidingFunction) 
     AllDists = Dict{SVector{2,Int},Int}()
-    indicesMapping = collect(eachindex(ψG.params))
+    indicesMapping = collect(eachindex(get_params(ψG)))
     uniqueInds = collect(indicesMapping)
     return SymmetryReducedWaveFunction(ψG,indicesMapping,uniqueInds)
 end
@@ -73,8 +81,10 @@ end
 
 
 function add_reconstructedFullParams!(ψG,indicesMapping,trimmedparams)
+    params = get_params(ψG)
+
     for (i,k) in enumerate(indicesMapping)
-        ψG.params[i] += trimmedparams[k]
+        params[i] += trimmedparams[k]
     end
     return ψG
 end

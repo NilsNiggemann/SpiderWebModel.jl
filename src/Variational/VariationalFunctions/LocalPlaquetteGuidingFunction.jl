@@ -3,42 +3,70 @@ struct LocalPlaquetteGuidingFunction{A<:AbstractVector} <: AbstractGuidingFuncti
 end
 guidingfunc_name(F::LocalPlaquetteGuidingFunction) = "LocalPlaquetteGuidingFunction"
 
-function localPlaquetteGuidingFunction(State,α::Real=0.1)
+function localPlaquetteGuidingFunction(State,α::Real=0.1,type=Float32)
     plaqs = collect(plaquetteIterator(State))
     N = length(plaqs)
-    params = zeros(Float32,N)
+    params = zeros(type,N)
     ψ = LocalPlaquetteGuidingFunction(params)
 
     get_alpha_i(ψ) .= α
     return ψ
 end
-@inline updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::LocalPlaquetteGuidingFunction,Λ=0) = updateWeightList_plaqs!(Walker,AffectedPlaquetteList,ψG,Λ)
+function compute_GWF_buffer!(Buffer,ψG::LocalPlaquetteGuidingFunction,Walker::SpiderWebWalker) 
+    getNPlaq!(Walker)
+    return Buffer
+end
+
+# @inline updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::LocalPlaquetteGuidingFunction,Λ=0) = updateWeightList_plaqs!(Walker,AffectedPlaquetteList,ψG,Λ)
 
 function get_alpha_i(ψG::LocalPlaquetteGuidingFunction)
     return ψG.params
 end
 
-(ψG::LocalPlaquetteGuidingFunction)(N□::AbstractArray) = exp(guidingfunc_exponent(ψG,N□))
-
-function guidingfunc_exponent(ψG::LocalPlaquetteGuidingFunction,N□::AbstractArray) 
+function (ψG::LocalPlaquetteGuidingFunction)(N□::AbstractVector)
     α = get_alpha_i(ψG)
     exponent = α' * N□
-    return exponent
+    return exp(exponent)
+end
+(ψG::LocalPlaquetteGuidingFunction)(W::SpiderWebWalker) = ψG(W.n_x)
+function (ψG::LocalPlaquetteGuidingFunction)(x::StencilSpinConfig) 
+    α = get_alpha_i(ψG)
+    exponent = zero(eltype(α))
+    for (i,I) in enumerate(plaquetteIterator(x))
+        applPlus, applMinus = P_applicable(x, I)
+        n_i = applMinus + applPlus
+        exponent += α[i] * n_i
+    end
+    return exp(exponent)
 end
 
-function guidingfuncRatio_exponent(ψG::LocalPlaquetteGuidingFunction,Walker::SpiderWebWalker,move,affectedPlaquettes)
+function guidingfuncRatio(ψG::LocalPlaquetteGuidingFunction,Walker::SpiderWebWalker,move,AffectedPlaquetteList)
     α = get_alpha_i(ψG)
 
-    exponent = zero(eltype(α))
+
+    i,j,opNum = move
+
+    affectedPlaquettes = AffectedPlaquetteList[i,j]
+
+    Config = get_config(Walker)
+    applyPlaquette!(Config,i,j,opNum)
+    getNPlaqfilled!(Walker,affectedPlaquettes)
+    applyPlaquette!(Config,i,j,-opNum)
+
     n = Walker.n_x
     n´ = Walker.n_x´
-    for ind in eachindex(affectedPlaquettes)
+
+    exponent = zero(eltype(n))
+
+    @boundscheck checkbounds(n,eachindex(affectedPlaquettes))
+
+    @inbounds @simd for ind in eachindex(affectedPlaquettes)
         i = affectedPlaquettes[ind]
         Δn = n´[i] - n[i]
         exponent += α[i]*Δn
     end
 
-    return exponent
+    return exp(exponent)
 end
 getOx_k_plaqs(::LocalPlaquetteGuidingFunction,n::AbstractArray,k) = n[k]
 

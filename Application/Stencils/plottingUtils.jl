@@ -1,5 +1,8 @@
 using StaticArrays
 using Optim
+dropmean(A; dims=:) = dropdims(mean(A; dims=dims); dims=dims)
+dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
+
 
 _getkwargs(::Any) = (;xlabel = L"projection order $$")
 _getkwargs(m::SW.ContinuousTimeMethod) = (;xlabel = L"\tau")
@@ -197,20 +200,46 @@ function getBranchingHistory!(BranchingMatrix::AbstractMatrix,reconfigurationTab
     return BranchingMatrix
 end
 
-function plotVarEn(stochReconfRes;normalization=1)
+function plotVarEn(stochReconfRes;normalization=1,movavg = 1,E_exact = NaN)
     fig = Figure(theme = theme_SimpleTicks())
 
     ax = Axis(fig[1, 1], xlabel = "Iteration", ylabel = "Energy",xlabelvisible=false,xticklabelsvisible=false)
+    axVar = Axis(fig[1,1], ylabel = "σE", yaxisposition=:right,yticklabelcolor=:red,ylabelcolor = :red,ygridstyle = :dash,xgridvisible = false,xticksvisible = false,xticklabelsvisible = false)
+
     ax2 = Axis(fig[2,1], xlabel = "Iteration", ylabel = "α")
+    ax2norm = Axis(fig[2,1], ylabel = "||Δα||", yaxisposition=:right,yticklabelcolor=:red,ylabelcolor = :red,ygridstyle = :dash,xgridvisible = false,xticksvisible = false,xticklabelsvisible = false)
+    linkxaxes!(ax,axVar, ax2,ax2norm)
 
     Epl =stochReconfRes.E0 ./ normalization
+
+
     x = eachindex(Epl)
-    errorbars!(ax,x,Epl,stochReconfRes.ΔE./ normalization,whiskerwidth=5)
-    lines!(ax,x,Epl)
+    # errorbars!(ax,x,Epl,stochReconfRes.ΔE./ normalization,whiskerwidth=5,color = :black)
+    Delta = stochReconfRes.ΔE./ normalization
+    
+
+
     parsteps = stochReconfRes.params_steps
     parslice = getLastSlice(parsteps)
+    lastdim = length(size(stochReconfRes.params_steps))
 
-    lines!(ax2,x,parslice)
+    diffs = diff(stochReconfRes.params_steps,dims = lastdim)
+    norms = SW.norm.(eachslice(diffs,dims = lastdim))
+
+    if movavg > 1
+        Epl = movingaverage(Epl,movavg)
+        Delta = movingaverage(Delta,movavg)
+        norms = movingaverage(norms,movavg)
+        parslice = movingaverage(parslice,movavg)
+    end
+
+    hlines!(ax,E_exact,color = :black,linestyle = :dash,linewidth = 2)
+
+    band!(ax,x,Epl .-Delta, Epl .+ Delta,color = (:black,0.3))
+    lines!(ax,x,Epl,color = :black)
+    lines!(axVar,x,Delta,color = :red,linewidth = 1)
+    lines!(ax2,x,parslice,color = :black)
+    lines!(ax2norm,x[2:end],norms,color = :red)
     fig
 end
 function trueMomenta(kmin,kmax,L)
