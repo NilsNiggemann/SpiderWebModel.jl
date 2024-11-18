@@ -61,7 +61,7 @@ NStepsstart = 1000
 NStepsEnd = 1500
 NBins = 300
 ## -- debug params --
-# L = 32
+# L = 12
 # nBra = 1
 # NSteps = 1000
 # equilibration_steps = 10
@@ -76,7 +76,7 @@ NBins = 300
 # NStepsstart = 100
 # NBins = 10
 ##
-NWalkers_stochRec = NWalkers ÷ 4
+NWalkers_stochRec = 128 * 5
 equilibration_steps_stochRec = 100
 ##
 function get_S_condensate!(S)
@@ -111,11 +111,10 @@ parentState = get_S_condensate!(
 
 ##
 
-initializer = getInitializer(parentState,μ;5*NWalkers,NSteps = 100,OptIndep = 20)
 # initializer = getInitializer(parentState,μ;NWalkers,NSteps = 1,OptIndep = 2)
 ##
 # rm(outfileSR,force=true)
-SRdir = ENV["MYSCRATCH"]*"/Spiderweb/DataStochRec/L=($L)/periodic_RK_Full_$(SECTOR_NAME)/mu=$(μ)/"
+SRdir = ENV["MYSCRATCH"]*"/Spiderweb/DataStochRec/L=($L)/$(SW.guidingfunc_name(ψG))/periodic_RK_Full_$(SECTOR_NAME)/mu=$(μ)/"
 mkpath(SRdir)
 SRoutfiles = readdir(SRdir,join=true)
 
@@ -135,7 +134,7 @@ CT = SW.ContinuousTimeMethod(τ,1,-length(parentState)*0.266*(1-μ),SW.Hxx_RK(μ
 # optimize starting
 if !isfile(outfileSR) && μ != 1.0
     @info "starting run" L τ nBra NSteps NWalkers_stochRec outfileSR
-    stochReconfRes = SW.stochastic_reconfiguration(parentState,CT,i->min(NStepsstart + 20*i,NStepsEnd),ψGSymm,NBins,i -> 1*max(0.3,0.6 -0.002i),SW.IterativeSRSolver();Nwalkers = NWalkers_stochRec,reconfigure = true,rel_tolerance=0.,equilibration_steps=equilibration_steps_stochRec,pre_equilibration_steps=100_000,scatter_fraction,outfile=outfileSR,initializer,reset = false)
+    stochReconfRes = SW.stochastic_reconfiguration(parentState,CT,i->min(NStepsstart + 20*i,NStepsEnd),ψGSymm,NBins,i -> 1*max(0.3,0.6 -0.002i),SW.IterativeSRSolver();Nwalkers = NWalkers_stochRec,reconfigure = false,rel_tolerance=0.,equilibration_steps=equilibration_steps_stochRec,pre_equilibration_steps=100_000,scatter_fraction,outfile=outfileSR,initializer,reset = false)
 end
 
 println("stochastic reconf done")
@@ -143,6 +142,7 @@ flush(stdout)
 
 #___________Spin-1_______________________
 ##
+initializer = getInitializer(parentState,μ;5*NWalkers,NSteps = 100,OptIndep = 20)
 
 if μ != 1.0
     optim_params_steps = h5read(outfileSR,"params_steps")

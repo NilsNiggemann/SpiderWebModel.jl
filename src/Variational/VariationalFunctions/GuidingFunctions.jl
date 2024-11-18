@@ -6,8 +6,6 @@ guidingfunc_name(F::Function) = string(typeof(F))
 guidingfunc_name(F::AbstractGuidingFunction) = string(typeof(F))
 
 get_params(P::AbstractGuidingFunction) = P.params
-variational_parameters(P::AbstractGuidingFunction) = Dict([:params=>P.params])
-variational_parameters(P::Function) = Dict([x => getproperty(P,x) for x in propertynames(P)])
 
 """Allocates a buffer for the guiding wave function to be used for efficient computation. Can be anything depending on the model"""
 allocate_GWF_buffer(ψG::AbstractGuidingFunction,S::Any) = precomputeAffectedPlaquettes(S)
