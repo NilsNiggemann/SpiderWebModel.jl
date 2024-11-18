@@ -345,3 +345,126 @@ end
 
 # (S::SzOperator)(conf::StencilSpinConfig) = conf[S.I] /2
 # (S::SzOperator)(conf::AbstractMatrix{<:AbstractFloat}) = conf[S.I]
+
+
+
+function getImagTimeCorr(Gnp,reconfigurationTable,ObsFunc::T,mtau=size(Gnp,2)÷4, m=size(Gnp,2)÷2) where {T}
+    N = lastindex(reconfigurationTable,2)
+    Obs = [float(zero(ObsFunc(1,2m))) for i in 1:mtau]
+    O0 = float(zero(ObsFunc(1,2m)))
+    # num = zero(Obs)
+    denom = 0.
+
+    Nw = size(reconfigurationTable,1)
+    p = size(Gnp,2)
+
+    BranchingMatrix = zeros(Int,Nw,m+1)
+
+    WalkerMultiplicities = zeros(Int,Nw,m+1)
+    for n in m+1:N
+        Gn = Gnp[n,p]
+        denom += Gn*Nw
+        
+        getBranchingMatrix!(BranchingMatrix,WalkerMultiplicities,reconfigurationTable,n,m)
+        for α in 1:Nw
+            # O0 = ObsFunc(BranchingMatrix[α,m],n-m)
+            O0 = _set_to!(O0,ObsFunc(BranchingMatrix[α,m],n-m))
+            for ntau in 0:mtau-1
+                mult = WalkerMultiplicities[α,m-ntau]
+                mult == 0 && continue
+                Otau = ObsFunc(BranchingMatrix[α,m-ntau],n-m+ntau)
+                Obs[ntau+1] = _add_numerator!(Obs[ntau+1],Gn*mult,O0,Otau)
+                # Obs[ntau+1] += Gn*mult*O0*Otau
+            end
+        end
+    end
+    
+    for i in eachindex(Obs)
+        Obs[i] /= denom
+    end
+    return (Obs)
+end
+function getImagTimeCorr(result::GFMCObservables,ObsFunc::T,m,mtau = m÷2) where T
+    SWFObsFunc = constructSWF_operator(result.SaveConfigs,ObsFunc)
+    Gnp = precomputeNormalizedAccWeight(result.TotalWeights,1,m)
+    getImagTimeCorr(Gnp,result.reconfigurationTable,SWFObsFunc,mtau,m)
+end
+function getImagTimeCorr(results::AbstractVector{<:GFMCObservables},ObsFunc::T,m,mtau = m÷2) where T
+    stack(getImagTimeCorr.(results,ObsFunc,m,mtau))
+end
+
+_add_numerator!(Obsn::AbstractArray,Gnmult,O0::AbstractArray,Otau::AbstractArray) = (@. Obsn += Gnmult*O0*Otau)
+_add_numerator!(Obsn::Number,Gnmult,O0::Number,Otau::Number) = (Obsn += Gnmult*O0*Otau)
+_set_to!(a,b) = (a=b)
+_set_to!(a::AbstractArray,b::AbstractArray) = (a.=b)
+
+function getBranchingMatrix!(BranchingMatrix::AbstractMatrix,PopulationMatrix,reconfigurationTable::AbstractMatrix,n,projectionLength)
+    # BranchingMatrix[:,begin] .= @view reconfigurationTable[:,begin]
+    PopulationMatrix .= 0 
+    for α in axes(reconfigurationTable,1)
+        α´ = α
+        for i_m in 0:projectionLength
+            α´ = reconfigurationTable[α´,n-i_m]
+            # println((; α,α´,i_m))
+            BranchingMatrix[α,i_m+1] = α´
+            PopulationMatrix[α´,i_m+1] += 1
+        end
+    end
+    return (;BranchingMatrix,PopulationMatrix)
+end
+
+function getBranchingMatrix(reconfigurationTable,n,projectionLength) 
+    BranchingMatrix = zeros(Int,size(reconfigurationTable,1),projectionLength+1)
+    PopulationMatrix = zeros(Int,size(reconfigurationTable,1),projectionLength+1)
+    getBranchingMatrix!(BranchingMatrix,PopulationMatrix,reconfigurationTable,n,projectionLength)
+end
+
+function constructSWF_operator(AllConfigs,OpFunc::T) where T
+    function Obsfunc(α,n)
+        conf = @view AllConfigs[:,:,α,n]
+        return OpFunc(conf)
+    end
+end
+
+# function getImagTimeCorr(results::GFMCObservables,ObsFunc::T,mtau=size(Gnp,2)÷4, m=size(Gnp,2)÷2) where {T}
+#     Gnps = precomputeNormalizedAccWeight(results,1,m)
+
+#     stack(getImagTimeCorr)
+# end
+
+function autocorrelation(SaveConfigs,O,lags,args...;kwargs...)
+
+    dims = size(SaveConfigs)
+    # configs = reshape(SaveConfigs,prod(dims[1:3]),dims[4])
+    # configs = reshape(SaveConfigs[:,:,begin,:],dims[1]*dims[2],dims[4])
+    # Otype = zero(O(SaveConfigs[:,:,begin,begin]))
+
+    # E1 = [zero(Otype) for _ in 1: length(lags)]
+    # E2 = [zero(Otype) for _ in 1: length(lags)]
+    E1 = zeros(length(lags))
+    E2 = zeros(length(lags))
+        # var = 0.
+    nsum = axes(SaveConfigs,4)[begin+maximum(lags):end]
+
+    N = length(nsum)
+    for i in nsum
+        for (i_lag,lag) in enumerate(lags)
+            O1 = 0.
+            O2 = 0.
+            Nw = length(axes(SaveConfigs,3))
+            for j in axes(SaveConfigs,3)
+                conf1 = @view SaveConfigs[:,:,j,i-lag]
+                conf2 = @view SaveConfigs[:,:,j,i]
+                O1 += O(conf1)
+                O2 += O(conf2)
+            end
+
+            E1[i_lag] += O1*O2 / Nw
+            E2[i_lag] += O1 /Nw
+            # var += O1^2
+
+        end
+    end
+    return (E1 .- E2.^2) ./ N
+    # return StatsBase.autocor(configs,args...;kwargs...)
+end
