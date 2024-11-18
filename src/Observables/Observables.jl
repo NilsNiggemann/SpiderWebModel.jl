@@ -46,6 +46,157 @@ function (FFTSq::SqFFT)(out,Conf)
     copyto!(FFTSq.Si,Conf)
     FFTSq(out,FFTSq.Si)
 end
+add_elementwise!(x::AbstractArray,y) = (x .+= y)
+add_elementwise!(x::Number,y::Number) = x + y
+
+mult_elementwise!(x::Number,y::Number) = x * y
+function mult_elementwise!(x::AbstractArray,y::Number)
+    
+    for i in eachindex(x)
+        x[i] *= y
+    end
+    return x
+end
+
+divide_elementwise!(x::Number,y::Number) = x / y
+divide_elementwise!(x::AbstractArray,y) = (x ./= y)
+
+function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc,m::Integer=size(Gnp,2)÷2)
+    N = lastindex(AllConfigs,4)
+    exampleConf = @view AllConfigs[:,:,begin,begin]
+    Obs = ObsFunc(exampleConf)
+    num = float(zero(Obs))
+    denom = 0.
+    GnO = float(zero(Obs))
+    # fill!(Obs,zero(eltype(Obs)))
+
+    Nw = size(reconfigurationTable,1)
+    p = size(Gnp,2)
+    # surviving_walker_mapping_list = zeros(Int,Nw)
+    WalkerMultiplicities = zeros(Int,Nw)
+
+    for n in m+1:N
+        Gn = Gnp[n,p]
+        # denom += Gn*Nw
+        denom += Gn*Nw
+        # reconfigList = @view reconfigurationTable[:,n-m]
+        # surviving_walker_mapping!(surviving_walker_mapping_list,reconfigList)
+        WalkerMultiplicities .= 0
+        for α in 1:Nw
+            α´ = α
+            for i_m in 1:m
+                α´ = reconfigurationTable[α´,n-i_m]
+            end
+            WalkerMultiplicities[α´] += 1
+        end
+
+        for α in 1:Nw
+            mult = WalkerMultiplicities[α]
+            mult == 0 && continue
+            conf = @view AllConfigs[:,:,α,n-m]
+            O = ObsFunc(conf)
+            # surviving_index = surviving_walker_mapping_list[α´]
+            # O = ObsFunc(AllConfigs[n-m][surviving_index])
+            GnO = _set_to!(GnO,O)
+            GnO = mult_elementwise!(GnO,Gn*mult)
+            # @. num += Gn*O
+            num = add_elementwise!(num,GnO)
+        end
+    end
+    return divide_elementwise!(num,denom)
+end
+function getObs(result,ObsFunc,p::Integer)
+    Gnp = precomputeNormalizedAccWeight(result.TotalWeights,1,p)
+    return getObs(Gnp,result.SaveConfigs,result.reconfigurationTable,ObsFunc,p÷2)
+end
+
+const ABSTRACTCOLLECTION = Union{AbstractRange,AbstractVector,Tuple}
+
+function getObs(Gnp,AllConfigs,reconfigurationTable,ObsFunc::AbstractObservable,m_values::ABSTRACTCOLLECTION)
+    N = lastindex(AllConfigs,4)
+
+    pMax = maximum(m_values)
+
+    Obs = obs(ObsFunc)
+    num_m = [zeros(size(Obs)) for _ in m_values]
+    denom = 0.
+
+    Nw = size(reconfigurationTable,1)
+    p = size(Gnp,2)
+    WalkerMultiplicities = zeros(Int,Nw)
+    ObsBuffer = [similar(Obs) for α in 1:Nw, n in 1:(pMax)]
+    
+    wrap_idx(n) = (n-1) % (pMax) + 1
+    obsBuffer(α,n) = ObsBuffer[α,wrap_idx(n)]
+
+    _fill_obs_buffer!(ObsBuffer,1:pMax,ObsFunc,AllConfigs,pMax)
+
+    for n in pMax+1:N
+        Gn = Gnp[n,p]
+        denom += Gn*Nw
+        _fill_obs_buffer!(ObsBuffer,n-1,ObsFunc,AllConfigs,pMax)
+        for (i_m,m) in enumerate(m_values)
+            WalkerMultiplicities .= 0
+            for α in 1:Nw
+                α´ = α
+                for i_m in 1:m
+                    α´ = reconfigurationTable[α´,n-i_m]
+                end
+                WalkerMultiplicities[α´] += 1
+            end
+
+
+            for α in 1:Nw
+                mult = WalkerMultiplicities[α]
+                mult == 0 && continue
+
+                O = obsBuffer(α,n-m)
+                @. num_m[i_m] += O*Gn*mult
+            end
+        end
+    end
+    for i in eachindex(num_m)
+        divide_elementwise!(num_m[i],denom)
+    end
+    return num_m
+end
+
+function _fill_obs_buffer!(ObsBuffer,nRange,ObsFunc!,AllConfigs,pMax)
+    wrap_idx(n) = (n-1) % (pMax) + 1
+    obsBuffer(α,n) = ObsBuffer[α,wrap_idx(n)]
+
+    for n in nRange, α in axes(AllConfigs,3)
+        conf = @view AllConfigs[:,:,α,n]
+        ObsFunc!(obsBuffer(α,n),conf)
+    end
+    return
+end
+
+function surviving_walker_mapping!(mappingarr,reconfigList)
+    fill!(mappingarr,0)
+    surviving_walkers = 0
+    for (α,α´) in enumerate(reconfigList)
+        if α == α´
+            surviving_walkers += 1
+            mappingarr[α´] = surviving_walkers
+        end
+    end
+    # println(reconfigList)
+    # println(mappingarr)
+    for α in eachindex(reconfigList,mappingarr)
+        if mappingarr[α] == 0
+            α´ = reconfigList[α]
+            # println((α,α´,mappingarr[α´]))
+            mappingarr[α] = mappingarr[α´]
+        end
+    end
+    return mappingarr
+end
+
+function splitIntoBins(array,binsize)
+    Iterators.partition(array,binsize)
+end
+
 
 function getStructureFacWeights(AllStates::AbstractVector{<:SpinConfig}, weights, tol = 0)
     # weights = abs2.(Psi)
@@ -258,8 +409,6 @@ copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
     return real(newRes ./NSites)
     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
-
-const ABSTRACTCOLLECTION = Union{AbstractRange,AbstractVector,Tuple}
 
 @views function getSqGFMC(res,m_values::ABSTRACTCOLLECTION)
     pMax = maximum(m_values)
