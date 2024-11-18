@@ -655,7 +655,7 @@ function propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method::D
 
     w_avg_estimate⁻¹ = 1. / w_avg_estimate
 
-    batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads(), split = :batch)
+    batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
 
     Threads.@threads for (i_chunk,αinds) in enumerate(batches)
         GWFBuffer = Guiding_function_buffer[i_chunk]
@@ -677,7 +677,7 @@ end
 function propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method::ContinuousTimeMethod)
     (;Hxx,nBranch,τ,w_avg_estimate) = method
     
-    batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads(), split = :batch)
+    batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
 
     Threads.@threads for (i_chunk,αinds) in enumerate(batches)
         GWFBuffer = Guiding_function_buffer[i_chunk]
