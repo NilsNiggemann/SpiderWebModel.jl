@@ -11,7 +11,6 @@ get_params(ψG::PlaquetteNumberGuidingFunction) = ψG.α
 (ψG::PlaquetteNumberGuidingFunction)(W::SpiderWebWalker) = exp(ψG.α*sum(W.n_x))
 
 guidingfunc_name(F::PlaquetteNumberGuidingFunction) = "PlaquetteNumberGuidingFunction"
-variational_parameters(P::PlaquetteNumberGuidingFunction) = Dict([:alpha=>P.α])
 
 function guidingfuncRatio(ψG::PlaquetteNumberGuidingFunction,Walker::SpiderWebWalker,move,AffectedPlaquetteList::T) where T
 

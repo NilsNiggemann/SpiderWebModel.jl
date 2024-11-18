@@ -533,11 +533,9 @@ end
 saveParameters(::Nothing,args...) = nothing
 
 function saveVariationalParameter(file::HDF5.File,ψG)
-    pars = variational_parameters(ψG)
+    pars = get_params(ψG)
     funcName = guidingfunc_name(ψG)
-    for (key,val) in pars
-        file[string(funcName,"/",key)] = val
-    end
+    file[string(funcName,"/params")] = pars
 end
 
 abstract type AbstractGFMCInitializer end
@@ -790,3 +788,4 @@ function random_init_walkers!(Walkers::AbstractVector{<:SpiderWebWalker},equilib
         end
     end
 end
+ψG
