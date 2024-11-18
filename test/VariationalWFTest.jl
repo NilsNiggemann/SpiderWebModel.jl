@@ -13,9 +13,8 @@ using Test
             @test SW.remap_index(type,k,params) == i
         end
     end
-
-
 end
+
 ##
 function TestWFRatio(ψG,S;tol=1e-10)
     Buff = SW.allocate_GWF_buffer(ψG,S)
@@ -72,5 +71,53 @@ end
     SW.get_v_ij(ψJastrow) .= SW.Symmetric(SW.get_v_ij(ψJastrow))
     TestWFRatio(ψJastrow,S)
 
+
+end
+##
+@testset "Symmetries" begin
+    S = SW.stencilConfig(zeros(12,12),1;
+    boundaryCondition = :periodic
+    )
+    ψG = SW.JastrowFunction(S)
+
+    params = SW.get_params(ψG)
+    Symm = SW.TranslationalSymmetry(SA[2, 0], SA[0, 2])
+    ψGSymm = SW.symmetrize(ψG,Symm,S)
+    newparas = 1:length(ψGSymm.uniqueInds)
+    
+    SW.add_reconstructedFullParams!(ψG,ψGSymm.indicesMapping,newparas)
+
+    fig,ax,hm = SW.heatmap(reshape(ψG.v_ij[1 + size(S,1)*0,:],size(S)))
+    # fig,ax,hm = SW.heatmap(reshape(ψG.m_i,size(S)))
+    Colorbar(fig[1,2],hm)
+    fig
+    @test ψG.m_i[10] - ψG.m_i[12] ≈ 0
+    @test ψG.m_i[15] - ψG.m_i[17] ≈ 0
+
+    vij_1 = SW.PeriodicMatrix(reshape(ψG.v_ij[1,:],size(S)))
+    vij_2 = SW.PeriodicMatrix(reshape(ψG.v_ij[3,:],size(S)))[3:end+2,1:end]
+    heatmap(vij_2)
+    @test vij_1 == vij_2
+
+    vij_2 = SW.PeriodicMatrix(reshape(ψG.v_ij[1+2*size(S,1),:],size(S)))[1:end,3:end+2]
+    @test vij_1 == vij_2
+
+
+    
+    Symm = SW.TranslationalSymmetry(SA[2, 2], SA[-2, 2])
+
+    ψGSymm = SW.symmetrize(ψG,Symm,S)
+    newparas = 1:length(ψGSymm.uniqueInds)
+    
+    SW.add_reconstructedFullParams!(ψG,ψGSymm.indicesMapping,newparas)
+
+    mxy = reshape(ψG.m_i,size(S))
+    vIJ = reshape(ψG.v_ij,(size(S)...,size(S)...))
+
+    @test mxy[3,3] - mxy[3-2,3+2] ≈ 0
+    @test mxy[3,3] - mxy[3+2,3+2] ≈ 0
+
+    @test vIJ[3,3,3,3] - vIJ[3-2,3+2,3-2,3+2] ≈ 0
+    @test vIJ[3,3,3,3] - vIJ[3+2,3+2,3+2,3+2] ≈ 0
 
 end

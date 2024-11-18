@@ -13,39 +13,90 @@ end
 @inline guidingfuncRatio(F::SymmetryReducedWaveFunction,Walker,move,Buffer) = guidingfuncRatio(F.psi,Walker,move,Buffer)
 
 @inline getOx_k(ψG::SymmetryReducedWaveFunction,W,k) = getOx_k(ψG.psi,W,k)
+function Random.rand!(ψG::SymmetryReducedWaveFunction,maxAmplitude=1e-4)
 
+    params = get_params(ψG)
+    Random.rand!(params) .-= 0.5
+    params .*= maxAmplitude
+    enforceSymmetries!(ψG)
+    return ψG
+end
+
+function enforceSymmetries!(ψG::SymmetryReducedWaveFunction)
+    params = get_params(ψG)
+    for i in eachindex(params)
+        params[i] = params[ψG.uniqueInds[ψG.indicesMapping[i]]]
+    end
+    return ψG
+end
 
 abstract type AbstractSymop end
+abstract type AbstractSymmetryGroup end
+
 struct TranslationalSymmetry{T} <: AbstractSymop
     a1::T
     a2::T
 end
 
-function reduceParams!(ψSymm::SymmetryReducedWaveFunction,Symm::AbstractSymop,S::AbstractMatrix)
-    indicesMapping = ψSymm.indicesMapping
-    uniqueInds = ψSymm.uniqueInds
-    params = get_params(ψSymm.psi)
+struct SymmetryGroup{T<:Tuple} <: AbstractSymmetryGroup
+    symmetries::T
+end
+SymmetryGroup(args...) = SymmetryGroup(args)
 
-    for par in indicesMapping
-        indicesMapping[par] == par || continue
+symmetrize(ψ::AbstractGuidingFunction,Symm::AbstractSymop,SpinConfig::AbstractMatrix) = symmetrize(ψ,SymmetryGroup(Symm),SpinConfig)
 
-        type,k = _getParamsTypeAndIndex(params,par)
-        equivalent_params = generate_equivalent(type,k,Symm,ψSymm.psi,S)
-        equivalent_params .= remap_index.(type,equivalent_params,Ref(params))
-        # indicesMapping[equivalent_params] .= par
-        indicesMapping[equivalent_params] .= minimum(equivalent_params)
-    end
+function symmetrize(ψ::AbstractGuidingFunction,Symms::AbstractSymmetryGroup,SpinConfig::AbstractMatrix)
+    ψSymm = getNonSymmetric(ψ)
+    (;indicesMapping,uniqueInds) = ψSymm
+
+    reduce_indices_Mapping!(ψSymm,Symms,SpinConfig)
+    
+    # i_prev = copy(indicesMapping)
+    # for i in 1:2
+    #     indicesMapping = indicesMapping[indicesMapping]
+    # end
+
+    reduce_indices_Mapping!(ψSymm,Symms,SpinConfig)
     empty!(uniqueInds)
     append!(uniqueInds,findFirstUniqueIndices(indicesMapping))
 
+    # oldIndicesMapping = copy(indicesMapping)
     for i in eachindex(indicesMapping)
-        ind = findfirst(==(indicesMapping[i]),uniqueInds)
-        indicesMapping[i] = ind
+        corresp_index = findfirst(==(indicesMapping[i]),uniqueInds)
+
+        indicesMapping[i] = corresp_index
     end
+    # @assert oldIndicesMapping ==  uniqueInds[indicesMapping]
     return ψSymm
 end
 
+symmetrize(ψ::AbstractGuidingFunction,Symm::AbstractSymop,S::AbstractMatrix) = symmetrize(ψ,(Symm,),S) 
+
+function reduce_indices_Mapping!(ψSymm::SymmetryReducedWaveFunction,Symms::AbstractSymmetryGroup,SpinConfig::AbstractMatrix)
+    indicesMapping = ψSymm.indicesMapping
+    params = get_params(ψSymm.psi)
+
+    for (i,par) in enumerate(indicesMapping)
+        indicesMapping[par] == par || continue
+
+        type,k = _getParamsTypeAndIndex(params,par)
+        equivalent_params = generate_equivalent(type,k,Symms,ψSymm.psi,SpinConfig)
+        equivalent_params .= remap_index.(type,equivalent_params,Ref(params))
+        indicesMapping[i] = minimum(equivalent_params)
+        # indicesMapping[equivalent_params] .= minimum(equivalent_params)
+
+    end
+    # indicesMapping = indicesMapping[indicesMapping]
+
+    return indicesMapping
+end
+
 generate_equivalent(type,k,Symm::T1,ψSymm::T2,S) where {T1 <:AbstractSymop, T2 <: AbstractGuidingFunction} = error("Symmetry $T1 not implemented for wavefunction $T2")
+
+function generate_equivalent(type,k,SymmGroup::T1,ψSymm::T2,S) where {T1 <:AbstractSymmetryGroup, T2 <: AbstractGuidingFunction}
+    
+    append!([generate_equivalent(type,k,Symm,ψSymm,S) for Symm in SymmGroup.symmetries]...)
+end
 
 function generate_equivalent_sites(site::siteType,T::TranslationalSymmetry,S::AbstractMatrix) where {siteType}
     (;a1,a2) = T
@@ -80,7 +131,6 @@ function generate_equivalent_site_pairs(I::siteType,J::siteType,T::Translational
             I´ = _translateAndWrap(I,translation,Lx,Ly)
             J´ = _translateAndWrap(J,translation,Lx,Ly)
             push!(newPairs,(I´,J´))
-            push!(newPairs,(J´,I´))
         end
     end
     return collect(newPairs)

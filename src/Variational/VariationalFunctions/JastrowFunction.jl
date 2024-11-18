@@ -4,13 +4,13 @@ struct JastrowFunction{T<:Number} <: AbstractGuidingFunction
     m_i::Vector{T}
     v_ij::Matrix{T}
 end
-function JastrowFunction(N::Int,NPlaq,Type = Float32)
+function JastrowFunction(N::Int,NPlaq,Type = Float64)
     α = zeros(Type,NPlaq)
     m_i = zeros(Type,N)
     v_ij = zeros(Type,N,N)
     return JastrowFunction(α,m_i,v_ij)
 end
-JastrowFunction(S::StencilSpinConfig,Type = Float32) = JastrowFunction(length(S),length(collect(plaquetteIterator(S))),Type)
+JastrowFunction(S::StencilSpinConfig,Type = Float64) = JastrowFunction(length(S),length(collect(plaquetteIterator(S))),Type)
 
 get_alpha_i(ψG::JastrowFunction) = ψG.α
 get_m_i(ψG::JastrowFunction) = ψG.m_i
@@ -57,6 +57,7 @@ end
 function allocate_GWF_buffer(ψG::JastrowFunction{T},S::AbstractMatrix) where T
     x_i = zeros(T,length(S))
     h_i = zeros(T,length(S))
+    
     prefac_moves = _precompute_prefac_moves(ψG,S)
     AffectedPlaquetteList = precomputeAffectedPlaquettes(S)
     return Jastrow_GWF_Buffer(x_i,h_i,prefac_moves,AffectedPlaquetteList)
@@ -232,4 +233,15 @@ function generate_equivalent(type,k,T::TranslationalSymmetry,ψ::JastrowFunction
         error("Invalid type")
     end
 
+end
+
+struct ExchangeSymmetry <: AbstractSymop end
+
+function generate_equivalent(type,k,T::ExchangeSymmetry,ψ::JastrowFunction,S::AbstractMatrix) 
+    if type == 3
+        i,j = index_to_site_pair(k,S,ψ.v_ij)
+        return [k,site_pair_to_index(j,i,S,ψ.v_ij)]
+    else
+        return [k]
+    end
 end
