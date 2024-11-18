@@ -369,7 +369,7 @@ function saveParameters(filename::String,Λ,equilibration_steps,nBranch,ψG,w_av
         for (k,v) in kwargs
             file[String(k)] = v
         end
-        saveVariationalParameter(file,ψG)
+        saveVariationalParameters(file,ψG)
     end
 end
 function saveParameters(filename::String,equilibration_steps,method::DiscreteTimeMethod,ψG)
@@ -383,10 +383,18 @@ end
 
 saveParameters(::Nothing,args...) = nothing
 
-function saveVariationalParameter(file::HDF5.File,ψG)
+function saveVariationalParameters(file::HDF5.File,ψG)
     pars = get_params(ψG)
     funcName = guidingfunc_name(ψG)
-    file[string(funcName,"/params")] = pars
+    _save_h5_array(file,string(funcName,"/params"),pars)
+end
+function _save_h5_array(file,datasetname,arr::RecursiveArrayTools.ArrayPartition)
+    for i in eachindex(arr.x)
+        file[datasetname*"/"*string(i)] = arr.x[i]
+    end
+end
+function _save_h5_array(file,datasetname,arr::AbstractArray)
+    file[datasetname] = arr
 end
 
 abstract type AbstractGFMCInitializer end
