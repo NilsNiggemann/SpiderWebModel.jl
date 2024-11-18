@@ -7,9 +7,9 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=2-10:00:00
+#SBATCH --time=1-10:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
-#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK/%L24a.out
+#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK/L24%a.out
 #SBATCH --partition=normal
 #SBATCH --ntasks=1
 #SBATCH --mem=220GB
@@ -92,7 +92,7 @@ end
 function getInitializer(S,mu;NWalkers=128,NSteps = 100,tau = 1. + 2mu,OptIndep = 10)
     μ = mu
     ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
-    CTFindOpt = SW.ContinuousTimeMethod(tau,1,(1-μ)* 0.266*length(S),SW.Hxx_RK(μ))
+    CTFindOpt = SW.ContinuousTimeMethod(tau,0.4,(1-μ)* 0.266*length(S),SW.Hxx_RK(μ))
             
     @time OptimStart = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CTFindOpt,NWalkers,NSteps,ψG;equilibration_steps=1,pre_equilibration_steps=60_000,scatter_fraction=0.5) for _ in 1:OptIndep])
     initializer = SW.WeightedConfigsInitializers(OptimStart)
@@ -111,7 +111,7 @@ parentState = get_S_condensate!(
 
 ##
 
-initializer = getInitializer(parentState,μ;NWalkers,NSteps = 100,OptIndep = 20)
+initializer = getInitializer(parentState,μ;5*NWalkers,NSteps = 100,OptIndep = 20)
 # initializer = getInitializer(parentState,μ;NWalkers,NSteps = 1,OptIndep = 2)
 ##
 # rm(outfileSR,force=true)
@@ -144,13 +144,13 @@ flush(stdout)
 #___________Spin-1_______________________
 ##
 
-optim_params_steps = h5read(outfileSR,"params_steps")
-optim_params = selectdim(optim_params_steps,SW.arraydim(optim_params_steps),last(size(optim_params_steps)))
-# optim_params = h5read(outfileSR,"params_steps")[:,:,end]
-Nplaquettes = length(collect(SW.plaquetteIterator(parentState)))
-
-@assert !iszero(optim_params)
 if μ != 1.0
+    optim_params_steps = h5read(outfileSR,"params_steps")
+    optim_params = selectdim(optim_params_steps,SW.arraydim(optim_params_steps),last(size(optim_params_steps)))
+    # optim_params = h5read(outfileSR,"params_steps")[:,:,end]
+    Nplaquettes = length(collect(SW.plaquetteIterator(parentState)))
+
+    @assert !iszero(optim_params)
     ψG.params .= optim_params
     # ψG = SW.PlaquetteNumberGuidingFunction(only(unique(optim_params[1])))
     w_avg_estimate = -h5read(outfileSR,"E0")[end]
