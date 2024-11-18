@@ -2,14 +2,14 @@
 #=
 #!/bin/bash
 # SBATCH --dependency=afterok:8745821
-#SBATCH --job-name=CTRKS1
+#SBATCH --job-name=smCTRKS1
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=2-10:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
-#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK_Staircase/%L24_a.out
+#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK_FSS/%a.out
 #SBATCH --partition=normal
 #SBATCH --ntasks=1
 #SBATCH --mem=220GB
@@ -17,7 +17,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --ntasks-per-node=1
 ~/.bashrc
-julia -O3 -t $SLURM_CPUS_PER_TASK /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/Spin1GFMC_CT_RK_stairCase.jl $SLURM_ARRAY_TASK_ID
+julia -O3 -t $SLURM_CPUS_PER_TASK /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/FiniteSizeScaling/GFMC_FSS.jl $SLURM_ARRAY_TASK_ID
 exit
 =#
 
@@ -29,8 +29,10 @@ using HDF5
 using SpiderWebModel.Statistics
 i_arg = parse(Int, ARGS[1])
 
-μs = 0.2:0.025:0.45
-Ls = (24,28,32)
+μs = -0.1:0.05:1.1
+# μs = 0.2:0.025:0.45
+
+Ls = (20,24,28,32,36)
 jobs_array = [(;L,μ) for L in Ls for μ in μs]
 
 # μs = μs[1:2:end]
@@ -38,7 +40,7 @@ jobs_array = [(;L,μ) for L in Ls for μ in μs]
 
 (;L,μ) = jobs_array[i_arg]
 nBra = 1
-τ = 0.10
+τ = 0.10+ 0.1μ
 ##
 # L = 32
 # NSteps = 12_000
@@ -57,15 +59,12 @@ NBinsEval = 1
 NRuns = 14
 equilibration_steps = 1200
 pre_equilibration_steps = 50_000
-NWalkers = 128*20
-scatter_fraction = 0.0
+NWalkers = round(Int,128*60*(L/28)^2)
+scatter_fraction = 0.5
 NStepsstart = 1000
 NStepsEnd = 1500
 NBins = 300
-##
-if L == 32
-    NWalkers *= 4
-end
+
 ## -- debug params --
 # L = 32
 # nBra = 1
@@ -95,12 +94,14 @@ function get_S_stair!(S)
     return S
 end
 
-function getInitializer(S,mu;NWalkers=128,NSteps = 100,tau = 1. + 2mu,OptIndep = 10)
+function getInitializer(S,mu;NWalkers=128,NSteps = 100,tau =0.3 + 0.6mu,OptIndep = 10,outfileDIR=nothing)
     μ = mu
     ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-μ))
     CTFindOpt = SW.ContinuousTimeMethod(tau,1,(1-μ)* 0.266*length(S),SW.Hxx_RK(μ))
-            
-    @time OptimStart = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CTFindOpt,NWalkers,NSteps,ψG;equilibration_steps=1,pre_equilibration_steps=60_000,scatter_fraction=0.5) for _ in 1:OptIndep])
+    
+    getOutf(i) = isnothing(outfileDIR) ? nothing : joinpath(outfileDIR,"$i.h5")
+
+    @time OptimStart = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CTFindOpt,NWalkers,NSteps,ψG;equilibration_steps=1,pre_equilibration_steps=60_000,scatter_fraction=0.5,outfile=getOutf(i)) for i in 1:OptIndep])
     initializer = SW.WeightedConfigsInitializers(OptimStart)
     return initializer
 end
@@ -116,7 +117,14 @@ parentState = get_S_condensate!(
 
 ##
 
-initializer = getInitializer(parentState,μ;NWalkers,NSteps = 100,OptIndep = 20)
+outfileDIR_init = let
+    pth = ENV["MYSCRATCH"]*"/Spiderweb/DataTemp/L=($L)/periodic_RK_Full_$(SECTOR_NAME)/mu=$(μ)/"
+    mkpath(pth)
+
+    mktempdir(pth)
+end
+
+initializer = getInitializer(parentState,μ;NWalkers=3*NWalkers,NSteps = 400,OptIndep = 20,outfileDIR=outfileDIR_init)
 # initializer = getInitializer(parentState,μ;NWalkers,NSteps = 1,OptIndep = 2)
 ##
 # rm(outfileSR,force=true)
@@ -169,7 +177,7 @@ CT = SW.ContinuousTimeMethod(τ,nBra,w_avg_estimate,SW.Hxx_RK(μ))
 ##
 outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/L=$(L)/periodic_RK_Full_$(SECTOR_NAME)/mu_$(μ)/"
 
-for run in 1:NRuns
+Threads.@threads for run in 1:NRuns
     outfile = joinpath(outfileDIR,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run).h5")
     mkpath(dirname(outfile))
 
@@ -190,9 +198,10 @@ AllResults = vcat(SW.readResults.(resFiles,NSteps÷NBinsEval)...);
 ## 
 outfileTotal = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/eval/L=$(L)/mu=$(μ)/Spin1GFMC_Eval_periodic_$(SECTOR_NAME)_mu$(μ)_L$(L)_$(i_arg).h5"
 mkpath(dirname(outfileTotal))
+rm(outfileTotal,force=true)
 @assert !isfile(outfileTotal) "file already exists!"
 function getEns(results)
-    en = [SW.getEnergies(res.TotalWeights,res.energies,1,1000÷res.nBra) for res in results]
+    en = [SW.getEnergies(res.TotalWeights,res.energies,1,500÷res.nBra) for res in results]
 end
 ##
 
@@ -205,40 +214,18 @@ let
         file["L"] = L
         file["mu"] = μ
         file["tau"] = τ
+        file["NWalkers"] = NWalkers
+        file["NSteps"] = NSteps
     end
     
-    Threads.@threads for projectionSteps in (50,250,500,750,1000)
+    projectionSteps = 1:5:150
     # for projectionSteps in (20,40)
-        SqsGFMC = stack(SW.getSqsGFMC(AllResults,projectionSteps),dims=3)
-        h5open(outfileTotal,"cw") do file
-            file["SqsGFMC/$projectionSteps"] = SqsGFMC
-        end
-        println(L, " ",projectionSteps)
-        flush(stdout)
-    
+    SqsGFMC = SW.getSqsGFMC(AllResults,projectionSteps)
+    h5open(outfileTotal,"cw") do file
+        file["p_Sq"] = collect(projectionSteps)
+        file["SqsGFMC"] = SqsGFMC
     end
+    println(L, " ",projectionSteps)
+    flush(stdout)
 end
-
-##
-
-function separate_files_by_mu(files)
-    for file in files
-        # Extract the mu value from the filename using a regular expression
-        foundmatch = match(r"mu=(-?\d+\.?\d*)_", file)
-        path = dirname(file)
-        if foundmatch !== nothing
-            mu_value = foundmatch.captures[1]
-            # Create the directory for the mu value if it doesn't exist
-            mu_dir = joinpath(path,"mu_$mu_value")
-            # return (mu_dir)
-
-            mkpath(mu_dir)
-            # Move the file to the corresponding directory
-            mv(file, joinpath(mu_dir, basename(file)))
-        else
-            println("No mu value found in filename: $file")
-        end
-    end
-end
-
-separate_files_by_mu(resFiles)
+rm(outfileDIR,force=true,recursive=true)

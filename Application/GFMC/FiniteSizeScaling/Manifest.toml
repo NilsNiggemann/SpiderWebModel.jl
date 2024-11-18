@@ -1487,11 +1487,11 @@ weakdeps = ["ChainRulesCore"]
 
 [[deps.SpiderWebModel]]
 deps = ["Arpack", "BitIntegers", "CairoMakie", "ChunkSplitters", "CircularArrays", "DataStructures", "Dictionaries", "FFTW", "Gurobi", "H5Zblosc", "HDF5", "IterativeSolvers", "JuMP", "KrylovKit", "LinearAlgebra", "LinearMaps", "LoopVectorization", "MathOptInterface", "OrderedCollections", "ProgressMeter", "Random", "SparseArrays", "StaticArrays", "Statistics", "StatsBase", "Stencils", "Test"]
-git-tree-sha1 = "b35543cef72ab3041c44f31782104208f14be489"
+git-tree-sha1 = "1c133cf2aac4588d08f896c8c9616aada178cd38"
 repo-rev = "main"
-repo-url = "../.."
+repo-url = "../../.."
 uuid = "8e1b84da-b1d7-4311-a21b-52324f990117"
-version = "0.3.5"
+version = "0.3.7"
 
 [[deps.StackViews]]
 deps = ["OffsetArrays"]

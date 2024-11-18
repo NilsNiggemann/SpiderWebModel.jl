@@ -2,11 +2,17 @@ using CairoMakie, MakieHelpers,Statistics, HDF5
 import SpiderWebModel as SW
 include("plottingUtils.jl")
 ##
+dropmean(A; dims=:) = dropdims(mean(A; dims=dims); dims=dims)
+dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
+function getFiles(L)
+    files = [joinpath(root,file) for (root,_,files) in walkdir( "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=$L/") for file in files]
+end
 function prepResults(folder,mufilter)
     files = [joinpath(root,file) for (root,_,files) in walkdir(folder) for file in files]
     filter!(contains("mu=$(mufilter)_"),files)
-    return files
-    res = vcat(SW.readResults.(files,5000,discardStart = 5000)...)
+    # return files
+    res = vcat(SW.readResults.(files,5000)...)
+    return res
     energies = [h5read(file,"energies") for file in files]
     TotalWeights = [h5read(file,"TotalWeights") for file in files]
     # mus = [h5read(file,"mu") for file in files]
@@ -17,25 +23,49 @@ end
 # entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equiv_open/",0.30)
 # entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/L=32/",0.65)
 ##
-files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=32/") for file in files]#[8:end]
-# files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=30/") for file in files]#[1:2:end]
-# filter!(!contains("mu=-0.18"),files)
-# filter!(!contains("mu=-0.2"),files)
-##
-energies = stack([h5read(file,"energies") for file in files])
-mus = [h5read(file,"mu") for file in files]
-Sqs = stack([h5read(file,"SqsGFMC/50") for file in files])
-taus = [h5read(file,"tau") for file in files]
+function getRes(folder)
+    files = let
+        filesunsrt = [joinpath(root,file) for (root,_,files) in walkdir(folder) for file in files]
+        mus = [h5read(file,"mu") for file in filesunsrt]
+        filesunsrt[sortperm(mus)]
+    end
+        #[8:end]
+    # files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=30/") for file in files]#[1:2:end]
+    # filter!(!contains("mu=-0.18"),files)
+    # filter!(!contains("mu=-0.2"),files)
+    ##
+    energies = stack([h5read(file,"energies") for file in files])
+    mus = [h5read(file,"mu") for file in files]
+    Sqs = stack([h5read(file,"SqsGFMC") for file in files])
+    taus = [h5read(file,"tau") for file in files]
+    p_Sq = stack([h5read(file,"p_Sq") for file in files])
+    return (;energies,mus,Sqs,taus,files,p_Sq)
+end
+function getSq_tau(res,tau)
+    p_Sq = res.p_Sq
+    Dtaus = reshape(res.taus,1,size(p_Sq,2))
+    taus = p_Sq .* Dtaus
+    tauInds = [findfirst(>=(tau),t) for t in eachcol(taus)]
+    # return tauInds
+    return stack(res.Sqs[:,:,ti,:,i] for (i,ti) in enumerate(tauInds))
+end
+
+function getSq_tau_mean_std(res,tau)
+    Sqtau = getSq_tau(res,tau)
+    dropmean(Sqtau,dims=4), dropstd(Sqtau,dims=4)
+end
+
+res = Dict(L=>getRes("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=$L/") for L in (20,24,))
 ##
 with_theme(theme_SimpleTicks()) do
-    ind = 10
-    Nsites = length(Sqs[1:end-1,1:end-1,1,ind])
-    enmean = mean(energies,dims=2)[1:250,1,ind] ./ Nsites
+    ind = 4
+    Nsites = length(res[24].Sqs[1:end-1,1:end-1,1,ind,begin])
+    enmean = mean(res[24].energies,dims=2)[1:250,1,ind] ./ Nsites
 
-    enstd = std(energies,dims=2)[1:250,1,ind] ./ Nsites
+    enstd = std(res[24].energies,dims=2)[1:250,1,ind] ./ Nsites
     # enmean = mean(entest,dims=2)[:,1]
     # enstd = std(entest,dims=2)[:,1]
-    tau = taus[ind]
+    tau = res[24].taus[ind]
     lines((eachindex(enmean).-1) .*tau,enmean,axis = (;ylabel = L"E/N_\text{sites}",xlabel = L"\tau"))
     band!((eachindex(enmean).-1) .*tau,enmean - enstd , enmean + enstd,color = (:black,0.2))
     current_figure()
@@ -43,19 +73,19 @@ with_theme(theme_SimpleTicks()) do
 end
 ##
 with_theme(theme_SimpleTicks()) do 
-    tauindices = [round(Int,8 ÷ tau) for tau in taus]
-    energies_slice = zeros(size(energies,2),size(energies,3))
+    tauindices = [round(Int,8 ÷ tau) for tau in res[24].taus]
+    energies_slice = zeros(size(res[24].energies,2),size(res[24].energies,3))
     for (i,tau) in enumerate(tauindices)
-        energies_slice[:,i] .= @view energies[tau,:,i]
+        energies_slice[:,i] .= @view res[24].energies[tau,:,i]
     end
 
     enmean = dropdims(mean(energies_slice,dims=1),dims=1)
     enstd = dropdims(std(energies_slice,dims=1),dims=1)
     Nsites = 30^2
-    push!(enmean,0)
-    push!(enstd,0)
-    mus2 = copy(mus)
-    push!(mus2,1)
+    # push!(enmean,0)
+    # push!(enstd,0)
+    mus2 = copy(res[24].mus)
+    # push!(mus2,1)
     ord = sortperm(mus2)
     mus2 = mus2[ord]
     enmean = enmean[ord] ./ Nsites
@@ -108,14 +138,18 @@ with_theme(theme_SimpleTicks()) do
     vlines!(ax,[0.16,1],color = :grey,linestyle = :dash)
     xlims!(ax,extrema(mus2)...)
     ylims!(ax,extrema(enmean)...)
+    # return enmean, mus2
+    ylims!(axDE,extrema(dEdmu)...)
     fig
 end
 
 ##
-with_theme(theme_PiTicks()) do 
-    Sq = mean(Sqs,dims=3)[:,:,1,:] ./ 4
+with_theme(theme_PiTicks()) do
+    L = 24
+    Sq = dropmean(res[L].Sqs,dims=4)[:,:,10,:] ./ 4
     # muPlot = [-0.06,0.2,0.3,0.6,0.94,1.1]
-    muPlot = [0.0,0.4,0.9,1.05]
+    # muPlot = [0.0,0.4,0.9,1.05]
+    muPlot = [0.2,0.6,]
 
     fig = Figure(fontsize = 22,size = 200 .*(length(muPlot),1.4))
     ticks = PiTicks([0,pi])
@@ -128,7 +162,7 @@ with_theme(theme_PiTicks()) do
     # Sqpl = SqFunc.(Iterators.product(kx,ky))
     # hm = heatmap!(ax1,kx,ky,Sqpl,colormap = :viridis)
     # muPlot = [0.9,0.92,0.94,0.96]
-    mupls = mus[[findfirst(>=(mu),mus) for mu in muPlot]]
+    mupls = res[L].mus[[findfirst(>=(mu),res[L].mus) for mu in muPlot]]
     spinconf = SW.SpinConfig(SW.periodicStateLoops(8),1)
     ax0 = Axis(fig[1,0];SW.getConfigAxis(spinconf)...,xticks = 1:2:8 ,yticks = 1:2:8,xlabel = L"x",ylabel = L"y")
     
@@ -137,40 +171,54 @@ with_theme(theme_PiTicks()) do
     axes = [Axis(fig[1,i],aspect=1,title = L"μ = %$(mupls[i])",yticklabelsvisible=i==1,xticks=ticks,yticks=ticks,xlabel = L"q_x",ylabel = L"q_y", ylabelvisible = i==1) for i in eachindex(muPlot)]
 
     for (i,ax) in enumerate(axes)
-        i_mu = findfirst(>(muPlot[i]),mus)
+        i_mu = findfirst(>(muPlot[i]),res[L].mus)
         SqMat = Sq[:,:,i_mu]
-        mupl = mus[i_mu]
+        mupl = res[L].mus[i_mu]
         SqFunc = SW.getSqCont(SqMat)
         Sqpl = SqFunc.(Iterators.product(kx,ky))
         heatmap!(ax,kx,ky,Sqpl,colormap = :viridis)
     end
     colgap!(fig.layout,2,0)
-    colgap!(fig.layout,3,0)
-    colgap!(fig.layout,4,0)
+    # colgap!(fig.layout,3,0)
+    # colgap!(fig.layout,4,0)
     Label(fig[1,0, TopLeft()],L"a)$$",padding = (-30,0,-10,0))
     Label(fig[1,1, TopLeft()],L"b)$$",padding = (-30,0,-10,0))
     fig
 end
 ##
-files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil_acc/eval/L=32/") for file in files]#[1:2:end]
-# files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=30/") for file in files]#[1:2:end]
-# filter!(!contains("mu=-0.18"),files)
-# filter!(!contains("mu=-0.2"),files)
-
-energies = stack([h5read(file,"energies") for file in files])
-mus = [h5read(file,"mu") for file in files]
-Sqs = stack([h5read(file,"SqsGFMC/100") for file in files])
-taus = [h5read(file,"tau") for file in files]
-##
-muIndex = findfirst(>=(0.7),mus)
-SqsGFMC = Sqs[:,:,:,muIndex]./ 4
-SqMat = dropdims(mean(SqsGFMC,dims=3),dims=3)
-SqErr = dropdims(std(SqsGFMC,dims=3),dims=3)
-fittingCoefs = optimizeCoeffs(SqMat)
+with_theme(theme_SimpleTicks()) do
+    L = 24
+    muIndex = findfirst(>=(0.6),res[L].mus)
+    SqsGFMC = res[L].Sqs[:,:,:,:,muIndex]./ 4
+    SqMat = dropmean(SqsGFMC,dims=4)
+    SqErr = dropstd(SqsGFMC,dims=4)
+    fig = Figure(size = 120 .* (4,4))
+    ax = Axis(fig[1,1],xlabel = L"τ",ylabel = L"\mathcal{S}(\mathbf{q})")
+    p_Sq = res[L].p_Sq[:,muIndex]
+    dTau = res[L].taus[muIndex]
+    tau = p_Sq .*dTau
+    # return heatmap(SqMat[:,:,20])
+    Sq_examp = SqMat[:,:,10]
+    inds = sort(collect(CartesianIndices(Sq_examp))[:],by = x->Sq_examp[x],rev=true)
+    # for I in ((5,5),(7,7),(10,3),(5,9))
+    for I in inds[[1,5,10,15,12]]
+        i,j = Tuple(I)
+        range = 1:10
+        scatterlines!(ax,tau[range],SqMat[i,j,range],marker = '×')
+        errorbars!(ax,tau[range],SqMat[i,j,range],SqErr[i,j,range],whiskerwidth = 6,linewidth=0.5)
+    end
+    fig
+end
 ##
 with_theme(theme_SimpleTicks()) do 
+    L = 24
+    muIndex = findfirst(>=(0.7),res[L].mus)
+    SqsGFMC = res[L].Sqs[:,:,10,:,muIndex]./ 4
+    SqMat = dropmean(SqsGFMC,dims=3)
+    SqErr = dropstd(SqsGFMC,dims=3)
+    fittingCoefs = optimizeCoeffs(SqMat)
 
-    μ = mus[muIndex]
+    μ = res[L].mus[muIndex]
     fig = Figure(size = 120 .* (4,4))
 
     axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1,xticks = PiTicks(), yticks = PiTicks())
@@ -219,8 +267,8 @@ with_theme(theme_SimpleTicks()) do
 
         Sqcut = [Sq(x,y) for (x,y) in p1_points]
         Sqerrcut = [Sqerr(x,y) for (x,y) in p1_points]
-        SqFT = [SqFieldTheory(q,fittingCoefs...) for q in p1_points]
-        
+        SqFT = [SqFieldTheory(q,fittingCoefs) for q in p1_points]
+
         # SqFT = [SqFieldTheory(q,1,10) for q in qpoints]
         scatter!(ax,p1_points,marker = '∘' ,color = color,markersize = 10)
         scatterlines!(axFT,p1_points,color = color,linestyle = :dash,marker = '●',markersize = 2)
@@ -263,40 +311,114 @@ with_theme(theme_SimpleTicks()) do
 end
 
 ##
-files22 = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=22/") for file in files]#[8:end]
-# files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=30/") for file in files]#[1:2:end]
-# filter!(!contains("mu=-0.18"),files)
-# filter!(!contains("mu=-0.2"),files)
-##
-energies22 = stack([h5read(file,"energies") for file in files22])
-mus22 = [h5read(file,"mu") for file in files22]
-Sqs22 = stack([h5read(file,"SqsGFMC/50") for file in files22])
-taus22 = [h5read(file,"tau") for file in files22]
-##
+function getxi(Sq,I::CartesianIndex,dI::CartesianIndex)
+    L = size(Sq,1)-1
+    xi_L = sqrt(Sq[I]/Sq[I+dI] -1 )
+    return xi_L * L
+end
+
+function getxi(Sq,I::CartesianIndex)
+    # neighbors = [(-1,-1)]
+    # neighbors = [(i,j) for i in -1:1,j in -1:1 if i != 0 || j != 0]
+    neighbors = [(1,0),(0,1),(-1,0),(0,-1)]
+    return maximum(getxi(Sq,I,CartesianIndex(dI)) for dI in neighbors)
+end
+
+function getxi(Sq)
+    I = argmax(Sq)
+    return getxi(Sq,I)
+end
+
+
 with_theme(theme_PiTicks()) do 
-    mu = 0.15
-    fig = Figure(fontsize = 22,size = 400 .*(1.4,1.4))
+    mu = 0.75
+    fig = Figure(fontsize = 22,size = 400 .*(1.4,2.4))
     ticks = PiTicks([0,pi])
     axes = [
         Axis(fig[1,1],aspect = 1,xlabel = L"q_x",ylabel = L"q_y",xticks = ticks,yticks = ticks,title = L"μ = %$(mu)"),
-        Axis(fig[1,2],aspect = 1,xlabel = L"q_x",ylabel = L"q_y",xticks = ticks,yticks = ticks,title = L"μ = %$(mu)"),
+        Axis(fig[2,1],aspect = 1,xlabel = L"q_x",ylabel = L"q_y",xticks = ticks,yticks = ticks,title = L"μ = %$(mu)"),
     ]
 
-    for (ax1,L,mus,Sq) in zip(axes,(22,32),(mus22,mus),(Sqs22,Sqs))
-
-        muIndex = findfirst(==(mu),mus)
-        SqsGFMC = Sq[:,:,:,muIndex]./ 4
+    for (i,ax1,L) in zip((1,2),axes,(20,24))
+        # Sq = getSq_tau(res[L],13)
+        mus = res[L].mus
+        
+        muIndex = findfirst(>=(mu),mus)
+        println(mus[muIndex])
+        SqsGFMC = res[L].Sqs[:,:,end,:,muIndex]./ 4
+        # SqsGFMC = Sq[:,:,:,muIndex]./ 4
 
         SqMat = dropdims(mean(SqsGFMC,dims=3),dims=3)
         SqErr = dropdims(std(SqsGFMC,dims=3),dims=3)
 
 
         # ax2 = Axis(fig[1,1],aspect = 1,xlabel = L"q_x",ylabel = L"q_y",xticks = ticks,yticks = ticks,title = L"μ = 0.6")
-
-        kx = ky = trueMomenta(-pi/2,1.5pi,size(SqMat,1)-1)
+        kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
         SqFunc = SW.getSqCont(SqMat)
+
+        # SqFunc = SW.getSqCont(SqMat)
+
+        # hm = heatmap!(ax1,kx,ky,SqFunc.(Iterators.product(kx,ky)),colormap = :viridis)
         hm = heatmap!(ax1,kx,ky,SqFunc.(Iterators.product(kx,ky)),colormap = :viridis)
-        # Colorbar(fig[1,2],hm)
+        xi = getxi(SqMat)
+        @info "" L maximum(SqMat) /L^2 xi xi/L
+        Colorbar(fig[i,2],hm)
     end
     fig
+end
+
+##
+function getXis(Sqs)
+    xis = zeros(size(Sqs,4))
+    for (i,ii) in enumerate(axes(Sqs,4))
+        Sq = @views dropmean(Sqs[:,:,:,ii],dims=3)
+
+        xis[i] = getxi(Sq./4,argmax(Sq))
+    end
+    return xis
+end
+function getXis_err(Sqs)
+    xis = zeros(size(Sqs)[3:4])
+    for (i,ii) in enumerate(axes(Sqs,4))
+        for (j,jj) in enumerate(axes(Sqs,3))
+            Sq = @views Sqs[:,:,jj,ii]
+
+            xis[j,i] = getxi(Sq./4,argmax(Sq))
+        end
+    end
+    ximean = dropmean(xis,dims=1)
+    xistd = dropstd(xis,dims=1)
+    return (;ximean,xistd)
+end
+
+with_theme(theme_SimpleTicks()) do 
+    fig = Figure(fontsize = 22,size = 400 .*(1.4,1.))
+    ax = Axis(fig[1,1],xlabel = L"μ",ylabel = L"\xi/L")
+    ax2 = insetAtPoint(fig,ax,(0.6,7),(110,60))
+    # ax2 = Axis(fig[2,1],xlabel = L"μ",ylabel = L"\xi/L")
+    # linkaxes!(ax,ax2)
+
+    Linestyles = [:dash,:dot,:solid,:dashdot]
+    # allmus = [musSmall,musMedium,mus]
+    # allxis = [xisSmall,xisMedium,xis]
+    for (L,linestyle) in zip((20,24),Linestyles)
+    # for (L,linestyle) in zip(keys(res),Linestyles)
+        # Sq = res[L].Sqs[:,:,5,:,:]
+        Sq = getSq_tau(res[L],5)
+        xis = getXis_err(Sq)
+        mus = res[L].mus
+        scatterlines!(ax,mus,xis.ximean/L,label = L"L=%$L";linestyle)
+        errorbars!(ax,mus,xis.ximean/L,xis.xistd/L,whiskerwidth = 5)
+        
+        muFilter = findall(x->x>=(0.1) && x<=0.9,mus)
+        # muFilter = findall(x->x>=(0.3) && x<=0.45,mus)
+
+        scatterlines!(ax2,mus[muFilter],xis.ximean[muFilter]/L,label = L"L=%$L";linestyle)
+        errorbars!(ax2,mus[muFilter],xis.ximean[muFilter]/L,xis.xistd[muFilter]/L,whiskerwidth = 5)
+    end
+    vlines!(ax,[0.41],color = :grey,linestyle = :dashdot)
+    vlines!(ax2,[0.41],color = :grey,linestyle = :dashdot)
+    axislegend(ax,position = :lt)
+    fig
+    
 end

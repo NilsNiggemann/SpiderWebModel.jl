@@ -242,6 +242,7 @@ SqFieldTheory(qx, qy, A,r) = SqFieldTheory_full(qx, qy, 4*A^2,1, r)
 SqFieldTheory(q::AbstractVector,A::Real,r::Real) = SqFieldTheory(q[1],q[2],A,r)
 
 SqFieldTheory(q::AbstractVector,coefs::AbstractVector) = SqFieldTheory(q[1],q[2],coefs[1],coefs[2])
+SqFieldTheory(q::Tuple,coefs::AbstractVector) = SqFieldTheory(q[1],q[2],coefs[1],coefs[2])
 
 function optimizeCoeffs(SqMat,weightfunc=x->one(first(x)))
     q = trueMomenta(0., 2pi, size(SqMat, 1) - 1)[1:end-1]
