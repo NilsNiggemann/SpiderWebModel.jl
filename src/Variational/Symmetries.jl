@@ -43,7 +43,6 @@ struct SymmetryGroup{T<:Tuple} <: AbstractSymmetryGroup
 end
 SymmetryGroup(args...) = SymmetryGroup(args)
 
-symmetrize(ψ::AbstractGuidingFunction,Symm::AbstractSymop,SpinConfig::AbstractMatrix) = symmetrize(ψ,SymmetryGroup(Symm),SpinConfig)
 
 function symmetrize(ψ::AbstractGuidingFunction,Symms::AbstractSymmetryGroup,SpinConfig::AbstractMatrix)
     ψSymm = getNonSymmetric(ψ)
@@ -70,7 +69,7 @@ function symmetrize(ψ::AbstractGuidingFunction,Symms::AbstractSymmetryGroup,Spi
     return ψSymm
 end
 
-symmetrize(ψ::AbstractGuidingFunction,Symm::AbstractSymop,S::AbstractMatrix) = symmetrize(ψ,(Symm,),S) 
+symmetrize(ψ::AbstractGuidingFunction,Symm::AbstractSymop,SpinConfig::AbstractMatrix) = symmetrize(ψ,SymmetryGroup(Symm),SpinConfig)
 
 function reduce_indices_Mapping!(ψSymm::SymmetryReducedWaveFunction,Symms::AbstractSymmetryGroup,SpinConfig::AbstractMatrix)
     indicesMapping = ψSymm.indicesMapping
