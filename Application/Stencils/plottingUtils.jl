@@ -1,5 +1,7 @@
 using StaticArrays
 using Optim
+using MakieHelpers
+##
 dropmean(A; dims=:) = dropdims(mean(A; dims=dims); dims=dims)
 dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
 
