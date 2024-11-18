@@ -3,6 +3,21 @@ using Optim
 dropmean(A; dims=:) = dropdims(mean(A; dims=dims); dims=dims)
 dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
 
+function errlines!(ax::Makie.AbstractAxis,x,y,err;bandkwargs = (;),kwargs...)
+    l = lines!(ax,x,y;kwargs...)
+    band!(ax,x,y .- err,y .+ err;color = (l.color[],0.3),bandkwargs...)
+end
+errlines!(x,y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),x,y,err;bandkwargs,kwargs...)
+errlines!(y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),eachindex(y),y,err;bandkwargs,kwargs...)
+errlines!(ax::Makie.AbstractAxis,y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),eachindex(y),y,err;bandkwargs,kwargs...)
+function errlines(args...;kwargs...)
+    fig = Figure()
+    ax = Axis(fig[1,1])
+    errlines!(ax,args...;kwargs...)
+
+    fig
+end
+
 
 _getkwargs(::Any) = (;xlabel = L"projection order $$")
 _getkwargs(m::SW.ContinuousTimeMethod) = (;xlabel = L"\tau")
@@ -200,7 +215,7 @@ function getBranchingHistory!(BranchingMatrix::AbstractMatrix,reconfigurationTab
     return BranchingMatrix
 end
 
-function plotVarEn(stochReconfRes;normalization=1,movavg = 1,E_exact = NaN)
+function plotVarEn(stochReconfRes;normalization=1,movavg = 1,E_exact = NaN,alpha_index = 1)
     fig = Figure(theme = theme_SimpleTicks())
 
     ax = Axis(fig[1, 1], xlabel = "Iteration", ylabel = "Energy",xlabelvisible=false,xticklabelsvisible=false)
