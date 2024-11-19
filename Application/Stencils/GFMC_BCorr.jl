@@ -14,13 +14,14 @@ function getPeriodic(parent)
     SW.SpinConfig(SW.PeriodicMatrix(state), parent.S)
 end
 
-S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
+mu = 0.4
+S = SW.stencilConfig(parent(SW.getStairCase(8)),1/2;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
 S_ED = getPeriodic(SW.getStairCase(size(S,1)))
 # S_ED = SW.getStairCase(size(S,1))
 # S = SW.stencilConfig(parent(SW.getStairCase(7)),1/2)
 # S_ED = SW.getStairCase(size(S,1))
 HStair = SW.generateHilbertSpace(S_ED)
-
+SW.addRKPotential!(HStair,mu)
 ExSol = SW.SolveHKrylov(HStair.H)
 E0 = ExSol.values[1]
 v0 = ExSol.vectors[1]
@@ -34,24 +35,32 @@ sleep(0.5)
 GC.gc()
 GC.gc()
 ##
-outfile = "Data/temp/S12_1/"
+outfile = "Data/temp/S12_3"
 rm(outfile;recursive=true,force=true)
-##
 mkpath(outfile)
+CT = SW.ContinuousTimeMethod(0.1,w_avg_estimate = E0,Hxx = SW.Hxx_RK(mu))
+CTSR = SW.ContinuousTimeMethod(100*CT.τ,w_avg_estimate = CT.w_avg_estimate,Hxx = CT.Hxx)
+
+##
+
 nThermal = 1000
 nBra = 3
-ψG = SW.fullVariationalFunction(S,0.197)
-
-# ψG(N) = 1
-# DT = SW.ContinuousTimeMethod(0.1,3,-E0)
-DT = SW.DiscreteTimeMethod(0.,1,-E0)
-# stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,1000+ 200*i),ψG,50,0.6,SW.IterativeSRSolver();Nwalkers = 6*8,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
-# ψG = typeof(ψG)(stochReconfRes.params)
-# DT = SW.DiscreteTimeMethod(0,3,E0)
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,30,1500,ψG,equilibration_steps=100,pre_equilibration_steps=1_000,scatter_fraction=0.5,outfile = outfile*"$(i).h5") for i in 1:6])
+ψG = SW.JastrowFunction(S)
+SW.rand!(SW.getNonSymmetric(ψG),1e-3)
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,10,ψG,100,1e-3,SW.IterativeSRSolver();Nwalkers = 28,reconfigure = false,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
+SW.get_params(ψG) .= stochReconfRes.params
+plotVarEn(stochReconfRes)
 
 ##
-plotEnergies(results,DT,E0,nThermal=10,normalize=true,Emin = -0.1046,Emax = -0.10444)
+# ψG(N) = 1
+# CT = SW.ContinuousTimeMethod(0.1,3,-E0)
+# stochReconfRes = SW.stochastic_reconfiguration(S,CT,i->round(Int,1000+ 200*i),ψG,50,0.6,SW.IterativeSRSolver();Nwalkers = 6*8,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
+# ψG = typeof(ψG)(stochReconfRes.params)
+# CT = SW.DiscreteTimeMethod(0,3,E0)
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,28*1,3000,ψG,equilibration_steps=100,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
+
+##
+plotEnergies(results,CT,E0,nThermal=10,normalize=true,Emin = E0-1e-2,Emax = E0+1.5e-2)
 
 ##___________ StraightForwardWalking _______________________
 # allPlaqs = collect(SW.plaquetteIterator(S))
@@ -75,11 +84,11 @@ let
 end
 ##
 BOp = SW.PlaquetteFlipOperator(S)
-resB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,5,BOp,ψG,collect(SW.plaquetteIterator(S))[1:1]) for (i,res) in enumerate(results)])
-# resB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,5,BOp,ψG,1;outfile = string(outfile,i,".h5")) for (i,res) in enumerate(results)])
+resB = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,5,BOp,ψG,collect(SW.plaquetteIterator(S))[1:1]) for (i,res) in enumerate(results)])
+# resB = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,5,BOp,ψG,1;outfile = string(outfile,i,".h5")) for (i,res) in enumerate(results)])
 ##
 BBOp = SW.BBOperator(S,refPlaq)
-resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,5,BBOp,ψG,SW.getApplicablePlaquettes(S)) for (i,res) in enumerate(results)])
+resBB = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,5,BBOp,ψG,SW.getApplicablePlaquettes(S)) for (i,res) in enumerate(results)])
 
 ##
 Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,5) for res in results]
@@ -99,10 +108,12 @@ let
     BEnd = only(nth.(mean(BVals)))
     localCorr = only(findfirst(==(refPlaq),GFMCPlaqs))
     corrEnd = BBEnd .- BEnd^2
+    # corrEnd = BEnd^2
     
     corrEnd[localCorr] /= 2
 
     exactCorrsRescale = copy(exactCorrs)
+    # exactCorrsRescale = exactB
     localCorr = only(findfirst(==(refPlaq),pairPlaqs))
     exactCorrsRescale[localCorr] /= 2
 
@@ -120,28 +131,38 @@ let
 end
 ##
 Plaq2 = (4,7)
-# Plaq2 = rand(pairPlaqs)
 # Plaq2 = refPlaq
+with_theme(theme_SimpleTicks()) do 
+    fig = Figure()
+    ax = Axis(fig[1,1])
+    for Plaq2 in pairPlaqs
+        gfmcPlaq = only(findfirst(==(Plaq2),GFMCPlaqs))
+        obsArr = stack(stack(BBVals))[:,gfmcPlaq,:] .- stack(stack(BVals))[:,1,:].^2
+        exactCorr = exactBB[only(findfirst(==(Plaq2),pairPlaqs))] - exactB[refPlaqPos]^2
 
-gfmcPlaq = only(findfirst(==(Plaq2),GFMCPlaqs))
-obsArr = stack(stack(BBVals))[:,gfmcPlaq,:] 
-errorbars(eachindex(nBra .* obsArr[:,1]),mean(obsArr,dims=2)[:],sqrt.(var(obsArr,dims=2))[:])
-lines!(eachindex(nBra .* obsArr[:,1]),mean(obsArr,dims=2)[:],linewidth = 0.5)
-exactCorr = exactBB[only(findfirst(==(Plaq2),pairPlaqs))]
-hlines!([exactCorr],color = :red)
-# ylims!(exactCorr -5e-1,exactCorr + 5e-1)
-current_figure()
+        errorbars!(eachindex(nBra .* obsArr[:,1]),dropmean(obsArr,dims=2),dropstd(obsArr,dims=2))
+        l = lines!(eachindex(nBra .* obsArr[:,1]),dropmean(obsArr,dims=2),linewidth = 0.5)
+
+        # Ex_diff = dropmean(obsArr,dims=2) .- exactCorr
+        # Ex_diff_std = dropstd(obsArr,dims=2)
+        # l = errlines!(ax,eachindex(Ex_diff),Ex_diff,Ex_diff_std,linewidth = 2)
+        hlines!([exactCorr],color = (l.color[],0.5),linewidth = 1,linestyle = :dash)
+
+    end
+    # ylims!(exactCorr -5e-1,exactCorr + 5e-1)
+    current_figure()
+end
 ##
 #___________Spin-1_______________________
 S = SW.stencilConfig(zeros(14,14),1;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
-DT = SW.DiscreteTimeMethod(0.,1,prod(size(S)))
+CT = SW.DiscreteTimeMethod(0.,1,prod(size(S)))
 ψG = SW.fullVariationalFunction(S,0.15)
-stochReconfRes = SW.stochastic_reconfiguration(S,DT,i->round(Int,200+ 5*i),ψG,30,0.8,SW.IterativeSRSolver();Nwalkers = 6*20,rel_tolerance=1e-8,equilibration_steps=100,pre_equilibration_steps=10_000)
+stochReconfRes = SW.stochastic_reconfiguration(S,CT,i->round(Int,200+ 5*i),ψG,30,0.8,SW.IterativeSRSolver();Nwalkers = 6*20,rel_tolerance=1e-8,equilibration_steps=100,pre_equilibration_steps=10_000)
 ##
 ψG = typeof(ψG)(stochReconfRes.params)
-DT = SW.DiscreteTimeMethod(0.,8,0.2658*prod(size(S)))
+CT = SW.DiscreteTimeMethod(0.,8,0.2658*prod(size(S)))
 
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,3000,ψG,equilibration_steps=1000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,20,3000,ψG,equilibration_steps=1000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
 ##
 plotEnergies(results,nBra,p=100;normalize=true)
 ##
@@ -158,11 +179,11 @@ outfile = "Data/temp/S1/L=$(size(S,1))"
 rm(outfile;recursive=true,force=true)
 mkpath(outfile)
 BOp = SW.PlaquetteFlipOperator(S)
-resB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,1,BOp,ψG,[refPlaq];outfile = nothing #=outfile*"$i.h5"=#) for (i,res) in enumerate(results)])
+resB = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,1,BOp,ψG,[refPlaq];outfile = nothing #=outfile*"$i.h5"=#) for (i,res) in enumerate(results)])
 ##
 BBOp = SW.BBOperator(S,refPlaq)
-# resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,1,BBOp,ψG,GFMCPlaqs) for (i,res) in enumerate(results)])
-resBB = fetch.([Threads.@spawn SW.measure_operator(S,DT,res.SaveConfigs,1,BBOp,ψG,GFMCPlaqs;outfile = nothing #=outfile*"$i.h5"=#) for (i,res) in enumerate(results)])
+# resBB = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,1,BBOp,ψG,GFMCPlaqs) for (i,res) in enumerate(results)])
+resBB = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,1,BBOp,ψG,GFMCPlaqs;outfile = nothing #=outfile*"$i.h5"=#) for (i,res) in enumerate(results)])
 
 
 ##

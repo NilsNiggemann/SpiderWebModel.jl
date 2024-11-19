@@ -48,6 +48,16 @@ function updateWeightList!(Walker::SpiderWebWalker,Buffer,ψG::AbstractGuidingFu
     return res
 end
 
+function guidingfuncRatio_naive(ψG::AbstractGuidingFunction,Walker,move)
+    i,j,opNum = move
+    Config = get_config(Walker)
+    ψx = ψG(Config)
+    applyPlaquette!(Config, i, j, opNum)
+    ψx´ = ψG(Config)
+    applyPlaquette!(Config, i, j, -opNum)
+    return ψx´/ψx
+end
+
 function guidingfuncRatio(ψG::AbstractGuidingFunction,Walker,move,ψx::Number)
     i,j,opNum = move
     Config = get_config(Walker)
