@@ -97,11 +97,11 @@ function getNewStates!(states, Conf, StateRep::SBitVector, plaqMap::PlaqMapping)
         plaqstate = StateRep[ij]
         setindex(StateRep, ij, !plaqstate)
     end
-
-    for i in axes(Conf.Mat, 1), j in axes(Conf.Mat, 2)
-        iseven(i + j) && continue
+    
+    for (i,j) in plaquetteIterator(Conf)
         if canFlipPlaquette(Conf, i, j)
-            push!(states, convertToStateRep(plaqMap(i, j)))
+            val = convertToStateRep(plaqMap(i, j))
+            push!(states, val)
         end
     end
 
@@ -124,7 +124,7 @@ function _generateHilbertSpace(
 
     CurrentStates = ([InitialState_rep])
 
-    NewStates = [InitialState_rep]
+    NewStates = empty!([InitialState_rep])
 
     AllStates = DataStructures.SwissDict(InitialState_rep => 1)
 
@@ -161,6 +161,13 @@ function _generateHilbertSpace(
     return (; Hrows, Hcols, AllStates, plaqMapping)
 end
 
+
+struct HilbertSpace{StatesType,HType<:AbstractMatrix,PlaqMapType}
+    AllStates::StatesType
+    H::HType
+    plaqMapping::PlaqMapType
+end
+
 function generateHilbertSpace(InitialState, type = SBitVector{UInt64}(0, 0))
     (; Hrows, Hcols, AllStates, plaqMapping) = _generateHilbertSpace(InitialState, type)
     H = constructSparseMatrix(Hrows, Hcols, AllStates)
@@ -168,10 +175,11 @@ function generateHilbertSpace(InitialState, type = SBitVector{UInt64}(0, 0))
     return HilbertSpace(AllStates, H, plaqMapping)
 end
 
-struct HilbertSpace{StatesType,HType<:AbstractMatrix,PlaqMapType}
-    AllStates::StatesType
-    H::HType
-    plaqMapping::PlaqMapType
+function addRKPotential!(Hilbert::HilbertSpace,μ)
+    H = Hilbert.H.data
+    H[diagind(H)] .= 0
+    H[diagind(H)] .= -μ .* H*ones(size(H, 1))
+    return Hilbert
 end
 
 function addVertex!(rows::AbstractVector, cols::AbstractVector, i, Neighbors)
