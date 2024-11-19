@@ -24,7 +24,7 @@ S .= SW.periodicStateDenseLoops(size(S,1))
 # ψG.M_i .= 1e-6
 # ψG = SW.localPlaquetteGuidingFunction(S,0.001)
 # ψG = SW.RBMSpin1(S,1,Float64)
-ψG = SW.JastrowFunction(S,Float64)
+ψG = SW.SimpleJastrowFunction(S,Float64)
 # ψG = SW.orderGuidingFunction(S)
 # ψG = SW.PlaquetteRBM(S,1,Float64)
 # Symmetry = SW.SymmetryGroup(SW.TranslationalSymmetry(SA[2,2],SA[-2,2]),SW.ExchangeSymmetry())
@@ -43,7 +43,7 @@ SW.rand!(ψGSymm,1e-3)
 
 # ψGSymm = SW.symmetrize(S,ψG,(4,4))
 ψGold = SW.PlaquetteNumberGuidingFunction(0.12)
-nThermal = 1000
+nThermal = 400
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
 CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2))
@@ -52,7 +52,7 @@ CTSR = SW.ContinuousTimeMethod(8,Hxx = CT.Hxx)
 
 ##
 cappedGrowth(x,start,stop,offset,growth) = start + 0.5(stop-start)* (1 +tanh(growth *(x -offset)))
-SRSteps = 100
+SRSteps = 1500
 
 numSteps(i) = round(Int,cappedGrowth(i,20,40,SRSteps - SRSteps÷2,10/SRSteps))
 learningRate(i) = cappedGrowth(i,8e-1,4e-1,SRSteps - SRSteps÷2,5/SRSteps)
@@ -64,7 +64,7 @@ learningRate(i) = i > SRSteps ÷8 ? 1e-2 : 1e-4
 numSteps(i) = i > SRSteps ÷2 ? 50 : 10
 ##
 
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,numSteps ,ψGSymm,SRSteps,learningRate,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,30 ,ψGSymm,SRSteps,3e-4,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
 report_steps = 10,
 reset = false,
 # outfile = "tempSR/SR2.h5"
@@ -73,7 +73,7 @@ reset = false,
 ψGnew = deepcopy(ψG)
 SW.get_params(ψGnew) .= stochReconfRes.params
 # SW.get_params(ψGnew) .= stochReconfRes.params_steps[:,begin]
-plotVarEn(stochReconfRes,movavg = 30,alpha_index = 6000)
+plotVarEn(stochReconfRes,movavg = 30,alpha_index = 1)
 ##
 with_theme(theme_SimpleTicks()) do
 
@@ -113,7 +113,7 @@ end
 ##
 
 SW.Random.seed!(1234)
-NWalkers = 28*6
+NWalkers = 28*3
 NSteps = 2000
 @time resultsNaive = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψGold;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
 
@@ -155,11 +155,11 @@ with_theme(theme_SimpleTicks()) do
 
         inds = [
             (4,5),
-            (5,5),
-            (6,5),
-            (5,4),
-            (5,6),
-            # Tuple(argmax(Sqmean[:,:,end]))
+            # (5,5),
+            # (6,5),
+            # (5,4),
+            # (5,6),
+            Tuple(argmax(Sqmean[:,:,end]))
         ]
 
         x = axes(SqsGFMC)[3] .* CT.τ

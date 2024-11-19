@@ -13,6 +13,7 @@ include("VariationalFunctions/RBMSpin1.jl")
 include("VariationalFunctions/PlaquetteRBM.jl")
 include("VariationalFunctions/RKFunction.jl")
 include("VariationalFunctions/JastrowFunction.jl")
+include("VariationalFunctions/SimpleJastrowFunction.jl")
 include("VariationalFunctions/NaiveFunction.jl")
 
 include("StochasticReconfiguration.jl")
