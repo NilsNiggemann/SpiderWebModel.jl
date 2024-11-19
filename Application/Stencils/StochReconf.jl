@@ -7,7 +7,7 @@ using MakieHelpers
 # using MKL
 include("plottingUtils.jl")
 ##
-S = SW.stencilConfig(zeros(12,12),1;
+S = SW.stencilConfig(zeros(20,20),1;
 boundaryCondition = :periodic
 )
 S .= SW.periodicStateDenseLoops(size(S,1))
@@ -27,10 +27,10 @@ S .= SW.periodicStateDenseLoops(size(S,1))
 ψG = SW.JastrowFunction(S,Float64)
 # ψG = SW.orderGuidingFunction(S)
 # ψG = SW.PlaquetteRBM(S,1,Float64)
-Symmetry = SW.SymmetryGroup(SW.TranslationalSymmetry(SA[2,2],SA[-2,2]),SW.ExchangeSymmetry())
+# Symmetry = SW.SymmetryGroup(SW.TranslationalSymmetry(SA[2,2],SA[-2,2]),SW.ExchangeSymmetry())
 # Symmetry = SW.SymmetryGroup(SW.ExchangeSymmetry())
 ψGSymm = SW.getNonSymmetric(ψG)
-ψGSymm = SW.symmetrize(ψG,Symmetry,S)
+# ψGSymm = SW.symmetrize(ψG,Symmetry,S)
 # SW.reduceParams!(ψGSymm,,S)
 SW.Random.seed!(1234)
 # ψGSymm = SW.symmetrize(S,ψG,(4,4))
@@ -52,7 +52,7 @@ CTSR = SW.ContinuousTimeMethod(8,Hxx = CT.Hxx)
 
 ##
 cappedGrowth(x,start,stop,offset,growth) = start + 0.5(stop-start)* (1 +tanh(growth *(x -offset)))
-SRSteps = 500
+SRSteps = 100
 
 numSteps(i) = round(Int,cappedGrowth(i,20,40,SRSteps - SRSteps÷2,10/SRSteps))
 learningRate(i) = cappedGrowth(i,8e-1,4e-1,SRSteps - SRSteps÷2,5/SRSteps)
@@ -60,11 +60,11 @@ lines(1:SRSteps,5000*learningRate.(1:SRSteps))
 lines!(1:SRSteps,numSteps.(1:SRSteps))
 # current_figure()
 ##
-# learningRate(i) = i > 450 ? 1e-3 : 1e-3
-# numSteps(i) = i > SRSteps ÷2 ? 30 : 20
+learningRate(i) = i > SRSteps ÷8 ? 1e-2 : 1e-4
+numSteps(i) = i > SRSteps ÷2 ? 50 : 10
 ##
 
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,numSteps ,ψGSymm,SRSteps,8e-4,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,numSteps ,ψGSymm,SRSteps,learningRate,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
 report_steps = 10,
 reset = false,
 # outfile = "tempSR/SR2.h5"
@@ -73,20 +73,17 @@ reset = false,
 ψGnew = deepcopy(ψG)
 SW.get_params(ψGnew) .= stochReconfRes.params
 # SW.get_params(ψGnew) .= stochReconfRes.params_steps[:,begin]
-plotVarEn(stochReconfRes,movavg = 10)
+plotVarEn(stochReconfRes,movavg = 30,alpha_index = 6000)
 ##
 with_theme(theme_SimpleTicks()) do
-    S = SW.stencilConfig(zeros(12,12),1;
-    boundaryCondition = :periodic
-    )
-    ψG = SW.JastrowFunction(S)
 
-    params = SW.get_params(ψG)
 
-    vij = SW.PeriodicMatrix(reshape(ψGnew.v_ij[1+2*size(S,1)+2,:],size(S)))
+    # vij = SW.PeriodicMatrix(reshape(ψGnew.v_ij[1+2*size(S,1)+2,:],size(S)))
+    # vij = SW.PeriodicMatrix(reshape(ψGnew.v_ij[1+5*size(S,1)+2,:],size(S)))
+    vijFull = reshape(ψGnew.v_ij,size(S,1),size(S,2),size(S,1),size(S,2))
     # vij = SW.PeriodicMatrix(reshape(ψGnew.v_ij[1+2*size(S,1)+2,:],size(S)))[3:end+2,3:end+2]
-
-    fig,ax,hm = SW.heatmap(vij)
+    vij = vijFull[10,15,:,:]
+    fig,ax,hm = SW.heatmap(vij;colormap = :viridis)
     # use text! to annotate the heatmap with the value of each vij matrix element, recast as an Int
     # for J in CartesianIndices(vij)
     #     for I in CartesianIndices(vij)
@@ -109,13 +106,14 @@ with_theme(theme_SimpleTicks()) do
 
         # text!(ax, [Point(i,j)], string(round(Int, v)), color = :white,fontsize = 25)
     end
+    Colorbar(fig[1,2],hm)
     fig
 end
 
 ##
 
 SW.Random.seed!(1234)
-NWalkers = 28
+NWalkers = 28*6
 NSteps = 2000
 @time resultsNaive = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψGold;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
 
@@ -141,8 +139,8 @@ current_figure()
 ##
 plotVarEn(stochReconfRes,movavg = 10,E_exact = mean(last.(SW.getEnergies.(resultsNaive,1,50))))
 ##
-SqsGFMCNaive = SW.getSqsGFMC(resultsNaive,1:50)
-SqsGFMC = SW.getSqsGFMC(results,1:50)
+SqsGFMCNaive = SW.getSqsGFMC(resultsNaive,1:70)
+SqsGFMC = SW.getSqsGFMC(results,1:70)
 ##
 with_theme(theme_SimpleTicks()) do 
     fig = Figure(fontsize = 22,size = (500,400))
@@ -150,22 +148,22 @@ with_theme(theme_SimpleTicks()) do
     
     linestyles = [:solid,:dash,:dot,:dashdot,:dashdotdot]
     colors = [:black,:red,:green,:purple,:orange]
-    for (linestyle,SqsGFMC,color) in zip(linestyles,(SqsGFMC,SqsGFMCNaive),colors)
+    for (SqsGFMC,color) in zip((SqsGFMCNaive,SqsGFMC),colors)
 
         Sqmean = dropmean(SqsGFMC,dims = 4)
         Sqerr = dropstd(SqsGFMC,dims = 4)
 
         inds = [
             (4,5),
-            # (5,5),
-            # (6,5),
-            # (5,4),
-            # (5,6),
-            Tuple(argmax(Sqmean[:,:,end]))
+            (5,5),
+            (6,5),
+            (5,4),
+            (5,6),
+            # Tuple(argmax(Sqmean[:,:,end]))
         ]
 
         x = axes(SqsGFMC)[3] .* CT.τ
-        for (i,j) in inds
+        for (linestyle, (i,j)) in zip(linestyles,inds)
             sqm = Sqmean[i,j,:]
             sqe = Sqerr[i,j,:]
             
@@ -178,7 +176,7 @@ with_theme(theme_SimpleTicks()) do
 end
 ##
 with_theme(theme_PiTicks()) do 
-    Sq = dropmean(SqsGFMC,dims=4)[:,:,10] ./4
+    Sq = dropmean(SqsGFMC,dims=4)[:,:,30] ./4
     kx = ky = 2pi .* LinRange(0,1,size(Sq,1))
     fig = Figure(fontsize = 22,size = (800,400))
     axMC = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"k_y",title = L"GFMC$$",aspect = 1)
@@ -201,4 +199,11 @@ with_theme(theme_PiTicks()) do
 
     rowsize!(fig.layout,2,Relative(0.1))
     fig
+end
+
+##
+let 
+    Gnp
+    sqtau = getImagTimeCorr(Gnp,reconfigurationTable,ObsFunc::T,mtau=size(Gnp,2)÷4, m=size(Gnp,2)÷2)
+    
 end

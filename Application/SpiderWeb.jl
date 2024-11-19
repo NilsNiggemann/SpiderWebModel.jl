@@ -67,7 +67,7 @@ AFM = let
     S = SW.SpinConfig([0.5 * (-1)^(i + j) for i = 1:100, j = 1:100], 1 / 2)
 end
 
-SW.PlaquetteOperatorSave!(AFM, 5, 5)
+# SW.PlaquetteOperatorSave!(AFM, 5, 5)
 plotSpinConfig(AFM)
 ##
 SW.fulFillsConstraint(AFM)
@@ -115,23 +115,11 @@ function findOps(Conf)
     Allops = [x for x in Allops if SW.CanApplyAnywhere(Conf, x)]
     return Allops
 end
-##
-function plotApplPlaquettes(State)
-    b = findOps(State)
-    plaqs = SW.getApplicablePlaquettes(State, b[1])
-    plaqs2 = SW.getApplicablePlaquettes(State, b[3])
-    fig = plotSpinConfig(State, markersize = 23)
-    ax = current_axis()
-    points = Point2f.(plaqs)
-    points2 = Point2f.(plaqs2)
-    scatter!(ax, points, markersize = 13, color = :red)
-    scatter!(ax, points2, markersize = 13, color = :lime)
-    fig
-end
+
 ##
 let
     StairCase = getStairCase(15)
-    plotApplPlaquettes(StairCase)
+    SW.plotApplPlaquettes(StairCase)
 end
 ##
 function generateRandomGroundState(L, S = 1 / 2; maxiter = 1_000_000)
@@ -201,8 +189,6 @@ let
     current_figure()
 end
 ##
-include("plotStructureFac.jl")
-##
 function getConfigs(L, numConfigs = 10; kwargs...)
     # paths = [SW.ydirecPathReverse(L),SW.xdirecPathReverse(L),SW.ydirecPath(L),SW.xdirecPath(L),SW.spiralPath(L)]
 
@@ -248,7 +234,6 @@ function getConfigsSpiral(L, numConfigs = 10; kwargs...)
     S =
         fetch.([
             Threads.@spawn SW.constructConfigPath(
-                SW.DictAlgorithm(),
                 L,
                 L,
                 SW.ALLGS_S12,
@@ -276,7 +261,7 @@ let
 end
 ##
 # Confs = [SW.SpinConfig(S,1/2) for S in eachslice(h5read("confs20.h5","Confs"),dims = 3)]
-plotStructureFac(Confs, cbar = false)
+heatmap(real(SW.getEqualWeightStructureFac(Confs).Sq))
 ##
 save("Confs/SpiralPathSq_14.pdf", current_figure())
 ##
@@ -425,3 +410,29 @@ a = readConfs("ConfsRaw/Confs35.h5")
 ##
 ConfFlucs = appendFluctuations(a, 4, 2, b)
 plotStructureFac(ConfFlucs)
+
+
+##
+
+function findHigherFlucs(L)
+    Conf = SW.stencilConfig(zeros(L,L),1,boundaryCondition = :periodic)
+    Linner = L-2
+    internalSites = Iterators.product((-1:1 for _ in 1:Linner^2)...)
+    return _inner(Conf,collect(internalSites))
+end
+function _inner(Conf,internalSites)
+    
+    internal = @view Conf[2:end-1,2:end-1]
+    ops = typeof(Conf)[]
+    for op in internalSites
+        all(iszero,op) && continue
+        iszero(sum(op)) || continue
+        internal[:] .= op
+        if SW.fulFillsConstraint(Conf)
+            push!(ops,copy(Conf))
+        end
+    end
+    return ops
+end
+a = findHigherFlucs(6)
+##

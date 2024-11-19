@@ -198,13 +198,13 @@ function splitIntoBins(array,binsize)
 end
 
 
-function getStructureFacWeights(AllStates::AbstractVector{<:SpinConfig}, weights, tol = 0)
+function getStructureFacWeights(AllStates::AbstractVector{<:AbstractMatrix}, weights, tol = 0)
     # weights = abs2.(Psi)
     # state_weight = collect(zip( AllStates,weights))[inds]
     Conf = parent(AllStates[1])
-    Sq = similar(Conf, Complex{eltype(Conf)})
-    Si = similar(Conf, Complex{eltype(Conf)})
-    plan = FFTW.plan_fft(Conf)
+    Sq = zeros(ComplexF32,size(Conf))
+    Si = zeros(ComplexF32,size(Conf))
+    plan = FFTW.plan_fft(Sq)
     # Sq(c) = mul!(outBuffer,plan,c)
     
     Lx,Ly = size(Conf)
