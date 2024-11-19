@@ -28,7 +28,7 @@ function _evaluate_jastrow_simple(ψG,x::AbstractMatrix)
     m = get_m_i(ψG)
     v = get_v_ij(ψG)
 
-    exp_m = zero(eltype(α))
+    exp_m = zero(eltype(m))
     for i in eachindex(IndexLinear(),x)
         exp_m += m[i] * x[i]
     end
