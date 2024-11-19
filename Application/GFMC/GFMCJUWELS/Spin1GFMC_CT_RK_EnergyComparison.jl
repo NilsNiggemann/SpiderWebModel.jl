@@ -12,7 +12,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=48
 #SBATCH --mem=90GB         # memory , more means less gc time
-#SBATCH --time=0-24:00:00          # total run time limit (HH:MM:SS)
+#SBATCH --time=0-3:00:00          # total run time limit (HH:MM:SS)
 #SBATCH --mail-type=END
 #SBATCH --output=/p/project/pmfrg/niggemann1/JobsOutput/Spiderweb/GFMC/EnergySweep/Spin1_%a.out    # File to which standard Out- will be written
 
@@ -137,8 +137,8 @@ end
 
 ##
 
-initializer = getInitializer(parentState,μ;NWalkers,NSteps = 100,OptIndep = 20)
-# initializer = getInitializer(parentState,μ;NWalkers,NSteps = 1,OptIndep = 2)
+# initializer = getInitializer(parentState,μ;NWalkers,NSteps = 100,OptIndep = 20)
+initializer = getInitializer(parentState,μ;NWalkers,NSteps = 1,OptIndep = 2)
 ##
 # rm(outfileSR,force=true)
 SRdir = ENV["MYSCRATCH"]*"/Spiderweb/DataStochRec/L=($L)/periodic_RK_Full_$(SECTOR_NAME)/mu=$(μ)/"
@@ -210,6 +210,7 @@ AllResults = vcat(SW.readResults.(resFiles,NSteps÷NBinsEval)...);
 ## 
 outfileTotal = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/eval/L=$(L)/mu=$(μ)/Spin1GFMC_Eval_periodic_$(SECTOR_NAME)_mu$(μ)_L$(L)_$(i_arg).h5"
 mkpath(dirname(outfileTotal))
+rm(outfileTotal,force=true)
 @assert !isfile(outfileTotal) "file already exists!"
 function getEns(results)
     en = [SW.getEnergies(res.TotalWeights,res.energies,1,1000÷res.nBra) for res in results]
@@ -227,7 +228,7 @@ let
         file["tau"] = τ
     end
     
-    Threads.@threads for projectionSteps in (1,10,20,50,100,250,300)
+    Threads.@threads for projectionSteps in (2,10,20,50,100,250,300)
     # for projectionSteps in (20,40)
         SqsGFMC = stack(SW.getSqsGFMC(AllResults,projectionSteps),dims=3)
         h5open(outfileTotal,"cw") do file

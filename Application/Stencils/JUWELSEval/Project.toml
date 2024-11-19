@@ -1,0 +1,12 @@
+[deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Cubature = "667455a9-e2ce-5579-9412-b964f529a492"
+HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
+LatticeFFTs = "83e9f648-131d-4a3c-a1de-d155351cd207"
+MakieHelpers = "769ed66a-a1e3-4c16-885f-a5b16fb973c2"
+Optim = "429524aa-4258-5aef-a3af-852621145aeb"
+SpiderWebModel = "8e1b84da-b1d7-4311-a21b-52324f990117"
+SpinFRGLattices = "053fb7f8-31b7-4f68-aef8-4452b415dd8c"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Stencils = "264155e8-78a8-466a-aa59-c9b28c34d21a"

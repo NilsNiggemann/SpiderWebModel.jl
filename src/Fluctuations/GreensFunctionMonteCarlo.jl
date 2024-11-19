@@ -393,7 +393,7 @@ function _save_h5_array(file,datasetname,arr::RecursiveArrayTools.ArrayPartition
         file[datasetname*"/"*string(i)] = arr.x[i]
     end
 end
-function _save_h5_array(file,datasetname,arr::AbstractArray)
+function _save_h5_array(file,datasetname,arr)
     file[datasetname] = arr
 end
 

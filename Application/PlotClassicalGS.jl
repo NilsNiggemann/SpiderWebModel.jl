@@ -26,7 +26,7 @@ Configs =
 end
 ##
 
-SW.plotFractons(Configs[10])
+SW.plotFractons(SW.stencilConfig(Configs[10]))
 ##
 function SqLargeN(qx,qy)
     cx = cos(qx)
@@ -199,7 +199,7 @@ getRKWavefunction(ψ) = SW.normalize!(one.(ψ))
 plotOverview(res, sol; kwargs...) = plotOverview(getObservables(res, sol); kwargs...)
 
 ##
-InitialConf = getPeriodic(SW.getStairCase(14))
+InitialConf = getPeriodic(SW.getStairCase(12))
 SolStair = solveED(InitialConf)
 ##
 States = SW.spinConfig.(SolStair.HilbertSpace.AllStates,Ref(InitialConf),Ref(SolStair.HilbertSpace.plaqMapping))
@@ -207,115 +207,6 @@ States = SW.spinConfig.(SolStair.HilbertSpace.AllStates,Ref(InitialConf),Ref(Sol
 SqED = SW.getStructureFac(States, SolStair.ψ0)
 SqRK = SW.getStructureFac(States, getRKWavefunction(SolStair.ψ0))
 
-##
-with_theme(theme_PiTicks()) do
-    fig = Figure(size = 0.7 .*(600,480))
-    ticks = PiTicks([0,pi])
-
-    subgl_top = GridLayout()
-    subgl_bot = GridLayout()
-
-    axkwargs = (;    xminorticksvisible=true,yminorticksvisible=true,xtickwidth = 1.4,ytickwidth = 1.4,xminortickwidth = 1.2,yminortickwidth = 1.2,xticksize=5,yticksize=5,xminorticksize=3,yminorticksize=3,xminortickalign =1,yminortickalign =1,xtickalign =1,xticksmirrored =true,yticksmirrored=true,ytickalign=1,
-    xlabelpadding = -5
-    )
-
-    subgl_top[1, 1] = ax = Axis(fig, aspect = 1,xticks = ticks,yticks = ticks,xminorticksvisible = true ,xlabel = L"q_x",ylabel = L"q_y",yminorticksvisible = true,
-    xlabelvisible=true;
-    axkwargs...
-    )
-    subgl_top[1, 2] = ax2 = Axis(fig, aspect = 1,yticklabelsvisible=false,xminorticksvisible = true ,xlabel = L"q_x",yminorticksvisible = true,
-    xlabelvisible=true,
-    xticklabelsvisible=true,xticks = ticks,yticks = ticks,
-    # title = L"class. spin-$1/2$"
-    ;
-    axkwargs...
-    )
-    subgl_top[1, 3] = ax3 = Axis(fig, aspect = 1,yticklabelsvisible=false,xminorticksvisible = true ,xlabel = L"q_x",yminorticksvisible = true,
-    xlabelvisible=true,
-    xticklabelsvisible=true,xticks = ticks,yticks = ticks,
-    # title = L"class. spin-$1$"
-    ;
-    axkwargs...
-    )
-
-    SqFunc = SW.getSqCont(real(Sq.Sq) ./ (1/2*(1/2+1)))
-
-    Sq1Func = SW.getSqCont(real(SqSpin1) ./2) # normalize by S(S+1)
-    
-    kx = collect(trueMomenta(-0.5pi,1.5pi,size(Sq.Sq,1)-1))
-    # kx = kx
-    ky = kx
-    kxSpin1 = collect(trueMomenta(-0.5pi,1.5pi,size(SqSpin1,1)-1))
-    # kxSpin1 = 2pi .* (0.5:1)
-    kySpin1 = kxSpin1
-
-    SqLN = [SqLargeN(kx,ky)/4 for kx in kxSpin1 , ky in kySpin1]
-    SqPlot = [SqFunc(kx,ky) for kx in kx , ky in kx]
-    SqSpin1Plot = [Sq1Func(kx,ky) for kx in kxSpin1 , ky in kySpin1]
-
-    @info "" sum(SqLN)/length(SqLN) sum(SqPlot)/length(SqPlot) sum(SqSpin1)/length(SqSpin1) length(kxSpin1)
-    # cRange = extrema(SqPlot)
-    cRange = (0,maximum(SqPlot))
-    hm = heatmap!(ax,kx,ky,SqLN,colorrange = cRange)
-    hm2 = heatmap!(ax2,kx,ky,SqPlot,colorrange = cRange)
-    hm3 = heatmap!(ax3,kx,ky,SqSpin1Plot,colorrange = cRange)
-    # hm = halfhalfheatmap!(ax,kx,ky,SqFunc,SqLargeN,x->-x+3pi,normalize = true)
-
-    subgl_bot[1, 1] = axED1 = Axis(fig, xlabel = L"q_x", ylabel = L"q_y", aspect = 1,xminorticksvisible = true, yminorticksvisible = true,xticks = ticks, yticks = ticks;
-    # axkwargs...,
-    # xtickcolor = :white,ytickcolor = :white,xminortickcolor = :white,yminortickcolor = :white
-    )
-    subgl_bot[1, 2] = axED2 = Axis(fig, xlabel = L"q_x", ylabel = L"q_y", aspect = 1,ylabelvisible = false,yticklabelsvisible = false,xminorticksvisible = true, yminorticksvisible = true,xticks = ticks, yticks = ticks;
-    # axkwargs...,
-    # xtickcolor = :white,ytickcolor = :white,xminortickcolor = :white,yminortickcolor = :white
-    )
-    kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqED.Sq,1)-1)
-    SqFunc = SW.getSqCont(SqED.Sq  ./ (1/2*(1/2+1)))
-    SqMat = [real(SqFunc(x,y)) for x in kx, y in ky] 
-
-    colorrange = extrema(SqMat)
-    SqRKFunc = SW.getSqCont(SqRK.Sq  ./ (1/2*(1/2+1)))
-    SqRKMat = [real(SqRKFunc(x,y)) for x in kx, y in ky]
-    hmED1 = heatmap!(axED1, kx, ky, SqMat;colorrange )
-    colorrange = extrema(SqRKMat)
-    hmED2 = heatmap!(axED2, kx, ky, SqRKMat;colorrange)
-
-    fig.layout[1, 1] = subgl_top
-    fig.layout[2, 1] = subgl_bot
-    # Label(fig[1,1, TopLeft()],L"a)$$",padding = (-30,0,-20,0))
-    # Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-20,0))
-    # Label(fig[1,3, TopLeft()],L"c)$$",padding = (-30,0,-20,0))
-    # Label(fig[2,1, TopLeft()],L"d)$$",padding = (-30,0,-20,0))
-    # Label(fig[2,2, TopLeft()],L"e)$$",padding = (-30,0,-20,0))
-
-    textpos = Point(-pi/2,3pi/2)
-
-
-    Colorbar(subgl_top[1,4], hm2,height = Relative(1),width = Relative(0.8),label = L"\mathcal{S}(q)/S(S+1)",ticks = SimpleTicks([0,0.2,0.4,0.6]))
-    Colorbar(subgl_bot[1,3], hmED2,height = Relative(1),width = Relative(0.8),label = L"\mathcal{S}(q)/S(S+1)",ticks = SimpleTicks())
-
-
-    text!(ax, textpos ,text = L"a)",color = :black,align = (:left,:top),fontsize = 18)
-    text!(ax2, textpos ,text = L"b)",color = :black,align = (:left,:top),fontsize = 18)
-    text!(ax3, textpos ,text = L"c)",color = :black,align = (:left,:top),fontsize = 18)
-
-    text!(axED1, textpos ,text = L"d)",color = :white,align = (:left,:top),fontsize = 18)
-    text!(axED2, textpos ,text = L"e)",color = :white,align = (:left,:top),fontsize = 18)
-
-    rowsize!(fig.layout,2,Relative(0.6))
-    rowgap!(fig.layout,1,-5)
-
-    colsize!(subgl_top,4,Relative(0.02))
-    colsize!(subgl_bot,3,Relative(0.05))
-
-    colgap!(subgl_top,1,0)
-    colgap!(subgl_top,2,0)
-    colgap!(subgl_top,3,5)
-    save("../Application/figs/Sq_comparison_2.png", fig,px_per_unit=4)
-    # Colorbar(fig[1, 2], hm)
-    fig
-    
-end
 ##
 SqGFMCStaircase = h5read("../Application/Data/StaircaseS12_L40_RK.h5","Sqs") ./4
 ##
@@ -328,7 +219,7 @@ with_theme(theme_PiTicks()) do
     subgl_top = GridLayout()
     subgl_bot = GridLayout()
 
-    axkwargs = (;    xminorticksvisible=true,yminorticksvisible=true,xtickwidth = 1.4,ytickwidth = 1.4,xminortickwidth = 1.2,yminortickwidth = 1.2,xticksize=5,yticksize=5,xminorticksize=3,yminorticksize=3,xminortickalign =1,yminortickalign =1,xtickalign =1,xticksmirrored =true,yticksmirrored=true,ytickalign=1,
+    axkwargs = (;xminorticksvisible=true,yminorticksvisible=true,xtickwidth = 1.4,ytickwidth = 1.4,xminortickwidth = 1.2,yminortickwidth = 1.2,xticksize=5,yticksize=5,xminorticksize=3,yminorticksize=3,xminortickalign =1,yminortickalign =1,xtickalign =1,xticksmirrored =true,yticksmirrored=true,ytickalign=1,
     xlabelpadding = -5,
     xtickcolor = :white,
     xminortickcolor = :white,
@@ -347,17 +238,9 @@ with_theme(theme_PiTicks()) do
     ;
     axkwargs...
     )
-    subgl_top[1, 3] = ax3 = Axis(fig, aspect = 1,yticklabelsvisible=false,xminorticksvisible = true ,xlabel = L"q_x",yminorticksvisible = true,
-    xlabelvisible=false,xticklabelsvisible=false,xticks = ticks,yticks = ticks,
-    # title = L"class. spin-$1$"
-    ;
-    axkwargs...
-    )
 
     SqFunc = SW.getSqCont(real(Sq.Sq) ./ (1/2*(1/2+1)))
 
-    Sq1Func = SW.getSqCont(real(SqSpin1) ./2) # normalize by S(S+1)
-    
     kx = collect(trueMomenta(-0.5pi,1.5pi,size(Sq.Sq,1)-1))
     # kx = kx
     ky = kx
@@ -367,14 +250,11 @@ with_theme(theme_PiTicks()) do
 
     SqLN = [SqLargeN(kx,ky)/4 for kx in kxSpin1 , ky in kySpin1]
     SqPlot = [SqFunc(kx,ky) for kx in kx , ky in kx]
-    SqSpin1Plot = [Sq1Func(kx,ky) for kx in kxSpin1 , ky in kySpin1]
-
-    @info "" sum(SqLN)/length(SqLN) sum(SqPlot)/length(SqPlot) sum(SqSpin1)/length(SqSpin1) length(kxSpin1)
+    @info "" sum(SqLN)/length(SqLN) sum(SqPlot)/length(SqPlot)
     # cRange = extrema(SqPlot)
     cRange = (0,maximum(SqPlot))
     hm = heatmap!(ax,kx,ky,SqLN,colorrange = cRange)
     hm2 = heatmap!(ax2,kx,ky,SqPlot,colorrange = cRange)
-    hm3 = heatmap!(ax3,kx,ky,SqSpin1Plot,colorrange = cRange)
     # hm = halfhalfheatmap!(ax,kx,ky,SqFunc,SqLargeN,x->-x+3pi,normalize = true)
 
     subgl_bot[1, 1] = axED1 = Axis(fig, xlabel = L"q_x", ylabel = L"q_y", aspect = 1,xminorticksvisible = true, yminorticksvisible = true,xticks = ticks, yticks = ticks;
@@ -382,11 +262,6 @@ with_theme(theme_PiTicks()) do
     # xtickcolor = :white,ytickcolor = :white,xminortickcolor = :white,yminortickcolor = :white
     )
     subgl_bot[1, 2] = axED2 = Axis(fig, xlabel = L"q_x", ylabel = L"q_y", aspect = 1,ylabelvisible = false,yticklabelsvisible = false,xminorticksvisible = true, yminorticksvisible = true,xticks = ticks, yticks = ticks;
-    axkwargs...,
-    # xtickcolor = :white,ytickcolor = :white,xminortickcolor = :white,yminortickcolor = :white
-    )
-
-    subgl_bot[1, 3] = axED3 = Axis(fig, xlabel = L"q_x", ylabel = L"q_y", aspect = 1,ylabelvisible = false,yticklabelsvisible = false,xminorticksvisible = true, yminorticksvisible = true,xticks = ticks, yticks = ticks;
     axkwargs...,
     # xtickcolor = :white,ytickcolor = :white,xminortickcolor = :white,yminortickcolor = :white
     )
@@ -402,7 +277,6 @@ with_theme(theme_PiTicks()) do
     SqRKMat = [real(SqRKFunc(x,y)) for x in kx, y in ky]
     colorrange = extrema(SqRKMat)
 
-
     
     kxGFMC = kyGFMC = trueMomenta(-0.5pi,1.5pi,size(SqGFMCStaircase,1)-1)
     
@@ -411,9 +285,8 @@ with_theme(theme_PiTicks()) do
 
     colorrange = (0,maximum(maximum.((SqGFMCStaircaseMat,SqMat,SqRKMat))))
     
-    hmED3 = heatmap!(axED3, kx, ky, SqGFMCStaircaseMat;colorrange)
+    hmED2 = heatmap!(axED2, kx, ky, SqGFMCStaircaseMat;colorrange)
     hmED1 = heatmap!(axED1, kx, ky, SqMat;colorrange )
-    hmED2 = heatmap!(axED2, kx, ky, SqRKMat;colorrange)
 
     fig.layout[1, 1] = subgl_top
     fig.layout[2, 1] = subgl_bot
@@ -426,32 +299,20 @@ with_theme(theme_PiTicks()) do
     textpos = Point(-pi/2,3pi/2)
 
 
-    Colorbar(subgl_top[1,4], hm2,height = Relative(1),width = Relative(0.8),label = L"\mathcal{S}(q)/S(S+1)",ticks = SimpleTicks([0,0.2,0.4,0.6]))
-    Colorbar(subgl_bot[1,4], hmED2,height = Relative(1),width = Relative(0.8),label = L"\mathcal{S}(q)/S(S+1)",ticks = SimpleTicks())
+    Colorbar(subgl_top[1,3], hm2,height = Relative(1),width = Relative(0.8),label = L"\mathcal{S}(q)/S(S+1)",ticks = SimpleTicks([0,0.2,0.4,0.6]))
+    Colorbar(subgl_bot[1,3], hmED2,height = Relative(1),width = Relative(0.8),label = L"\mathcal{S}(q)/S(S+1)",ticks = SimpleTicks())
 
 
     text!(ax, textpos ,text = L"a)",color = :black,align = (:left,:top),fontsize = 18)
     text!(ax2, textpos ,text = L"b)",color = :black,align = (:left,:top),fontsize = 18)
-    text!(ax3, textpos ,text = L"c)",color = :black,align = (:left,:top),fontsize = 18)
 
     text!(axED1, textpos ,text = L"d)",color = :white,align = (:left,:top),fontsize = 18)
-    text!(axED2, textpos ,text = L"e)",color = :white,align = (:left,:top),fontsize = 18)
-    text!(axED3, textpos ,text = L"f)",color = :white,align = (:left,:top),fontsize = 18)
-    text!(axED3, Point(pi,3pi/2) ,text = L"\times \frac{1}{%$(L40RescalingFactor)}",color = :white,align = (:left,:top),fontsize = 14)
+    text!(axED2, textpos ,text = L"f)",color = :white,align = (:left,:top),fontsize = 18)
+    text!(axED2, Point(pi,3pi/2) ,text = L"\times \frac{1}{%$(L40RescalingFactor)}",color = :white,align = (:left,:top),fontsize = 14)
     
     # rowsize!(fig.layout,2,Relative(0.6))
     rowgap!(fig.layout,1,4)
 
-    colsize!(subgl_top,4,Relative(0.02))
-    colsize!(subgl_bot,4,Relative(0.02))
-
-    colgap!(subgl_top,1,3)
-    colgap!(subgl_top,2,3)
-    colgap!(subgl_top,3,5)
-
-    colgap!(subgl_bot,1,3)
-    colgap!(subgl_bot,2,3)
-    colgap!(subgl_bot,3,5)
 
     save("../Application/figs/Sq_comparison_2.png", fig,px_per_unit=4)
     # Colorbar(fig[1, 2], hm)

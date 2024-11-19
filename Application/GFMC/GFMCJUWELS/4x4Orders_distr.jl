@@ -1,0 +1,119 @@
+#!/bin/bash
+#=
+#!/bin/bash
+
+#SBATCH --account=pmfrg
+
+#SBATCH --job-name=2ECompGFMC                 # replace name
+#SBATCH --export=ALL,JULIA_EXCLUSIVE=1
+#SBATCH --mail-user=nils.niggemann@fu-berlin.de  # replace email address
+# SBATCH --nodes=1
+# SBATCH --ntasks-per-node=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=48
+#SBATCH --mem=90GB         # memory , more means less gc time
+#SBATCH --time=0-10:00:00          # total run time limit (HH:MM:SS)
+#SBATCH --mail-type=END
+#SBATCH --output=/p/project/pmfrg/niggemann1/JobsOutput/Spiderweb/GFMC/EnergySweep/4x4Spin1_%a.out    # File to which standard Out- will be written
+
+jutil env activate -p pmfrg
+cd $PROJECT/niggemann1
+module --force purge
+module load Stages/2024  
+module load GCCcore/.12.3.0
+
+module load Julia/1.9.3
+export JULIA_DEPOT_PATH=/p/scratch/pmfrg/niggemann1/.julia/
+
+julia -O3 -t $SLURM_CPUS_PER_TASK /p/project/pmfrg/niggemann1/Jobs/SpiderWebModel.jl/Application/GFMC/GFMCJUWELS/4x4Orders_distr.jl ${SLURM_ARRAY_TASK_ID}
+exit
+=#
+
+import Pkg
+Pkg.activate(@__DIR__)
+cd(@__DIR__)
+import SpiderWebModel as SW
+using SpiderWebModel.HDF5
+i_arg = parse(Int, ARGS[1])
+
+function upscale(Conf,L)
+    S = similar(Conf,L,L)
+    per = SW.PeriodicMatrix(Conf,L,L)
+    for I in CartesianIndices(S)
+        S[I] = per[I]
+    end
+    S
+end
+function findFirstMiIndex(arr)
+    minval = arr[begin]
+    i_min = firstindex(arr)
+    for (i,x) in enumerate(arr)
+        if x < minval
+            i_min = i
+            minval = x
+        end
+    end
+    return i_min
+end
+
+function findEnergies(Configs,CT,ψG;Nwalkers = 28*2,NSteps = 2000,equilibration_steps = NSteps ÷6,outfileDIR = nothing)
+    en = zeros(length(Configs))
+    Δen = zeros(length(Configs))
+    getOutfile(i,j) = isnothing(outfileDIR) ? nothing : joinpath(outfileDIR,"$(i)_$(j).h5")
+
+    Threads.@threads for i in eachindex(Configs,en)
+        S = Configs[i]
+        if length(SW.getApplicablePlaquettes(S)) == 0
+            en[i] = 0
+            Δen[i] = 0
+            continue
+        end
+        Nwalkers = Nwalkers*round(Int,length(SW.getNPlaq(S))/ 5)
+        results = [SW.startManyWalkerGFMC(S,CT,Nwalkers,NSteps,ψG;equilibration_steps,pre_equilibration_steps=NSteps,scatter_fraction = 0.8,outfile = getOutfile(i,i_st)) for i_st in 1:6]
+
+        energies = SW.getEnergies.(results,1,min(NSteps÷3, 300))
+        energiesMean = SW.mean.(energies)
+        energiesStd = SW.std.(energies)
+        e0_index = findFirstMiIndex(energiesMean)
+        en[i] = energiesMean[e0_index]
+        Δen[i] = energiesStd[e0_index]
+    end
+    return (;en,Δen)
+end
+function makeConf(UC,L,Spin)
+    S = SW.stencilConfig(zeros(L,L),Spin;
+    boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+    )
+    S .= SW.getPeriodicState(UC,L,L)
+    return S
+end  
+##
+L = 16
+Nwalkers = 48*60
+NSteps = 6000
+
+reducedConfigs = makeConf.(collect.(eachslice(SW.h5read("../../Data/reducedConfigs.h5","reducedConfigs"),dims=3)),L,1)
+
+
+mus_sectors = LinRange(-0.15,0.99,30)
+mu = mus_sectors[i_arg]
+##
+CT = SW.ContinuousTimeMethod(0.2,1,-0.266length(reducedConfigs[1]),SW.Hxx_RK(mu))
+ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-mu))
+outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/SectorComp/runs/L=$(L)/mu=$(mu)_$(i_arg)/"
+rm(outfileDIR,recursive=true,force=true)
+mkpath(outfileDIR)
+
+res = findEnergies(upscale.(reducedConfigs,L),CT,ψG;Nwalkers,NSteps,outfileDIR)
+##
+AllresEn = res.en
+AllresΔEn = res.Δen
+
+outfileTotal = "/p/scratch/pmfrg/niggemann1/Spiderweb/DataS1_CT_RK_equil/SectorComp2/L=$(L)/mu=$(mu).h5"
+mkpath(dirname(outfileTotal))
+
+h5write(outfileTotal,"energies",AllresEn)
+h5write(outfileTotal,"Δenergies",AllresΔEn)
+h5write(outfileTotal,"mu",mu)
+##
+rm(outfileDIR,recursive=true)

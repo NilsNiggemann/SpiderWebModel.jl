@@ -129,7 +129,7 @@ function trackWalkerPath(reconfigTable,InitialWalkers,NSteps)
 end
 
 function equilib_plots(results;scatter_fraction,averageSteps = 100,Ntrack=50,p = 50,plotPopulation=false)
-    fig = Figure(size = 0.8 .*(1000, 1200),theme = theme_SimpleTicks())
+    fig = Figure(size = 100 .*(10, length(results)),theme = theme_SimpleTicks())
     initWalkers = collect(round(Int,scatter_fraction*size(results[1].reconfigurationTable,1)):size(results[1].reconfigurationTable,1))
     function getkw(i,title)
         if i == firstindex(results)
@@ -237,7 +237,7 @@ function plotVarEn(stochReconfRes;normalization=1,movavg = 1,E_exact = NaN,alpha
 
 
     parsteps = stochReconfRes.params_steps
-    parslice = getLastSlice(parsteps)
+    parslice = parsteps[alpha_index,:]
     lastdim = length(size(stochReconfRes.params_steps))
 
     diffs = diff(stochReconfRes.params_steps,dims = lastdim)
