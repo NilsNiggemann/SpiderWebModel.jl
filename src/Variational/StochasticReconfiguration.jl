@@ -187,9 +187,9 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
 
         add_reconstructedFullParams!(ψG,indicesMapping,δα .*dt[i])
         
-        E0 = mean(res.energies[range])
+        E0 = mean(E_i)
         results.E0[i] = E0
-        ΔE0 = sqrt(var(res.energies[range]))
+        ΔE0 = std(E_i)
         results.ΔE[i] = ΔE0
         
         # push!(params_steps, copy(params))
