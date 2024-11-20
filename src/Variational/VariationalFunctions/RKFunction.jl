@@ -1,5 +1,6 @@
 struct RKFunction <: AbstractGuidingFunction end
 (psi::RKFunction)(W::SpiderWebWalker) = 1.
+(psi::RKFunction)(x::Any) = 1.
 
 guidingfunc_name(F::RKFunction) = "RKFunction"
 get_params(ψG::RKFunction) = nothing

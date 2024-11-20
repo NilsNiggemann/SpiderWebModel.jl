@@ -2,9 +2,21 @@ using Cubature, CairoMakie, StaticArrays,MakieHelpers
 function dispClass(kx,ky)
     4 - cos(2*kx) + cos(2*kx - 2*ky) - 2*cos(kx - ky) - cos(2*ky) - 2*cos(kx + ky) + cos(2*kx + 2*ky)
 end
+function ω(kx,ky)
+    sx,cx = sincos(kx)
+    sy,cy = sincos(ky)
+    w2 = (cx - cy)^2 + 4*(sx*sy)^2
+    return sqrt(w2)
+end
+ω(k) = ω(k[1],k[2])
+function getBBCorrFieldTheory(kx,ky)
+    f(k) = ω(k)*ω(SA[kx,ky]-k)
+    return hcubature(f, SA[-pi/2,-pi], SA[pi/2,pi], reltol = 1e-6, abstol = 1e-6)[1]
+end
+
 ##
-let 
-    k = LinRange(-pi,pi,100)
+with_theme(theme_PiTicks()) do
+    k = LinRange(0,4pi,100)
 
     BB = fetch.([Threads.@spawn getBBCorrFieldTheory(ki,kj) for ki in k, kj in k])
 
@@ -57,17 +69,6 @@ with_theme(theme_PiTicks()) do
 end
 
 ##
-function ω(kx,ky)
-    sx,cx = sincos(kx)
-    sy,cy = sincos(ky)
-    w2 = (cx - cy)^2 + 4*(sx*sy)^2
-    return sqrt(w2)
-end
-ω(k) = ω(k[1],k[2])
-function getBBCorrFieldTheory(kx,ky)
-    f(k) = ω(k)*ω(SA[kx,ky]-k)
-    return hcubature(f, SA[-pi/2,-pi], SA[pi/2,pi], reltol = 1e-6, abstol = 1e-6)[1]
-end
 
 with_theme(theme_PiTicks()) do 
     # let
