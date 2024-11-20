@@ -34,13 +34,14 @@ include("Types/VariationalWFTypes.jl")
 include("Constraint.jl")
 include("PeriodicTilings.jl")
 
-include("Fluctuations/Fluctuations.jl")
-include("Fluctuations/ConstructHilbertSpace.jl")
-include("Fluctuations/ED.jl")
-include("Fluctuations/GreensFunctionMonteCarlo.jl")
-include("Fluctuations/Observables.jl")
-include("Fluctuations/StraightForwardWalking.jl")
-include("Fluctuations/RandomFluctuations.jl")
+include("ED/Fluctuations.jl")
+include("ED/ConstructHilbertSpace.jl")
+include("ED/ED.jl")
+
+include("GreenFunctionMonteCarlo/GreenFunctionMonteCarlo.jl")
+include("GreenFunctionMonteCarlo/Observables.jl")
+include("GreenFunctionMonteCarlo/StraightForwardWalking.jl")
+include("GreenFunctionMonteCarlo/RandomFluctuations.jl")
 
 include("Variational/VariationalFunctions.jl")
 
