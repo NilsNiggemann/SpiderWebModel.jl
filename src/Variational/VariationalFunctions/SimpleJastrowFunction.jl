@@ -171,8 +171,6 @@ function generate_equivalent(type,k,T::TranslationalSymmetry,ψ::SimpleJastrowFu
 
 end
 
-struct ExchangeSymmetry <: AbstractSymop end
-
 function generate_equivalent(type,k,T::ExchangeSymmetry,ψ::SimpleJastrowFunction,S::AbstractMatrix) 
     if type == 2
         i,j = index_to_site_pair(k,S,ψ.v_ij)

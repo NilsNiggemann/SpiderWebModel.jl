@@ -1,7 +1,6 @@
 # module VariationalFunctions
 
 
-include("VariationalFunctions/GuidingFunctions.jl")
 include("Symmetries.jl")
 
 include("VariationalFunctions/LocalPlaquetteGuidingFunction.jl")

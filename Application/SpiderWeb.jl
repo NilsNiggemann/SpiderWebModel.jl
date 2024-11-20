@@ -418,21 +418,25 @@ function findHigherFlucs(L)
     Conf = SW.stencilConfig(zeros(L,L),1,boundaryCondition = :periodic)
     Linner = L-2
     internalSites = Iterators.product((-1:1 for _ in 1:Linner^2)...)
-    return _inner(Conf,collect(internalSites))
+    return _inner(Conf,internalSites)
 end
 function _inner(Conf,internalSites)
     
     internal = @view Conf[2:end-1,2:end-1]
     ops = typeof(Conf)[]
+    # ops = eltype(internalSites)[]
+    uniqueLens = Set{Int}(0)
     for op in internalSites
-        all(iszero,op) && continue
+        sum(abs,op) in uniqueLens && continue
         iszero(sum(op)) || continue
         internal[:] .= op
         if SW.fulFillsConstraint(Conf)
-            push!(ops,copy(Conf))
+            push!(uniqueLens,sum(abs,op))
+            # push!(ops,copy(Conf))
+            push!(ops,op)
         end
     end
     return ops
 end
-a = findHigherFlucs(6)
+a = findHigherFlucs(7)
 ##

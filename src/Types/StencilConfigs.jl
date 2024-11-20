@@ -1,7 +1,3 @@
-# struct StencilSpinConfig{T,MatType<:AbstractMatrix{T}} <: AbstractSpinConfig{T}
-#     Mat::MatType
-#     M::Int8
-# end
 struct StencilSpinConfig{MVal<:Val,T,MatType<:AbstractMatrix{T}} <: AbstractSpinConfig{T}
     Mat::MatType
     M::MVal

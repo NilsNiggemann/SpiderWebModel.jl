@@ -1,16 +1,3 @@
-const P1 = SA[
-    -1.0 1.0 1.0
-    -1.0 0.0 -1.0
-    1.0 1.0 -1.0
-]
-const P2 = -P1
-
-const P1_SITES = -SVector(getSitesFromPlaquette(P1)) / 2
-const P2_SITES = -SVector(getSitesFromPlaquette(P2)) / 2
-
-const P1_SITES_BOOL = P1_SITES .== 1 / 2
-const P2_SITES_BOOL = P2_SITES .== 1 / 2
-
 function plaquetteFlippable(plaqSites::SVector{8})
     return plaqSites == P1_SITES || plaqSites == P2_SITES
 end

@@ -1,5 +1,3 @@
-abstract type AbstractOperator end
-operatorname(X::T) where T <: AbstractOperator = string(T)
 struct PlaquetteFlipOperator{T} <: AbstractOperator 
     AffectedPlaquettes::Matrix{T}
 end
@@ -133,7 +131,7 @@ function getWeight2Moves!(Walker::SpiderWebWalker,AffectedPlaquettes,ψG::T,I,J,
     return weight
 end
 
-function initialize_forward_walking!(Walkers,weights,O::AbstractOperator,Configs,J::Tuple{Int,Int},ψG::T,Guiding_function_buffer) where T
+function initialize_forward_walking!(Walkers,weights,O::AbstractOperator,Configs,J,ψG::T,Guiding_function_buffer) where T
     # @inbounds for (α, Walker) in enumerate(Walkers)
     batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
     

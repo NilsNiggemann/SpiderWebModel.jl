@@ -20,21 +20,30 @@ import FFTW
 import RecursiveArrayTools
 import Accessors
 
-include("SpinConfig.jl")
+include("Types/Utils.jl")
+include("Types/PeriodicMatrix.jl")
+include("Types/SpinConfig.jl")
+include("Types/StencilConfigs.jl")
+include("Types/PlaquetteMoves.jl")
+include("Types/EDTypes.jl")
+include("Types/GFMCTypes.jl")
+include("Types/Operators.jl")
+include("Types/ObservableTypes.jl")
+include("Types/VariationalWFTypes.jl")
+
 include("Constraint.jl")
 include("PeriodicTilings.jl")
 
-include("Fluctuations/StencilConfigs.jl")
 include("Fluctuations/Fluctuations.jl")
 include("Fluctuations/ConstructHilbertSpace.jl")
 include("Fluctuations/ED.jl")
 include("Fluctuations/GreensFunctionMonteCarlo.jl")
-include("Observables/Observables.jl")
-include("Fluctuations/Operators.jl")
+include("Fluctuations/Observables.jl")
 include("Fluctuations/StraightForwardWalking.jl")
 include("Fluctuations/RandomFluctuations.jl")
 
 include("Variational/VariationalFunctions.jl")
+
 # using .VariationalFunctions
 
 include("Plotting/plotSpinConfig.jl")

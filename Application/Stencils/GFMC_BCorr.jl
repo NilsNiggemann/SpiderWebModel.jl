@@ -29,25 +29,17 @@ HConfs = getPeriodic.(SW.spinConfig.(HStair.AllStates,Ref(S_ED),Ref(HStair.plaqM
 magEx = SW.getMagnetization(HConfs, v0)
 SqEx = SW.getStructureFac(HConfs,v0)
 ##
-results = nothing
-sleep(0.5)
-##
-GC.gc()
-GC.gc()
-##
-outfile = "Data/temp/S12_3"
-rm(outfile;recursive=true,force=true)
-mkpath(outfile)
+
 CT = SW.ContinuousTimeMethod(0.1,w_avg_estimate = E0,Hxx = SW.Hxx_RK(mu))
-CTSR = SW.ContinuousTimeMethod(100*CT.τ,w_avg_estimate = CT.w_avg_estimate,Hxx = CT.Hxx)
+CTSR = SW.ContinuousTimeMethod(30*CT.τ,w_avg_estimate = CT.w_avg_estimate,Hxx = CT.Hxx)
 
 ##
 
 nThermal = 1000
 nBra = 3
-ψG = SW.JastrowFunction(S)
+ψG = SW.SimpleJastrowFunction(S)
 SW.rand!(SW.getNonSymmetric(ψG),1e-3)
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,10,ψG,100,1e-3,SW.IterativeSRSolver();Nwalkers = 28,reconfigure = false,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,30,ψG,100,3e-3,SW.IterativeSRSolver();Nwalkers = 28,reconfigure = false,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
 SW.get_params(ψG) .= stochReconfRes.params
 plotVarEn(stochReconfRes)
 
@@ -153,31 +145,66 @@ with_theme(theme_SimpleTicks()) do
     current_figure()
 end
 ##
-#___________Spin-1_______________________
-S = SW.stencilConfig(zeros(14,14),1;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
-CT = SW.DiscreteTimeMethod(0.,1,prod(size(S)))
-ψG = SW.fullVariationalFunction(S,0.15)
-stochReconfRes = SW.stochastic_reconfiguration(S,CT,i->round(Int,200+ 5*i),ψG,30,0.8,SW.IterativeSRSolver();Nwalkers = 6*20,rel_tolerance=1e-8,equilibration_steps=100,pre_equilibration_steps=10_000)
-##
-ψG = typeof(ψG)(stochReconfRes.params)
-CT = SW.DiscreteTimeMethod(0.,8,0.2658*prod(size(S)))
 
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,20,3000,ψG,equilibration_steps=1000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
+function PlaqSumFT(S,BBCorr,refPlaq)
+    kx = trueMomenta(0,2pi,size(S,1))
+    ky = trueMomenta(0,2pi,size(S,2))
+    FTres = zeros(length(kx),length(ky))
+    for (i,kx) in enumerate(kx)
+        for (j,ky) in enumerate(ky)
+            BBq = 0.
+            for (iP,P) in enumerate(SW.plaquetteIterator(S))
+                rx,ry = P .- refPlaq
+                BBq += BBCorr[i] * cos(kx*rx + ky*ry)
+            end
+            FTres[i,j] = BBq
+        end
+        
+    end
+    return FTres
+end
+
+with_theme(theme_PiTicks()) do 
+
+    fig = Figure()
+    ax = Axis(fig[1,1];aspect = 1)
+    kx = trueMomenta(0,2pi,size(S,1))
+    ky = trueMomenta(0,2pi,size(S,2))
+
+#     exactBB
+# exactCorrs
+
+    FT = PlaqSumFT(S,exactCorrs,refPlaq)
+    heatmap!(ax,kx,ky,FT,colormap = :viridis)
+    fig
+    
+end
 ##
-plotEnergies(results,nBra,p=100;normalize=true)
+
+#___________Spin-1_______________________
+S = SW.stencilConfig(zeros(12,12),1;boundaryCondition = :periodic)
+CTSR = SW.ContinuousTimeMethod(15*CT.τ,Hxx = CT.Hxx)
+
+ψG = SW.SimpleJastrowFunction(S)
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,10,ψG,200,1e-3,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure = false,rel_tolerance=1e-8,equilibration_steps=1000,pre_equilibration_steps=10_000)
+SW.get_params(ψG) .= stochReconfRes.params
+plotVarEn(stochReconfRes)
+##
+CT = SW.ContinuousTimeMethod(0.1,w_avg_estimate = 0,Hxx = SW.Hxx_RK(1.))
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,28*2,3000,SW.RKFunction(),equilibration_steps=1000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
+##
+plotEnergies(results,CT;normalize=true)
 ##
 # scatter(Point.(allPlaqs))
 # scatter!(Point.(reducedPlaqs),color = :red)
 # current_figure()
 refPlaq = SW.getCentralPlaquette(S)
 symReduc = SW.symmetryReducePlaquettes(S,refPlaq)
-GFMCPlaqs = collect(SW.plaquetteIterator(S))[symReduc.uniqueInds]
+# GFMCPlaqs = collect(SW.plaquetteIterator(S))[symReduc.uniqueInds]
+GFMCPlaqs = collect(SW.plaquetteIterator(S))
 allPlaqs = collect(SW.plaquetteIterator(S))
 
 ##
-outfile = "Data/temp/S1/L=$(size(S,1))"
-rm(outfile;recursive=true,force=true)
-mkpath(outfile)
 BOp = SW.PlaquetteFlipOperator(S)
 resB = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,1,BOp,ψG,[refPlaq];outfile = nothing #=outfile*"$i.h5"=#) for (i,res) in enumerate(results)])
 ##
@@ -217,11 +244,19 @@ end
 # inds = findall(P->isReducedPlaq(P,refPlaq,size(S,1)),allPlaqs)
 # BBVals = [x[inds] for x in BVals]
 # BVals = [x[inds] for x in BVals]
-BBCorrelator = getBBCorrelator(BBVals,BVals,symReduc,index = 1)
-# BBCorrelator = getBBCorrelator(BBVals,BVals,1)
+# BBCorrelator = getBBCorrelator(BBVals,BVals,symReduc,index = 1)
+BBCorrelator = getBBCorrelator(BBVals,BVals,1)
 
 # BBCorrelator = getBBCorrelator(BBVals,BVals,reducedPlaqs,allPlaqs,refPlaq)
 ##
+function FTPlaq(rPlaq,Vals,k)
+    res = 0.
+    for (r,Val) in zip(rPlaq,Vals)
+        res += Val * cos(k'*r)
+    end
+    res
+end
+
 let 
     fig = Figure()
     ax = Axis(fig[1,1];SW.getConfigAxis(S)...,backgroundcolor = :white)
@@ -247,13 +282,29 @@ let
 end
 
 ##
-function FTPlaq(rPlaq,Vals,k)
-    res = 0.
-    for (r,Val) in zip(rPlaq,Vals)
-        res += Val * cos(k'*r)
-    end
-    res
+
+BBMat = let 
+    ri = [ SW.SVector(r .- refPlaq) for r in allPlaqs]
+
+    k = trueMomenta(-pi,pi,size(S,1))
+
+    FTgen = [FTPlaq(ri,BBCorrelator,SW.SA[kx,ky]) for (kx,ky) in Iterators.product(k,k)]
 end
+##
+with_theme(theme_PiTicks()) do
+    fig = Figure()
+    ax = Axis(fig[1,1];aspect = 1)
+    kx = trueMomenta(0,2pi,size(S,1))
+    ky = trueMomenta(0,2pi,size(S,2))
+
+    FT = PlaqSumFT(S,BBCorrelator,refPlaq)
+
+    # hm = heatmap!(ax,kx,ky,FT,colormap = :viridis)
+    hm = heatmap!(ax,kx,ky,BBMat,colormap = :viridis)
+    Colorbar(fig[1,2],hm)
+    fig
+end
+##
 
 function ω_photon(kx,ky)
     sx,cx = sincos(kx)

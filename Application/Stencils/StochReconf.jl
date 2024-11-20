@@ -7,7 +7,7 @@ using MakieHelpers
 # using MKL
 include("plottingUtils.jl")
 ##
-S = SW.stencilConfig(zeros(20,20),1;
+S = SW.stencilConfig(zeros(8,8),1;
 boundaryCondition = :periodic
 )
 S .= SW.periodicStateDenseLoops(size(S,1))
@@ -113,7 +113,7 @@ end
 ##
 
 SW.Random.seed!(1234)
-NWalkers = 28*3
+NWalkers = 28*6
 NSteps = 2000
 @time resultsNaive = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψGold;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
 
