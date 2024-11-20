@@ -146,7 +146,7 @@ function initialize_forward_walking!(Walkers,weights,O::AbstractOperator,Configs
         end
     end
 end
-initialize_forward_walking!(Problem::AbstractGFMCProblem,O::AbstractOperator,Configs,J::Tuple{Int,Int}) = initialize_forward_walking!(Problem.Walkers,Problem.weights,O,Configs,J,Problem.ψG,Problem.Guiding_function_buffer)
+initialize_forward_walking!(Problem::AbstractGFMCProblem,O::AbstractOperator,Configs,OperatorList) = initialize_forward_walking!(Problem.Walkers,Problem.weights,O,Configs,OperatorList,Problem.ψG,Problem.Guiding_function_buffer)
 
 function straight_forward_walking!(prob::AbstractGFMCProblem,TotalWeights,reconfigurationList)
     
@@ -185,7 +185,7 @@ setup_operatorObservables(mProj,NumObs,NSteps,Op::AbstractOperator,outfile::Noth
 
 function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::AbstractOperator,ψG::T,AllPlaqs = collect(plaquetteIterator(InitialState))) where T
     Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
-    NSteps = NSteps
+
     setup = setup_many_walker_GFMC(InitialState,Nwalkers)
     
     results = setup_operatorObservables(mProj,length(AllPlaqs),NSteps,O,outfile)
