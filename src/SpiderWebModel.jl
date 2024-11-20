@@ -37,6 +37,7 @@ include("PeriodicTilings.jl")
 include("ED/Fluctuations.jl")
 include("ED/ConstructHilbertSpace.jl")
 include("ED/ED.jl")
+include("ED/Observables.jl")
 
 include("GreenFunctionMonteCarlo/GreenFunctionMonteCarlo.jl")
 include("GreenFunctionMonteCarlo/Observables.jl")
