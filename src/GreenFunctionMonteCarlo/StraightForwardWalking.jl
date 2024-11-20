@@ -236,7 +236,7 @@ function RandomPlaquetteFlipOperator(S::StencilSpinConfig)
     return RandomPlaquetteFlipOperator(AffectedPlaquettes)
 end
 
-function apply_operator!(Walker::SpiderWebWalker,O::RandomPlaquetteFlipOperator,ψG::T,::Any) where T
+function apply_operator!(Walker::SpiderWebWalker,O::RandomPlaquetteFlipOperator,Guiding_function_buffer,ψG::T,::Any) where T
     
     weights = updateWeightList!(Walker,O.AffectedPlaquettes,ψG)
     moves = Walker.moves
