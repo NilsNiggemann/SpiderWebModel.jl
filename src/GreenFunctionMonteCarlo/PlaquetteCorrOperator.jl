@@ -11,22 +11,27 @@ function getAllTwoMoves(Walker::SpiderWebWalker)
 
     moves = copy(Walker.moves)
     # secondmoves = [empty(moves) for _ in eachindex(moves)]
-    secondmoves = empty!([moves])
+    # secondmoves = empty!([moves])
 
     Config = get_config(Walker)
     getMoves!(moves,Config)
-
+    newmoves = copy(moves)
+    Allmoves = empty!([(DIAGONAL_MOVE_ID,DIAGONAL_MOVE_ID)])
+    sizehint!(Allmoves, length(moves)^2)
+    
     for move in moves
         i,j,s = move
         applyPlaquette!(Config, i, j, s)
 
-        newmoves = getMoves!(copy(moves),Config)
-        push!(secondmoves,newmoves)
+        getMoves!(newmoves,Config)
+        for secondmove in newmoves
+            push!(Allmoves,(move,secondmove))
+        end
         applyPlaquette!(Config, i, j, -s)
     end
 
     # return (;moves,secondmoves)
-    return [(move1,move2) for (i,move1) in enumerate(moves) for move2 in secondmoves[i]]
+    return Allmoves
 end
 
 function apply_operator!(Walker::SpiderWebWalker,O::BBqOperator_4,Guiding_function_buffer,ψG::AbstractGuidingFunction,q::SVector)
