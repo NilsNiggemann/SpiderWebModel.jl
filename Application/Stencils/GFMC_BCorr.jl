@@ -184,14 +184,14 @@ with_theme(theme_PiTicks()) do
     
 end
 ##
-BBQOp = SW.BBqOperator_4()
+BBQOp = SW.BBqOperator()
 qvals = let 
     qx = trueMomenta(0,pi,size(S,1))
     qy = trueMomenta(0,pi,size(S,2))
     qvals = [SA[qx,qy] for (qx,qy) in Iterators.product(qx,qy)]
     
 end
-BBQOp = SW.BBqOperator_4()
+BBQOp = SW.BBqOperator()
 results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,28*1,100,ψG,equilibration_steps=2000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
 ##
 resBBq = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,10,BBQOp,ψG,qvals) for (i,res) in enumerate(results)])
@@ -424,7 +424,7 @@ BOp = SW.RandomPlaquetteFlipOperator(S)
 Bi = fetch.([Threads.@spawn SW.measureObservables(S,BOp,[nothing],1,28*2,6000,CT,ψG;equilibration_steps = 1000) for _ in 1:12])
 # resB = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,1,BOp,ψG,collect(SW.plaquetteIterator(S))[1:1]) for (i,res) in enumerate(results)])
 ##
-BBQOp = SW.BBqOperator_4()
+BBQOp = SW.BBqOperator()
 BBQ_0 = fetch.([Threads.@spawn SW.measureObservables(S,BBQOp,[SA[0,0.]],1,28*1,6000,CT,ψG;equilibration_steps = 1000) for _ in 1:6])
 
 BBQ = fetch.([Threads.@spawn SW.measureObservables(S,BBQOp,qvals,1,28*1,1000,CT,ψG;equilibration_steps = 1000) for _ in 1:6])

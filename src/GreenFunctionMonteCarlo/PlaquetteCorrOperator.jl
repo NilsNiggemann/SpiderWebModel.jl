@@ -1,10 +1,10 @@
 """Operator Δ + Σᵢⱼ cos(q rᵢⱼ) <PᵢPⱼ + PᵢPⱼ† + Pᵢ†Pⱼ + Pᵢ†Pⱼ†>.
 The delta is to make sure the the operator is positive definite.
 """
-struct BBqOperator_4 <: AbstractOperator 
+struct BBqOperator <: AbstractOperator 
 end
 
-operatorname(X::BBqOperator_4) = "BBqOperator_4"
+operatorname(X::BBqOperator) = "BBqOperator"
 
 function getAllTwoMoves(Walker::SpiderWebWalker)
     nx = Walker.n_x
@@ -34,7 +34,7 @@ function getAllTwoMoves(Walker::SpiderWebWalker)
     return Allmoves
 end
 
-function apply_operator!(Walker::SpiderWebWalker,O::BBqOperator_4,Guiding_function_buffer,ψG::AbstractGuidingFunction,q::SVector)
+function apply_operator!(Walker::SpiderWebWalker,O::BBqOperator,Guiding_function_buffer,ψG::AbstractGuidingFunction,q::SVector)
     AllMoves = getAllTwoMoves(Walker)
     if isempty(AllMoves)
         return 0.
@@ -55,7 +55,7 @@ function apply_operator!(Walker::SpiderWebWalker,O::BBqOperator_4,Guiding_functi
     return w
 end
 
-function apply_operator_buffer!(Walker::SpiderWebWalker,O::BBqOperator_4,Guiding_function_buffer,ψG::AbstractGuidingFunction,q::SVector,operatorBuffer)
+function apply_operator_buffer!(Walker::SpiderWebWalker,O::BBqOperator,Guiding_function_buffer,ψG::AbstractGuidingFunction,q::SVector,operatorBuffer)
     (;AllMoves,psiRatios,weights,Rij_x,Rij_y) = operatorBuffer
     if isempty(AllMoves)
         return 0.
@@ -82,7 +82,7 @@ function apply_operator_buffer!(Walker::SpiderWebWalker,O::BBqOperator_4,Guiding
     return wsum
 end
 
-function getWeightListAll2Moves!(Walker::SpiderWebWalker,AllMoves,ψG::AbstractGuidingFunction,Guiding_function_buffer,O::BBqOperator_4,q)
+function getWeightListAll2Moves!(Walker::SpiderWebWalker,AllMoves,ψG::AbstractGuidingFunction,Guiding_function_buffer,O::BBqOperator,q)
     nx = getNPlaq!(Walker)
 
     weights = [getWeight2Moves!(Walker,ψG,move1,move2,O,q) for (move1,move2) in AllMoves]
@@ -90,7 +90,7 @@ function getWeightListAll2Moves!(Walker::SpiderWebWalker,AllMoves,ψG::AbstractG
     return weights
 end
 
-function getWeight2Moves!(Walker::SpiderWebWalker,ψG::AbstractGuidingFunction,move1,move2,O::BBqOperator_4,q)
+function getWeight2Moves!(Walker::SpiderWebWalker,ψG::AbstractGuidingFunction,move1,move2,O::BBqOperator,q)
     (;Config) = Walker
 
     ψx = ψG(Config)
@@ -122,7 +122,7 @@ getRij(move1,move2) = SA[move1[1]-move2[1],move1[2]-move2[2]]
 
 function buffer_BBQ_WFWeights(Walker::SpiderWebWalker,ψG::AbstractGuidingFunction)
     AllMoves = getAllTwoMoves(Walker)
-    psiRatios = getWeightListAll2Moves!(Walker,AllMoves,ψG,nothing,BBqOperator_4(),SA[0.,0.])
+    psiRatios = getWeightListAll2Moves!(Walker,AllMoves,ψG,nothing,BBqOperator(),SA[0.,0.])
     weights = similar(psiRatios) .= 0. 
     Rij = (getRij(move1,move2) for (move1,move2) in AllMoves)
     Rij_x = [rij[1] for rij in Rij]
@@ -134,7 +134,7 @@ function buffer_BBQ_WFWeights(Walkers::Vector{<:SpiderWebWalker},ψG::AbstractGu
     return [buffer_BBQ_WFWeights(Walker,ψG) for Walker in Walkers]
 end
 
-function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::BBqOperator_4,ψG::T,Allqs) where T
+function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::BBqOperator,ψG::T,Allqs) where T
     Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
     setup = setup_many_walker_GFMC(InitialState,Nwalkers)
     
@@ -168,7 +168,7 @@ function fillWalkers!(Walkers,Configs)
     end
 end
 
-function _initialize_buffered_forward_walking!(Walkers,weights,O::BBqOperator_4,Configs,q,ψG::T,Guiding_function_buffer,WF_buffers) where T
+function _initialize_buffered_forward_walking!(Walkers,weights,O::BBqOperator,Configs,q,ψG::T,Guiding_function_buffer,WF_buffers) where T
     # @inbounds for (α, Walker) in enumerate(Walkers)
     batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
     
@@ -186,4 +186,4 @@ function _initialize_buffered_forward_walking!(Walkers,weights,O::BBqOperator_4,
         end
     end
 end
-initialize_buffered_forward_walking!(Problem::AbstractGFMCProblem,O::BBqOperator_4,Configs,operator,WF_buffers) = _initialize_buffered_forward_walking!(Problem.Walkers,Problem.weights,O,Configs,operator,Problem.ψG,Problem.Guiding_function_buffer,WF_buffers)
+initialize_buffered_forward_walking!(Problem::AbstractGFMCProblem,O::BBqOperator,Configs,operator,WF_buffers) = _initialize_buffered_forward_walking!(Problem.Walkers,Problem.weights,O,Configs,operator,Problem.ψG,Problem.Guiding_function_buffer,WF_buffers)
