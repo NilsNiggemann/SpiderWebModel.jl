@@ -225,7 +225,7 @@ stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,10,ψG,700,1e-3,SW.Iterati
 SW.get_params(ψG) .= stochReconfRes.params
 plotVarEn(stochReconfRes)
 ##
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,28*1,500,ψG,equilibration_steps=1000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,28*1,300,ψG,equilibration_steps=1000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
 ##
 plotEnergies(results,CT;normalize=true)
 ##
@@ -409,14 +409,15 @@ qvals = let
     qvals = [SA[qx,qy] for (qx,qy) in Iterators.product(qx,qy)][:]
 end 
 ##
-results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,28*1,3000,ψG,equilibration_steps=1000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
+results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,28*1,1000,ψG,equilibration_steps=1000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
 
 BOp = SW.RandomPlaquetteFlipOperator(S)
 resB = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,1,BOp,ψG,collect(SW.plaquetteIterator(S))[1:1]) for (i,res) in enumerate(results)])
 ##
 BBQOp = SW.BBqOperator_4()
-resBBq = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,1,BBQOp,ψG,qvals) for (i,res) in enumerate(results)])
+@time resBBq = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,1,BBQOp,ψG,qvals) for (i,res) in enumerate(results)])
 ##
+Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,5) for res in results]
 Bi = stack([SW.get_observables_sfw(Gnp,res[:,1,:]',mean(result.TotalWeights)) for (Gnp,res,result) in zip(Gnps,resB,results) ])
 BBQ = stack(stack([[SW.get_observables_sfw(Gnp,res[:,j,:]',mean(result.TotalWeights)) for j in eachindex(qvals)] for (Gnp,res,result) in zip(Gnps,resBBq,results) ]))
 ##
@@ -428,7 +429,7 @@ with_theme(theme_PiTicks()) do
     ky = trueMomenta(0,2pi,size(S,2))
     FTmean = dropmean(BBQ,dims=3)[end,:]
     FT = zeros(length(kx),length(ky))
-    FT[:] .= FTmean[:]
+    FT[:] .= FTmean[:] ./length(allPlaqs)
     FT[:] .-= 1/4*(FT[1,1]+FT[end,1]+FT[1,end]+FT[end,end])*0.5
 
     Bimean = dropmean(Bi,dims=2)[end]
