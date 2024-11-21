@@ -247,3 +247,16 @@ function apply_operator!(Walker::SpiderWebWalker,O::RandomPlaquetteFlipOperator,
     return w
 end
 
+function measureObservables(S::StencilSpinConfig,BOp::AbstractOperator,OperatorList,p::Integer,Nwalkers::Integer,NSteps::Integer,method::AbstractGFMCMethod,ψG::AbstractGuidingFunction;kwargs...)
+    result = startManyWalkerGFMC(S,method,Nwalkers,NSteps,ψG;kwargs...)
+    return measureObservables(result,S,BOp,OperatorList,p,method,ψG)
+end
+
+function measureObservables(result::GFMCObservables,S::StencilSpinConfig,BOp::AbstractOperator,OperatorList,p::Integer,method::AbstractGFMCMethod,ψG::AbstractGuidingFunction)
+    resSFW = measure_operator(S,method,result.SaveConfigs,p,BOp,ψG,OperatorList)
+
+    Gnp = precomputeNormalizedAccWeight(result.TotalWeights,1,max(p,2))
+
+    ObVal = stack([get_observables_sfw(Gnp,resSFW[:,j,:]',mean(result.TotalWeights)) for j in eachindex(IndexLinear(),OperatorList)])
+    return ObVal
+end
