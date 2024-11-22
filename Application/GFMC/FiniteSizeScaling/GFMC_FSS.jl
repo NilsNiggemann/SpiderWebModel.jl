@@ -1,13 +1,13 @@
 #!/bin/bash
 #=
 #!/bin/bash
-# SBATCH --dependency=afterok:8745821
+#SBATCH --dependency=afterok:16952754
 #SBATCH --job-name=smCTRKS1
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=5-00:00:00
+#SBATCH --time=3-00:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
 #SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK_FSS/%a.out
 #SBATCH --partition=normal
@@ -25,9 +25,9 @@ cd(@__DIR__)
 using Pkg
 Pkg.activate(@__DIR__)
 import SpiderWebModel as SW
-using HDF5
+using SpiderWebModel.HDF5
 using SpiderWebModel.Statistics
-i_arg = isinteractive() ? 6 : parse(Int, ARGS[1])
+i_arg = isinteractive() ? 88 : parse(Int, ARGS[1])
 
 μs = -0.1:0.05:1.1
 # μs = 0.2:0.025:0.45
@@ -61,24 +61,24 @@ equilibration_steps = 1200
 pre_equilibration_steps = 50_000
 NWalkers = round(Int,128*60*(L/28)^2)
 scatter_fraction = 0.5
-NStepsEnd = 1500
-NBins = 1500
-stoch_rec_learning_rate = 2e-4
-NWalkers_stochRec = Threads.nthreads() * 4
+NStepsEnd = 40
+NBins = 2500
+stoch_rec_learning_rate = 3e-3
+NWalkers_stochRec = Threads.nthreads() * 2
 equilibration_steps_stochRec = equilibration_steps
-report_steps_SR = 5
+report_steps_SR = 1
 ##
 # -- debug params --
 if isinteractive()
-    L = 12
+    # L = 12
     NSteps = 1000
     equilibration_steps = 10
     pre_equilibration_steps = 1000
     NWalkers = 12
-    stoch_rec_learning_rate = 1e-4
+    stoch_rec_learning_rate = 1e-6
     NRuns = 2
-    NStepsEnd = 30
-    NBins = 200
+    NStepsEnd = 10
+    NBins = 10
     NWalkers_stochRec = Threads.nthreads() ÷ 2
 end
 
@@ -119,10 +119,11 @@ parentState = get_S_condensate!(
 ##
 # rm(outfileSR,force=true)
 
-ψG = SW.JastrowFunction(parentState)
+ψG = SW.SimpleJastrowFunction(parentState)
 ψGSymm = SW.getNonSymmetric(ψG)
+SW.rand!(ψGSymm,1e-3)
 
-SRdir = ENV["MYSCRATCH"]*"/Spiderweb/DataStochRec/L=($L)/periodic_RK_Full_$(SECTOR_NAME)/$(SW.guidingfunc_name(ψG))/mu=$(μ)/"
+SRdir = ENV["MYSCRATCH"]*"/Spiderweb/DataStochRec/L=$L/periodic_RK_Full_$(SECTOR_NAME)/$(SW.guidingfunc_name(ψG))/mu=$(μ)/"
 mkpath(SRdir)
 SRoutfiles = readdir(SRdir,join=true)
 
@@ -132,9 +133,9 @@ else
     last(SRoutfiles)
 end
 
-CT = SW.ContinuousTimeMethod(τ,1,-length(parentState)*0.266*(1-μ),SW.Hxx_RK(μ))
-CT_stochRec = SW.ContinuousTimeMethod(100τ,1,-length(parentState)*0.266*(1-μ),SW.Hxx_RK(μ))
-
+CT = SW.ContinuousTimeMethod(τ,w_avg_estimate = length(parentState)*0.21*(1-μ),Hxx = SW.Hxx_RK(μ))
+CT_stochRec = SW.ContinuousTimeMethod(100τ,w_avg_estimate = CT.w_avg_estimate,Hxx = CT.Hxx)
+##
 # optimize starting
 if !isfile(outfileSR) && μ != 1.0
     @info "starting run" L τ nBra NSteps NWalkers_stochRec outfileSR
@@ -148,7 +149,17 @@ flush(stdout)
 ##
 
 optim_params_steps = h5read(outfileSR,"params_steps")
-optim_params = selectdim(optim_params_steps,SW.arraydim(optim_params_steps),last(size(optim_params_steps)))
+
+optim_params = let
+    e0 = h5read(outfileSR,"E0") 
+    idxzero = findfirst(iszero,e0)
+    if isnothing(idxzero)
+        optim_params_steps[:,end]
+    else
+        optim_params_steps[:,idxzero-1]
+    end
+end
+# selectdim(optim_params_steps,SW.arraydim(optim_params_steps),last(size(optim_params_steps)))
 # optim_params = h5read(outfileSR,"params_steps")[:,:,end]
 
 @assert !iszero(optim_params)
@@ -172,14 +183,14 @@ outfileDIR_init = let
     mktempdir(pth)
 end
 
-initializer = getInitializer(parentState,μ,ψG;NWalkers=3*NWalkers,NSteps = 400,OptIndep = 20,outfileDIR=outfileDIR_init)
-
 ##
 outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/L=$(L)/periodic_RK_Full_$(SECTOR_NAME)/mu_$(μ)/"
 outfileTotal = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/eval/L=$(L)/mu=$(μ)/Spin1GFMC_Eval_periodic_$(SECTOR_NAME)_mu$(μ)_L$(L)_$(i_arg).h5"
 mkpath(dirname(outfileTotal))
 # rm(outfileTotal,force=true)
 @assert !isfile(outfileTotal) "file already exists!"
+
+initializer = getInitializer(parentState,μ,ψG;NWalkers=3*NWalkers,NSteps = 400,OptIndep = 20,outfileDIR=outfileDIR_init)
 
 Threads.@threads for run in 1:NRuns
     outfile = joinpath(outfileDIR,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run).h5")

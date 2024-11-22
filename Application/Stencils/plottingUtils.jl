@@ -259,6 +259,21 @@ function plotVarEn(stochReconfRes;normalization=1,movavg = 1,E_exact = NaN,alpha
     lines!(ax2norm,x[2:end],norms,color = :red)
     fig
 end
+function plotVarEn(filename::String;detectZero=true,kwargs...)
+    E0 = h5read(filename,"E0")
+    ΔE = h5read(filename,"ΔE")
+    params_steps = h5read(filename,"params_steps")
+    @views if detectZero
+        idx = findfirst(iszero,E0)
+        if !isnothing(idx)
+            E0 = E0[1:idx-1]
+            ΔE = ΔE[1:idx-1]
+            params_steps = params_steps[:,1:idx-1]
+        end
+    end
+    res = (;E0,ΔE,params_steps)
+    plotVarEn(res;kwargs...)
+end
 function trueMomenta(kmin,kmax,L)
     nmin = floor(Int,L*kmin/(2pi))
     nmax = ceil(Int,L*kmax/(2pi))
