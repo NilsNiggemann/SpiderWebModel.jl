@@ -101,7 +101,7 @@ function post_move_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::Simp
         i = LI[CartesianIndex(site)]
         s = P1_STENCIL[index]*opSign
 
-        for j in eachindex(h)
+        LoopVectorization.@turbo for j in eachindex(h)
             h[j] += v[j,i]*s
         end
     end
