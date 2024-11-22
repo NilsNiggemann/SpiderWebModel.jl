@@ -38,7 +38,7 @@ function _evaluate_jastrow_simple(ψG,x::AbstractMatrix)
     return exp(exp_m + exp_v)
 end
 
-struct SimpleJastrow_GWF_Buffer_2{T<:Number,D}
+struct SimpleJastrow_GWF_Buffer{T<:Number,D}
     x_i::Vector{T}
     h_i::Vector{T}
     prefac_moves::D
@@ -49,7 +49,7 @@ function allocate_GWF_buffer(ψG::SimpleJastrowFunction{T},S::AbstractMatrix) wh
     h_i = zeros(T,length(S))
     
     prefac_moves = _precompute_prefac_moves(ψG,S)
-    return SimpleJastrow_GWF_Buffer_2(x_i,h_i,prefac_moves)
+    return SimpleJastrow_GWF_Buffer(x_i,h_i,prefac_moves)
 end
 
 
@@ -59,11 +59,11 @@ function _precompute_prefac_moves(ψG::SimpleJastrowFunction,Conf::StencilSpinCo
     AllWeights = Dict((i,j) => _precompute_jastrow_weight(vij,(i,j),Conf) for (i,j) in AllPlaqs)
 end
 
-function premove_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer_2,ψG::SimpleJastrowFunction,Walker::SpiderWebWalker) 
+function premove_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::SimpleJastrowFunction,Walker::SpiderWebWalker) 
     return Buffer
 end
 
-function compute_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer_2,ψG::SimpleJastrowFunction,Walker::SpiderWebWalker)
+function compute_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::SimpleJastrowFunction,Walker::SpiderWebWalker)
 
     x = Buffer.x_i
 
@@ -84,7 +84,7 @@ function compute_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer_2,ψG::SimpleJastr
     return Buffer
 end
 
-function post_move_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer_2,ψG::SimpleJastrowFunction,Walker::SpiderWebWalker,move::Tuple)
+function post_move_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::SimpleJastrowFunction,Walker::SpiderWebWalker,move::Tuple)
     Config = get_config(Walker)
 
     i,j,opSign = move
@@ -108,7 +108,7 @@ function post_move_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer_2,ψG::Si
     return Buffer
 end
 
-function guidingfuncRatio(ψG::SimpleJastrowFunction,Walker::SpiderWebWalker,move::Tuple,Buffer::SimpleJastrow_GWF_Buffer_2)
+function guidingfuncRatio(ψG::SimpleJastrowFunction,Walker::SpiderWebWalker,move::Tuple,Buffer::SimpleJastrow_GWF_Buffer)
     m = get_m_i(ψG)
 
     (;h_i,prefac_moves) = Buffer

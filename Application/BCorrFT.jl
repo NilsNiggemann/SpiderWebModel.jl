@@ -16,7 +16,7 @@ end
 
 ##
 with_theme(theme_PiTicks()) do
-    k = LinRange(0,4pi,100)
+    k = LinRange(-pi,pi,100)
 
     BB = fetch.([Threads.@spawn getBBCorrFieldTheory(ki,kj) for ki in k, kj in k])
 

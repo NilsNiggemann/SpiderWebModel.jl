@@ -83,37 +83,36 @@ function apply_operator_buffer!(Walker::SpiderWebWalker,O::BBqOperator,Guiding_f
 end
 
 function getWeightListAll2Moves!(Walker::SpiderWebWalker,AllMoves,ψG::AbstractGuidingFunction,Guiding_function_buffer,O::BBqOperator,q)
-    nx = getNPlaq!(Walker)
-
-    weights = [getWeight2Moves!(Walker,ψG,move1,move2,O,q) for (move1,move2) in AllMoves]
+    # nx = getNPlaq!(Walker)
+    compute_GWF_buffer!(Guiding_function_buffer,ψG,Walker)
+    weights = [getWeight2Moves!(Walker,ψG,move1,move2,O,q,Guiding_function_buffer) for (move1,move2) in AllMoves]
 
     return weights
 end
 
-function getWeight2Moves!(Walker::SpiderWebWalker,ψG::AbstractGuidingFunction,move1,move2,O::BBqOperator,q)
+function getWeight2Moves!(Walker::SpiderWebWalker,ψG::AbstractGuidingFunction,move1,move2,O::BBqOperator,q,Guiding_function_buffer)
     (;Config) = Walker
 
-    ψx = ψG(Config)
+    premove_update_GWF_buffer!(Guiding_function_buffer,ψG,Walker)
+    ψx´_ψx = guidingfuncRatio(ψG,Walker,move1,Guiding_function_buffer) # ψx´/ψx
+
+    applyPlaquette!(Config, move1)
+    post_move_update_GWF_buffer!(Guiding_function_buffer,ψG,Walker,move1)
+
+    premove_update_GWF_buffer!(Guiding_function_buffer,ψG,Walker)
+    ψx´´_ψx´ = guidingfuncRatio(ψG,Walker,move2,Guiding_function_buffer) # ψx´´/ψx´
     
+    weight = ψx´´_ψx´ * ψx´_ψx
+
     i_x, i_y, move_I = move1
     j_x, j_y, move_J = move2
-
-    applyPlaquette!(Config, i_x, i_y, move_I)
-    applyPlaquette!(Config, j_x, j_y, move_J)
-    
-    # n_x´ = getNPlaqfilled!(Walker,indices)
-
-    # weight = guidingfuncRatio(ψG,n_x,n_x´,indices)
-    ψx´ = ψG(Config)
-    weight = ψx´/ψx
-    # weight = 1
 
     qr_ij = q ⋅ SA[i_x-j_x, i_y-j_y]
 
     OperatorWeight = 2*(cos(qr_ij*0.5)^2)#/length(Walker.Plaquette_positions)
 
-    applyPlaquette!(Config, j_x, j_y, -move_J)
-    applyPlaquette!(Config, i_x, i_y, -move_I)
+    post_move_update_GWF_buffer!(Guiding_function_buffer,ψG,Walker,inverse_move(move1)) # undo the first move
+    applyPlaquette!(Config,inverse_move(move1))
 
     return weight*OperatorWeight
 end

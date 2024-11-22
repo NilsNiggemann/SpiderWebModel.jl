@@ -405,13 +405,17 @@ function getUncorrPart(S,refPlaq,k = trueMomenta(0,2pi,size(S,1)))
     FTGen/length(AllPlaqs)
 end
 
-S = SW.stencilConfig(zeros(20,20),1;boundaryCondition = :periodic)
-CT = SW.ContinuousTimeMethod(0.3,Hxx = SW.Hxx_RK(1.))
+S = SW.stencilConfig(zeros(12,12),1;boundaryCondition = :periodic)
+CT = SW.ContinuousTimeMethod(0.3,Hxx = SW.Hxx_RK(.7))
 CTSR = SW.ContinuousTimeMethod(10*CT.τ,Hxx = CT.Hxx)
 
-# ψG = SW.SimpleJastrowFunction(S)
-ψG = SW.RKFunction()
-
+ψG = SW.SimpleJastrowFunction(S)
+# ψG = SW.RKFunction()
+##
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,10,ψG,300,1e-3,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure = false,rel_tolerance=1e-8,equilibration_steps=1000,pre_equilibration_steps=10_000)
+SW.get_params(ψG) .= stochReconfRes.params
+plotVarEn(stochReconfRes)
+##
 
 qvals = let 
     qx = trueMomenta(0,pi,size(S,1))
@@ -421,25 +425,25 @@ qvals = let
 end 
 ##
 BOp = SW.RandomPlaquetteFlipOperator(S)
-Bi = fetch.([Threads.@spawn SW.measureObservables(S,BOp,[nothing],1,28*2,6000,CT,ψG;equilibration_steps = 1000) for _ in 1:12])
+Bi = fetch.([Threads.@spawn SW.measureObservables(S,BOp,[nothing],6,28*2,1000,CT,ψG;equilibration_steps = 3000,pre_equilibration_steps=20_000) for _ in 1:6])
 # resB = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,1,BOp,ψG,collect(SW.plaquetteIterator(S))[1:1]) for (i,res) in enumerate(results)])
 ##
 BBQOp = SW.BBqOperator()
-BBQ_0 = fetch.([Threads.@spawn SW.measureObservables(S,BBQOp,[SA[0,0.]],1,28*1,6000,CT,ψG;equilibration_steps = 1000) for _ in 1:6])
+BBQ_0 = fetch.([Threads.@spawn SW.measureObservables(S,BBQOp,[SA[0,0.]],6,28*1,200,CT,ψG;equilibration_steps = 5000,pre_equilibration_steps=20_000) for _ in 1:6])
 
-BBQ = fetch.([Threads.@spawn SW.measureObservables(S,BBQOp,qvals,1,28*1,1000,CT,ψG;equilibration_steps = 1000) for _ in 1:6])
+BBQ = fetch.([Threads.@spawn SW.measureObservables(S,BBQOp,qvals,6,28*1,1000,CT,ψG;equilibration_steps = 5000,pre_equilibration_steps=20_000) for _ in 1:6])
 
 ##
-function processBBQ(S,qvals,BBQ,Bi,BBq_0)
+function processBBQ(S,qvals,BBQ,Bi,BBq_0,p=lastindex(Bi))
     allPlaqs = collect(SW.plaquetteIterator(S))
-    FTmean = mean(BBQ)[end,:] ./length(allPlaqs)
+    FTmean = BBQ[p,:] ./length(allPlaqs)
     # kx,ky,FTrec = makeMatrix(qvals,FTmean)
     kx,ky,FTrec = makeMatrix(reconstruct_momentumSpace(qvals,FTmean)...)
 
     # FTrec .-= FTrec[1,1]*0.5
-    FTrec .-= only(mean(BBq_0))*0.5./length(allPlaqs)
+    FTrec .-= BBq_0[p,1]*0.5./length(allPlaqs)
     
-    Bimean = mean(Bi)[end]
+    Bimean = Bi[p]
 
     refPlaq = (1,2)
     Bq_sq = Bimean^2 .* getUncorrPart(S,refPlaq,kx) /length(allPlaqs)
@@ -447,15 +451,19 @@ function processBBQ(S,qvals,BBQ,Bi,BBq_0)
     FTrec .-= Bq_sq
 
     return (;kx,ky,Bq = FTrec)
-
 end
+
 ##
 with_theme(theme_PiTicks()) do 
     fig = Figure()
     ax = Axis(fig[1,1];aspect = 1)
-    (;kx,ky,Bq) = processBBQ(S,qvals,BBQ,Bi,BBQ_0)
+    # (;kx,ky,Bq) = processBBQ(S,qvals,BBQ,Bi,BBQ_0)
+    resBq = processBBQ.(Ref(S),Ref(qvals),BBQ,Bi,BBQ_0,6)
+    kx,ky = resBq[1].kx,resBq[1].ky
 
-    hm = heatmap!(ax,kx,ky,Bq,colormap = :viridis)
+    Bq = [Bq.Bq for Bq in resBq]
+    hm = heatmap!(ax,kx,ky,mean(Bq),colormap = :viridis)
+    # hm = heatmap!(ax,mean(Bq),colormap = :viridis)
     # hm = heatmap!(ax,kx,ky,Bq_sq,colormap = :viridis)
     Colorbar(fig[1,2],hm)
     fig
