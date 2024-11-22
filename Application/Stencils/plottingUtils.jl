@@ -280,6 +280,64 @@ function trueMomenta(kmin,kmax,L)
     # return 1/(2pi*L*100) .* nmin:nmax
     return (nmin : nmax) .* 2pi/L
 end
+function reconstruct_momentumSpace(qs,arrvals;tol=1e-14)
+    
+    newarrvals = copy(arrvals)
+    newqs = copy(qs)
+    roundfunc(x) = round(x+1e-300,digits = -round(Int,log10(tol)))
+    roundfunc(x::SVector) = roundfunc.(x)
+
+    AllqsSet = Set(roundfunc.(qs))
+
+    idx = 0
+    
+    for (q,val) in zip(newqs,newarrvals)
+        idx +=1
+        if idx > 5000
+            @warn "reconstruct_momentumSpace: Could not reconstruct momentum space"
+            return newqs,arrvals
+        end
+
+        qSymm = (SA[q[2],q[1]],SA[-q[1],q[2]],SA[q[1],-q[2]])
+        for q´ in qSymm
+            q´ = rem2pi.(q´,RoundNearest)
+            q´round = roundfunc(q´)
+            if !(q´round in AllqsSet)
+                push!(newqs,q´)
+                push!(newarrvals,val)
+                push!(AllqsSet,q´round)
+                # push!(newqsSet,round.(q´,digits = -round(Int,log10(tol))))
+            end
+            
+        end
+
+    end
+
+    return newqs,newarrvals
+end
+
+function makeMatrix(qx,qy,qs,vals)
+    FTrec = fill(NaN,length(qx),length(qy))
+    
+    for (i,qx) in enumerate(qx)
+        for (j,qy) in enumerate(qy)
+            idx = findfirst(==(SA[qx,qy]),qs)
+            if !isnothing(idx)
+                FTrec[i,j] = vals[idx]
+            end
+        end
+    end
+    return qx,qy,FTrec
+end
+
+uniqueTol(x;digits=16)  = unique(x -> round(x+1e-300;digits),x)
+function makeMatrix(qs,vals) 
+    qx = sort!(uniqueTol([q[1] for q in qs]))
+    qy = sort!(uniqueTol([q[2] for q in qs]))
+    # return sort!(unique(x->round(x+1e-300,digits=14),getindex.(qs,1)))
+    makeMatrix(qx,qy,qs,vals)
+end
+
 function getLastSlice(arr::AbstractArray{T,N}) where {T,N}
     slicedims = tuple(collect(1 for i in 1:N-1)...)
     return view(arr,slicedims...,:)

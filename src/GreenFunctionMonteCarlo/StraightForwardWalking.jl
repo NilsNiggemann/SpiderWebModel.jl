@@ -146,7 +146,7 @@ function initialize_forward_walking!(Walkers,weights,O::AbstractOperator,Configs
         end
     end
 end
-initialize_forward_walking!(Problem::AbstractGFMCProblem,O::AbstractOperator,Configs,J::Tuple{Int,Int}) = initialize_forward_walking!(Problem.Walkers,Problem.weights,O,Configs,J,Problem.ψG,Problem.Guiding_function_buffer)
+initialize_forward_walking!(Problem::AbstractGFMCProblem,O::AbstractOperator,Configs,OperatorList) = initialize_forward_walking!(Problem.Walkers,Problem.weights,O,Configs,OperatorList,Problem.ψG,Problem.Guiding_function_buffer)
 
 function straight_forward_walking!(prob::AbstractGFMCProblem,TotalWeights,reconfigurationList)
     
@@ -185,7 +185,7 @@ setup_operatorObservables(mProj,NumObs,NSteps,Op::AbstractOperator,outfile::Noth
 
 function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::AbstractOperator,ψG::T,AllPlaqs = collect(plaquetteIterator(InitialState))) where T
     Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
-    NSteps = NSteps
+
     setup = setup_many_walker_GFMC(InitialState,Nwalkers)
     
     results = setup_operatorObservables(mProj,length(AllPlaqs),NSteps,O,outfile)
@@ -236,7 +236,7 @@ function RandomPlaquetteFlipOperator(S::StencilSpinConfig)
     return RandomPlaquetteFlipOperator(AffectedPlaquettes)
 end
 
-function apply_operator!(Walker::SpiderWebWalker,O::RandomPlaquetteFlipOperator,ψG::T,::Any) where T
+function apply_operator!(Walker::SpiderWebWalker,O::RandomPlaquetteFlipOperator,Guiding_function_buffer,ψG::T,::Any) where T
     
     weights = updateWeightList!(Walker,O.AffectedPlaquettes,ψG)
     moves = Walker.moves
@@ -247,3 +247,16 @@ function apply_operator!(Walker::SpiderWebWalker,O::RandomPlaquetteFlipOperator,
     return w
 end
 
+function measureObservables(S::StencilSpinConfig,BOp::AbstractOperator,OperatorList,p::Integer,Nwalkers::Integer,NSteps::Integer,method::AbstractGFMCMethod,ψG::AbstractGuidingFunction;kwargs...)
+    result = startManyWalkerGFMC(S,method,Nwalkers,NSteps,ψG;kwargs...)
+    return measureObservables(result,S,BOp,OperatorList,p,method,ψG)
+end
+
+function measureObservables(result::GFMCObservables,S::StencilSpinConfig,BOp::AbstractOperator,OperatorList,p::Integer,method::AbstractGFMCMethod,ψG::AbstractGuidingFunction)
+    resSFW = measure_operator(S,method,result.SaveConfigs,p,BOp,ψG,OperatorList)
+
+    Gnp = precomputeNormalizedAccWeight(result.TotalWeights,1,max(p,2))
+
+    ObVal = stack([get_observables_sfw(Gnp,resSFW[:,j,:]',mean(result.TotalWeights)) for j in eachindex(IndexLinear(),OperatorList)])
+    return ObVal
+end
