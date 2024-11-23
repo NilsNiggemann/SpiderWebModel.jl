@@ -146,6 +146,18 @@ getStencilRadii(::Stencils.AbstractStencilArray{<:Any,R,<:Any,N}) where {R,N} = 
 @inline function safe_parent_indices(A::Stencils.AbstractStencilArray,I)
     return safe_parent_indices(A, Stencils.boundary(A), Stencils.padding(A), CartesianIndex(I))
 end
+
+@inline function safe_parent_indices_linear(A::Stencils.AbstractStencilArray,I)
+    inds = safe_parent_indices(A, Stencils.boundary(A), Stencils.padding(A), CartesianIndex(I))
+
+    LI = LinearIndices(A)
+    linear_inds = map(inds) do (i, j)
+        LI[i, j]
+    end
+
+    return linear_inds
+end
+
 @inline function safe_parent_indices(A::Stencils.AbstractStencilArray, ::Stencils.Wrap, ::Stencils.Conditional,I ::CartesianIndex
 )
     inds = Stencils.indices(Stencils.stencil(A), I)
