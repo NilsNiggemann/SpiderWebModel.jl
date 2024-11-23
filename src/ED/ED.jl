@@ -10,6 +10,6 @@ function SolveH(H::SparseMat; kwargs...)
 end
 
 function SolveHKrylov(H; kwargs...)
-    values, vectors, _ = KrylovKit.eigsolve(H, 1, :SR; kwargs...)
+    values, vectors, _ = KrylovKit.eigsolve(H, ones(size(H,1)), 1, :SR; kwargs...)
     return (; values, vectors)
 end
