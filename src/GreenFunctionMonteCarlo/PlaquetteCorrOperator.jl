@@ -146,7 +146,7 @@ function buffer_BBQ_WFWeights(Walkers::Vector{<:SpiderWebWalker},ψG::AbstractGu
         GWFBuffer = Guiding_function_buffer[i_chunk]
         for α in αinds
             Walker = Walkers[α]
-            allbuffers[α] = buffer_BBQ_WFWeights(Walker,ψG,Guiding_function_buffer[i_chunk])
+            allbuffers[α] = buffer_BBQ_WFWeights(Walker,ψG,GWFBuffer)
         end
     end
     return allbuffers    
@@ -159,7 +159,6 @@ function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveCo
     results = setup_operatorObservables(mProj,length(Allqs),NSteps,O,outfile)
 
     Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState)
-
     Problem = SpiderwebGFMCProblem(method,InitialState,ψG,setup.Walkers,setup.weights,Guiding_function_buffer,setup.reconfiguration_buffer,results)
 
     reconfigurationList = zeros(Int,length(Problem.Walkers))

@@ -4,7 +4,8 @@ struct RKFunction <: AbstractGuidingFunction end
 
 guidingfunc_name(F::RKFunction) = "RKFunction"
 get_params(ψG::RKFunction) = nothing
-guidingfuncRatio_log(ψG::RKFunction,Walker::SpiderWebWalker,move,Buffer::Number) = 1.
+guidingfuncRatio_log(ψG::RKFunction,Walker::SpiderWebWalker,move,Buffer) = 0.
+allocate_GWF_buffer(ψG::RKFunction,S::StencilSpinConfig) = nothing
 # function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::RKFunction,Λ=0)
 #     (;Config,weights,moves,n_x,n_x´) = Walker
 #     isempty(weights) && isempty(moves) || return weights #return if weights are already computed
