@@ -60,7 +60,7 @@ function compute_GWF_buffer!(Buffer,ψG::OrderGuidingFunction,Walker::SpiderWebW
     return Buffer
 end
 
-function guidingfuncRatio(ψG::OrderGuidingFunction,Walker::SpiderWebWalker,move::Tuple,AffectedPlaquetteList)
+function guidingfuncRatio_log(ψG::OrderGuidingFunction,Walker::SpiderWebWalker,move::Tuple,AffectedPlaquetteList)
     α = get_alpha_i(ψG)
     m = get_m_i(ψG)
     M = get_M_i(ψG)
@@ -101,7 +101,7 @@ function guidingfuncRatio(ψG::OrderGuidingFunction,Walker::SpiderWebWalker,move
         exp_M += M[I] * (2x[I]*s +s^2)
     end
 
-    return exp(exp_α  + exp_m *SpinNormalization + exp_M * SpinNormalization^2)
+    return exp_α  + exp_m *SpinNormalization + exp_M * SpinNormalization^2
 end
 
 function getOx_k(ψG::OrderGuidingFunction,Walker::SpiderWebWalker,k)

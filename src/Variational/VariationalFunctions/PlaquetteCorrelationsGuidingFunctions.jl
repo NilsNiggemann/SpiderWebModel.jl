@@ -43,7 +43,7 @@ end
 #     ψG(Walker)
 # end
 
-function guidingfuncRatio(ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker,move,AffectedPlaquetteList::AbstractMatrix)
+function guidingfuncRatio_log(ψG::FullVariationalGuidingFunction,Walker::SpiderWebWalker,move,AffectedPlaquetteList::AbstractMatrix)
     α = get_alpha_i(ψG)
     β = get_beta_ij(ψG)
 
@@ -62,7 +62,7 @@ function guidingfuncRatio(ψG::FullVariationalGuidingFunction,Walker::SpiderWebW
     exponent = zero(eltype(α))
     @warn "optimize guidingfunc for FullVariationalGuidingFunction" maxlog= 1
     exponent = dot(n,α) + dot(n,β,n) - dot(n´,α) - dot(n´,β,n´)
-    return exp(-exponent)
+    return -exponent
 
     for i in affectedPlaquettes
         Δn = n´[i] - n[i]
@@ -74,7 +74,7 @@ function guidingfuncRatio(ψG::FullVariationalGuidingFunction,Walker::SpiderWebW
         end
         exponent += exp_i*Δn
     end
-    return exp(exponent)
+    return exponent
 end
 
 function getOx_k_plaqs(ψG::FullVariationalGuidingFunction,n::AbstractArray,k)

@@ -196,7 +196,7 @@ function compute_GWF_buffer!(Buffer::RBMSpin1Buffer,ψG::RBMSpin1,Walker::Spider
     return Buffer
 end
 
-function guidingfuncRatio(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buffer::RBMSpin1Buffer)
+function guidingfuncRatio_log(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buffer::RBMSpin1Buffer)
     a = get_alpha_i(ψG)
     A = get_A_i(ψG)
     b = get_b_j(ψG)
@@ -256,7 +256,7 @@ function guidingfuncRatio(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,Buff
         coshprod *= (eᶿ*oneplustanhΘj + e⁻ᶿ*oneminustanhΘj)
     end
     prefac = 1 / (2. ^ length(Θ))
-    return exp(exp_a + exp_A) *coshprod*prefac
+    return exp_a + exp_A +log(coshprod*prefac)
 end
 
 function getOx_k(ψG::RBMSpin1,x::AbstractMatrix,k)

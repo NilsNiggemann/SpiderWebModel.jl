@@ -10,7 +10,7 @@ end
 (psi::SymmetryReducedWaveFunction)(W::SpiderWebWalker) = psi.psi(W)
 
 @inline guidingfunc_name(F::SymmetryReducedWaveFunction) = guidingfunc_name(F.psi)
-@inline guidingfuncRatio(F::SymmetryReducedWaveFunction,Walker,move,Buffer) = guidingfuncRatio(F.psi,Walker,move,Buffer)
+@inline guidingfuncRatio_log(F::SymmetryReducedWaveFunction,Walker,move,Buffer) = guidingfuncRatio_log(F.psi,Walker,move,Buffer)
 
 @inline getOx_k(ψG::SymmetryReducedWaveFunction,W,k) = getOx_k(ψG.psi,W,k)
 function Random.rand!(ψG::SymmetryReducedWaveFunction,maxAmplitude=1e-4)

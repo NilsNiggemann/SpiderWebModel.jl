@@ -12,7 +12,7 @@ get_params(ψG::PlaquetteNumberGuidingFunction) = ψG.α
 
 guidingfunc_name(F::PlaquetteNumberGuidingFunction) = "PlaquetteNumberGuidingFunction"
 
-function guidingfuncRatio(ψG::PlaquetteNumberGuidingFunction,Walker::SpiderWebWalker,move,AffectedPlaquetteList::T) where T
+function guidingfuncRatio_log(ψG::PlaquetteNumberGuidingFunction,Walker::SpiderWebWalker,move,AffectedPlaquetteList::T) where T
 
     i,j,opNum = move
     affectedPlaquettes = AffectedPlaquetteList[i,j]
@@ -31,7 +31,7 @@ function guidingfuncRatio(ψG::PlaquetteNumberGuidingFunction,Walker::SpiderWebW
         exponent += Δn
     end
 
-    return exp(exponent * α)
+    return exponent * α
 end
 # guidingfuncRatio_exponent(ψG::PlaquetteNumberGuidingFunction,Walker::SpiderWebWalker,move::Tuple,affectedPlaquettes) = _guidingfuncRatio_exponent(ψG,Walker,affectedPlaquettes)
 # @inline updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::PlaquetteNumberGuidingFunction,Λ=0) = updateWeightList_plaqs!(Walker,AffectedPlaquetteList,ψG,Λ)

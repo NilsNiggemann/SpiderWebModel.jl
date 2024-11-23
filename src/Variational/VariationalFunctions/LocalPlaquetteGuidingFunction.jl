@@ -40,7 +40,7 @@ function (ψG::LocalPlaquetteGuidingFunction)(x::StencilSpinConfig)
     return exp(exponent)
 end
 
-function guidingfuncRatio(ψG::LocalPlaquetteGuidingFunction,Walker::SpiderWebWalker,move,AffectedPlaquetteList)
+function guidingfuncRatio_log(ψG::LocalPlaquetteGuidingFunction,Walker::SpiderWebWalker,move,AffectedPlaquetteList)
     α = get_alpha_i(ψG)
 
 
@@ -66,7 +66,7 @@ function guidingfuncRatio(ψG::LocalPlaquetteGuidingFunction,Walker::SpiderWebWa
         exponent += α[i]*Δn
     end
 
-    return exp(exponent)
+    return exponent
 end
 getOx_k_plaqs(::LocalPlaquetteGuidingFunction,n::AbstractArray,k) = n[k]
 
