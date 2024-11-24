@@ -1,5 +1,4 @@
-"""Operator Δ + Σᵢⱼ cos(q rᵢⱼ) <PᵢPⱼ + PᵢPⱼ† + Pᵢ†Pⱼ + Pᵢ†Pⱼ†>.
-The delta is to make sure the the operator is positive definite.
+"""Operator Σᵢⱼ cos(q rᵢⱼ) <PᵢPⱼ + PᵢPⱼ† + Pᵢ†Pⱼ + Pᵢ†Pⱼ†>.
 """
 struct BBqOperator <: AbstractOperator 
 end
