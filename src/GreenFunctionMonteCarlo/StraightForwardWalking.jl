@@ -237,7 +237,7 @@ function RandomPlaquetteFlipOperator(S::StencilSpinConfig)
 end
 
 function apply_operator!(Walker::SpiderWebWalker,O::RandomPlaquetteFlipOperator,Guiding_function_buffer,ψG::T,::Any) where T
-    
+    compute_GWF_buffer!(Guiding_function_buffer,ψG,Walker)
     weights = updateWeightList!(Walker,Guiding_function_buffer,ψG)
     moves = Walker.moves
     moveidx = StatsBase.sample(StatsBase.Weights(weights))
