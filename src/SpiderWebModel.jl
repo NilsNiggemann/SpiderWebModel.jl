@@ -43,6 +43,7 @@ include("GreenFunctionMonteCarlo/GreenFunctionMonteCarlo.jl")
 include("GreenFunctionMonteCarlo/Observables.jl")
 include("GreenFunctionMonteCarlo/StraightForwardWalking.jl")
 include("GreenFunctionMonteCarlo/PlaquetteCorrOperator.jl")
+include("GreenFunctionMonteCarlo/BqOperator.jl")
 include("GreenFunctionMonteCarlo/RandomFluctuations.jl")
 
 include("Variational/VariationalFunctions.jl")
