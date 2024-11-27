@@ -1,5 +1,6 @@
 import SpiderWebModel as SW
 using Test
+using SpiderWebModel.StaticArrays
 
 @testset "utils" begin
     ψG = SW.JastrowFunction(SW.stencilConfig(zeros(4,4),1),Float64)
@@ -87,16 +88,11 @@ end
     
     SW.add_reconstructedFullParams!(ψG,ψGSymm.indicesMapping,newparas)
 
-    fig,ax,hm = SW.heatmap(reshape(ψG.v_ij[1 + size(S,1)*0,:],size(S)))
-    # fig,ax,hm = SW.heatmap(reshape(ψG.m_i,size(S)))
-    Colorbar(fig[1,2],hm)
-    fig
     @test ψG.m_i[10] - ψG.m_i[12] ≈ 0
     @test ψG.m_i[15] - ψG.m_i[17] ≈ 0
 
     vij_1 = SW.PeriodicMatrix(reshape(ψG.v_ij[1,:],size(S)))
     vij_2 = SW.PeriodicMatrix(reshape(ψG.v_ij[3,:],size(S)))[3:end+2,1:end]
-    heatmap(vij_2)
     @test vij_1 == vij_2
 
     vij_2 = SW.PeriodicMatrix(reshape(ψG.v_ij[1+2*size(S,1),:],size(S)))[1:end,3:end+2]

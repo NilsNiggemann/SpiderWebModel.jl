@@ -11,7 +11,9 @@ Base.:(==)(S1::QuantumMetric, S2::QuantumMetric) = S1.O_km == S2.O_km
 
 function QuantumMetric(O_km)
     O_k_avg = reshape(mean(O_km,dims=1),size(O_km,2))
-    @inbounds for i in eachindex(O_k_avg)
+    @boundscheck checkbounds(O_km,1,lastindex(O_k_avg))
+
+    LoopVectorization.@turbo for i in eachindex(O_k_avg)
         for j in axes(O_km,1)
             O_km[j,i] -= O_k_avg[i]
         end
@@ -24,27 +26,9 @@ end
 function LinearMaps._unsafe_mul!(y, S::QuantumMetric, v::AbstractVector)
     N_MC = size(S.O_km,2)
     O = S.O_km
-    # for k in axes(S,1)
-    #     z_k1 = zero(eltype(v))
-    #     z_k2 = zero(eltype(v))
-    #     for m in axes(S,1)
-    #         z_k2 +=  S.O_k_avg[m] * v[m]
-    #     end
-    #     z_k2 *= S.O_k_avg[k]
-
-    #     for μ in axes(S,2)
-    #         z_k1_m = zero(eltype(v))
-    #         for m in axes(S,1)
-    #             z_k1_m += O[m,μ] * v[m]
-    #         end
-    #         z_k1 += O[k,μ] * z_k1_m / N_MC
-    #     end
-    # end
-
+    
     zk1 = O' * (O * v) / N_MC
-    
-    # zk2 = (Ō' * v) .* Ō
-    
+
     y .= zk1 .+1e-6.*v# .- zk2
 
 end
@@ -82,18 +66,6 @@ function reconf_obs(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,c
 
     end
 
-    # Walker = spiderWebWalker(InitialState,plaqs)
-    # for (iconf) in eachindex(IndexLinear(),configs)
-    #     get_config(Walker) .= configs[iconf]
-    #     updateWeightList!(Walker,Guiding_function_buffer,ψG)
-    #     elocal = getLocalEnergy(Walker,method)
-    #     for (ik,k) in enumerate(inequivParams)
-    #         O_xk = getOx_k(ψG,Walker,k)
-    #         Ok_i[iconf,ik] = O_xk
-    #     end
-    #     E_i[iconf] = elocal
-    # end
-
     N = length(configs)
 
     EL_avg = mean(E_i)
@@ -108,7 +80,10 @@ getSOperator(O_ki,::Type{QuantumMetric}) = QuantumMetric(O_ki)
 abstract type AbstractSRSolver end
 
 struct ExplicitSRSolver <: AbstractSRSolver end
-struct IterativeSRSolver <: AbstractSRSolver end
+struct IterativeSRSolver{T} <: AbstractSRSolver 
+    kwargs::T
+end
+IterativeSRSolver(;kwargs...) = IterativeSRSolver(kwargs)
 
 function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatrix,solver::ExplicitSRSolver = ExplicitSRSolver())
     println("computing cov")
@@ -131,10 +106,11 @@ function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatri
     end
     return δα
 end
+
 function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatrix,solver::IterativeSRSolver;kwargs...)
     S = QuantumMetric(Ok_i)
     F = reshape(StatsBase.cov(Ok_i,E_i),size(Ok_i,2))
-    res = -IterativeSolvers.cg(S,F;kwargs...)
+    res = -IterativeSolvers.cg(S,F;solver.kwargs...,kwargs...)
     return res
 end
 stochastic_reconfiguration_step(E_i,Ok_i,::AbstractSRSolver) = error("solver not implemented")

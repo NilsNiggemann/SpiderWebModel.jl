@@ -1,5 +1,4 @@
-"""Operator Δ + Σᵢⱼ cos(q rᵢⱼ) <PᵢPⱼ + PᵢPⱼ† + Pᵢ†Pⱼ + Pᵢ†Pⱼ†>.
-The delta is to make sure the the operator is positive definite.
+"""Operator Σᵢⱼ cos(q rᵢⱼ) <PᵢPⱼ + PᵢPⱼ† + Pᵢ†Pⱼ + Pᵢ†Pⱼ†>.
 """
 struct BBqOperator <: AbstractOperator 
 end
@@ -121,7 +120,7 @@ getRij(move1,move2) = SA[move1[1]-move2[1],move1[2]-move2[2]]
 
 const MOVE_TYPE = Tuple{Int,Int,Int}
 
-struct BBQ_WaveFunctionBuffer_1
+struct BBQ_WaveFunctionBuffer
     AllMoves::Vector{Tuple{MOVE_TYPE,MOVE_TYPE}}
     psiRatios::Vector{Float64}
     weights::Vector{Float64}
@@ -136,17 +135,17 @@ function buffer_BBQ_WFWeights(Walker::SpiderWebWalker,ψG::AbstractGuidingFuncti
     Rij = (getRij(move1,move2) for (move1,move2) in AllMoves)
     Rij_x = [rij[1] for rij in Rij]
     Rij_y = [rij[2] for rij in Rij]
-    return BBQ_WaveFunctionBuffer_1(AllMoves,psiRatios,weights,Rij_x,Rij_y)
+    return BBQ_WaveFunctionBuffer(AllMoves,psiRatios,weights,Rij_x,Rij_y)
 end
 
 function buffer_BBQ_WFWeights(Walkers::Vector{<:SpiderWebWalker},ψG::AbstractGuidingFunction,Guiding_function_buffer)
     chunks = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
-    allbuffers = Vector{BBQ_WaveFunctionBuffer_1}(undef,length(Walkers))
+    allbuffers = Vector{BBQ_WaveFunctionBuffer}(undef,length(Walkers))
     Threads.@threads for (i_chunk,αinds) in enumerate(chunks)
         GWFBuffer = Guiding_function_buffer[i_chunk]
         for α in αinds
             Walker = Walkers[α]
-            allbuffers[α] = buffer_BBQ_WFWeights(Walker,ψG,Guiding_function_buffer[i_chunk])
+            allbuffers[α] = buffer_BBQ_WFWeights(Walker,ψG,GWFBuffer)
         end
     end
     return allbuffers    
@@ -159,7 +158,6 @@ function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveCo
     results = setup_operatorObservables(mProj,length(Allqs),NSteps,O,outfile)
 
     Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState)
-
     Problem = SpiderwebGFMCProblem(method,InitialState,ψG,setup.Walkers,setup.weights,Guiding_function_buffer,setup.reconfiguration_buffer,results)
 
     reconfigurationList = zeros(Int,length(Problem.Walkers))
@@ -186,7 +184,7 @@ function fillWalkers!(Walkers,Configs)
     end
 end
 
-function _initialize_buffered_forward_walking!(Walkers,weights,O::BBqOperator,Configs,q,ψG::T,Guiding_function_buffer,WF_buffers) where T
+function _initialize_buffered_forward_walking!(Walkers,weights,O::AbstractOperator,Configs,q,ψG::T,Guiding_function_buffer,WF_buffers) where T
     # @inbounds for (α, Walker) in enumerate(Walkers)
     batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
     
@@ -204,4 +202,4 @@ function _initialize_buffered_forward_walking!(Walkers,weights,O::BBqOperator,Co
         end
     end
 end
-initialize_buffered_forward_walking!(Problem::AbstractGFMCProblem,O::BBqOperator,Configs,operator,WF_buffers) = _initialize_buffered_forward_walking!(Problem.Walkers,Problem.weights,O,Configs,operator,Problem.ψG,Problem.Guiding_function_buffer,WF_buffers)
+initialize_buffered_forward_walking!(Problem::AbstractGFMCProblem,O::AbstractOperator,Configs,operator,WF_buffers) = _initialize_buffered_forward_walking!(Problem.Walkers,Problem.weights,O,Configs,operator,Problem.ψG,Problem.Guiding_function_buffer,WF_buffers)

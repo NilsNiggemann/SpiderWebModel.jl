@@ -25,9 +25,10 @@ with_theme(theme_PiTicks()) do
 end
 
 ##
-# using GLMakie
-# GLMakie.activate!()
+using WGLMakie
+WGLMakie.activate!()
 # GLMakie.closeall() # close any open screen
+
 ##
 with_theme(theme_PiTicks()) do 
 # let
@@ -35,27 +36,40 @@ with_theme(theme_PiTicks()) do
 
     z = BB = fetch.([Threads.@spawn dispClass(ki,kj) for ki in k, kj in k])
     x = y = k
+
+        
+    k_WF = -pi:pi/10:pi
+
+    z_WF = BB = fetch.([Threads.@spawn dispClass(ki,kj) for ki in k_WF, kj in k_WF])
+    x = y = k
+
     zmin, zmax = extrema(BB)
     cmap = :viridis
     # zlabel = L"\langle B(\mathbf{q})B(-\mathbf{q})\rangle"
     zlabel = L"$ε_1/J,$  $ε_2/J$"
 
-    fig = Figure(size = (600, 450), fontsize = 22)
+    fig = Figure(size = 0.8 .* (640, 550), fontsize = 22,backgroundcolor = :transparent)
     # fig = Figure()
     ticklabels = (-pi:pi/2:pi,Makie.latexstring.(["-π","-π/2","0","π/2","π"]))
-    ax = Axis3(fig[1, 1]; aspect = (1,1,0.4), perspectiveness = 0.0, elevation = π / 9,azimuth = 1.6π,
+    ax = Axis3(fig[1, 1]; aspect = (1,1,0.6), perspectiveness = 0.0, elevation = π / 10,azimuth = 1.55π,
         xzpanelcolor = (:black, 0.15), yzpanelcolor = (:black, 0.15),
-        zgridcolor = :grey, ygridcolor = :grey, xgridcolor = :grey,xlabel = L"q_x",ylabel = L"q_y",zlabel,zticks = SimpleTicks(),xticks = ticklabels,yticks = ticklabels,protrusions=(30,60,-0,-0),backgroundcolor = :gray97,ylabeloffset=70)
+        zgridcolor = :grey, ygridcolor = :grey, xgridcolor = :grey,xlabel = L"q_x",ylabel = L"q_y",zlabel,zticks = SimpleTicks(),xticks = ticklabels,yticks = ticklabels,protrusions=(30,70,50,-10),backgroundcolor = :transparent,ylabeloffset=70)
     # Box(fig[1, 1], strokewidth = 0)
-    surface!(ax, x, y, 0 .*z; colormap = cmap, colorrange = (zmin, zmax),)
+    # surface!(ax, x, y, 0 .*z; colormap = :coolwarm, colorrange = (zmin, zmax),)
+    surface!(ax, x, y, 0 .*z; colormap = :viridis,shininess = 30f0,backlight=10f0,colorrange = (-0.4,0.1))
+
+
+
+    wireframe!(ax, k_WF, k_WF, 0*z_WF; overdraw = true, transparency = true,color = (:black, 0.4),linewidth = 0.5)
+    
     sm = surface!(ax, x, y, z; colormap = cmap, colorrange = (zmin, zmax),
-    transparency = true,alpha = 1,shininess = 30f0,backlight=10f0)
+    transparency = false,alpha = 1,shininess = 30f0,backlight=10f0)
     
     # xm, ym, zm = minimum(ax.finallimits[])
     # contour!(ax, x, y, z; levels = 20, colormap = cmap, linewidth = 2,
     #     colorrange = (zmin, zmax), transformation = (:xy, zmin),
     #     transparency = true)
-    wireframe!(ax, x[1:6:end], y[1:6:end], z[1:6:end,1:6:end]; overdraw = true, transparency = true,color = (:black, 0.4),linewidth = 0.5)
+    wireframe!(ax, k_WF, k_WF, z_WF .+0.01; overdraw = false, transparency = true,color = (:black, 1),linewidth = 0.4,depth_shift = -1.0e-4)
     
     # return fig
     # Colorbar(fig[1, 2], sm, height = Relative(0.5))
@@ -65,6 +79,7 @@ with_theme(theme_PiTicks()) do
     # return fig
     # colsize!(fig.layout, 1, Aspect(1, 1.0))
     save("exactFig/dispersion_classical.png",fig,px_per_unit = 2)
+    # save("exactFig/dispersion_classical.png",alpha_colorbuffer(fig))
     fig
 end
 

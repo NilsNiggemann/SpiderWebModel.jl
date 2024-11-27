@@ -108,7 +108,7 @@ function post_move_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::Simp
     return Buffer
 end
 
-function guidingfuncRatio(ψG::SimpleJastrowFunction,Walker::SpiderWebWalker,move::Tuple,Buffer::SimpleJastrow_GWF_Buffer)
+function guidingfuncRatio_log(ψG::SimpleJastrowFunction,Walker::SpiderWebWalker,move::Tuple,Buffer::SimpleJastrow_GWF_Buffer)
     m = get_m_i(ψG)
 
     (;h_i,prefac_moves) = Buffer
@@ -133,7 +133,7 @@ function guidingfuncRatio(ψG::SimpleJastrowFunction,Walker::SpiderWebWalker,mov
         exp_m += m[I]*s
     end
 
-    return exp(exp_h + exp_m + prefac)
+    return exp_h + exp_m + prefac
 end
 
 function getOx_k(ψG::SimpleJastrowFunction,W::SpiderWebWalker,k)

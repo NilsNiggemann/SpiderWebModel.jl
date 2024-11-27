@@ -117,7 +117,7 @@ function compute_GWF_buffer!(Buffer,ψG::PlaquetteRBM,Walker::SpiderWebWalker)
     return Buffer
 end
 
-function guidingfuncRatio(ψG::PlaquetteRBM,Walker::SpiderWebWalker,move,Buffer)
+function guidingfuncRatio_log(ψG::PlaquetteRBM,Walker::SpiderWebWalker,move,Buffer)
 
     a = get_alpha_i(ψG)
     A = get_A_i(ψG)
@@ -178,7 +178,7 @@ function guidingfuncRatio(ψG::PlaquetteRBM,Walker::SpiderWebWalker,move,Buffer)
         logthetasum += log(arg)
     end
 
-    return exp(exp_a + exp_A + logthetasum)
+    return exp_a + exp_A + logthetasum
 end
 
 function getOx_k(ψG::PlaquetteRBM,Walker::SpiderWebWalker,k)

@@ -83,5 +83,5 @@ SW.Random.seed!(1234)
 S = SW.stencilConfig(parent(SW.getStairCase(10)),1/2,
 boundaryCondition = :periodic
 )
-testResults(S,SW.DiscreteTimeMethod(0.,2,67))
+testResults(S,SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.0)))
 

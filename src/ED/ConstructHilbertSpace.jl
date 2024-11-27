@@ -114,8 +114,7 @@ function constructSparseMatrix(rows, cols, AllStates)
     newrows = zeros(Int, lenRows)
     newcols = zeros(Int, lenCols)
 
-    batches = ChunkSplitters.chunks(newrows, n = nThreads)
-
+    batches = ChunkSplitters.chunks(eachindex(newrows), n = nThreads)
     Threads.@threads for (iChunk, inds) in enumerate(batches)
         for i in inds
             row = rows[i]

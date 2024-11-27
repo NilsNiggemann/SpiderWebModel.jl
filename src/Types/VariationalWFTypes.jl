@@ -32,10 +32,13 @@ function updateWeightList!(Walker::SpiderWebWalker,Buffer,ψG::AbstractGuidingFu
     newBuff = premove_update_GWF_buffer!(Buffer,ψG,Walker)
 
     for operator in moves
-        weight = guidingfuncRatio(ψG,Walker,operator,newBuff)
+        weight = guidingfuncRatio_log(ψG,Walker,operator,newBuff)
         push!(weights,weight)
     end
 
+    LoopVectorization.@turbo for i in eachindex(weights)
+        weights[i] = exp(weights[i])
+    end
     return weights
 end
 
@@ -66,6 +69,7 @@ function guidingfuncRatio(ψG::AbstractGuidingFunction,Walker,move,ψx::Number)
     applyPlaquette!(Config, i, j, -opNum)
     return ψx´/ψx
 end
+@inline guidingfuncRatio(ψG::AbstractGuidingFunction,Walker,move,Buffer) = @fastmath exp(guidingfuncRatio_log(ψG,Walker,move,Buffer))
 
 function _getParamsTypeAndIndex(A::RecursiveArrayTools.ArrayPartition,i)
     @boundscheck checkbounds(A, i)
