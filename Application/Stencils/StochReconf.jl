@@ -7,7 +7,7 @@ using MakieHelpers
 # using MKL
 include("plottingUtils.jl")
 ##
-S = SW.stencilConfig(zeros(8,8),1;
+S = SW.stencilConfig(zeros(16,16),1;
 boundaryCondition = :periodic
 )
 S .= SW.periodicStateDenseLoops(size(S,1))
@@ -28,9 +28,10 @@ S .= SW.periodicStateDenseLoops(size(S,1))
 # ψG = SW.orderGuidingFunction(S)
 # ψG = SW.PlaquetteRBM(S,1,Float64)
 # Symmetry = SW.SymmetryGroup(SW.TranslationalSymmetry(SA[2,2],SA[-2,2]),SW.ExchangeSymmetry())
+Symmetry = SW.TranslationalSymmetry(SA[2,2],SA[-2,2])
 # Symmetry = SW.SymmetryGroup(SW.ExchangeSymmetry())
-ψGSymm = SW.getNonSymmetric(ψG)
-# ψGSymm = SW.symmetrize(ψG,Symmetry,S)
+# ψGSymm = SW.getNonSymmetric(ψG)
+ψGSymm = SW.symmetrize(ψG,Symmetry,S)
 # SW.reduceParams!(ψGSymm,,S)
 SW.Random.seed!(1234)
 # ψGSymm = SW.symmetrize(S,ψG,(4,4))
@@ -46,8 +47,8 @@ SW.rand!(ψGSymm,1e-3)
 nThermal = 400
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
 # DT = SW.DiscreteTimeMethod(0.,3,0.266*length(S))
-CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2))
-CTSR = SW.ContinuousTimeMethod(8,Hxx = CT.Hxx)
+CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.4))
+CTSR = SW.ContinuousTimeMethod(15,Hxx = CT.Hxx)
 
 
 ##
@@ -64,8 +65,8 @@ learningRate(i) = i > SRSteps ÷8 ? 1e-2 : 1e-4
 numSteps(i) = i > SRSteps ÷2 ? 50 : 10
 ##
 
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,30 ,ψGSymm,SRSteps,3e-4,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
-report_steps = 10,
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,20 ,ψG,SRSteps,5e-4,SW.IterativeSRSolver();Nwalkers = 3*20,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+report_steps = 20,
 reset = false,
 # outfile = "tempSR/SR2.h5"
 )
@@ -75,52 +76,84 @@ SW.get_params(ψGnew) .= stochReconfRes.params
 # SW.get_params(ψGnew) .= stochReconfRes.params_steps[:,begin]
 plotVarEn(stochReconfRes,movavg = 30,alpha_index = 1)
 ##
+
+stochReconfResSymm = SW.stochastic_reconfiguration(S,CTSR,15 ,ψGSymm,SRSteps,1e-3,SW.IterativeSRSolver();Nwalkers = 1*20,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+report_steps = 20,
+reset = false,
+# outfile = "tempSR/SR2.h5"
+)
+
+psiSymm = deepcopy(ψG)
+SW.get_params(psiSymm) .= stochReconfResSymm.params
+plotVarEn(stochReconfResSymm,movavg = 30,alpha_index = 1)
+
+##
 with_theme(theme_SimpleTicks()) do
+    fig = Figure(fontsize = 22,size = (1000,600))
 
-
-    # vij = SW.PeriodicMatrix(reshape(ψGnew.v_ij[1+2*size(S,1)+2,:],size(S)))
-    # vij = SW.PeriodicMatrix(reshape(ψGnew.v_ij[1+5*size(S,1)+2,:],size(S)))
-    vijFull = reshape(ψGnew.v_ij,size(S,1),size(S,2),size(S,1),size(S,2))
-    # vij = SW.PeriodicMatrix(reshape(ψGnew.v_ij[1+2*size(S,1)+2,:],size(S)))[3:end+2,3:end+2]
-    vij = vijFull[10,15,:,:]
-    fig,ax,hm = SW.heatmap(vij;colormap = :viridis)
-    # use text! to annotate the heatmap with the value of each vij matrix element, recast as an Int
-    # for J in CartesianIndices(vij)
-    #     for I in CartesianIndices(vij)
-    #         if vij[I] == vij[J] && I != J
-    #             scatter!(ax, [Point(Tuple(I))])
-    #         end
-    #     end
-    # end
+    axSR1 = Axis(fig[1,1],xlabel = L"iter$$",ylabel = L"E", xlabelvisible = false,xticklabelsvisible = false)
+    axSR2 = Axis(fig[2,1],xlabel = L"iter$$",ylabel = L"\Delta E")
     
-    for I in CartesianIndices(vij)
-        v = vij[I]
-        i,j = Tuple(I)
+    errlines!(axSR1,stochReconfRes.E0,stochReconfRes.ΔE;label = "Non-symmetric",color = :black)
+    errlines!(axSR1,stochReconfResSymm.E0,stochReconfResSymm.ΔE;label = "Symmetric",color = :red)
+    lines!(axSR2,stochReconfRes.ΔE,label = "Non-symmetric",color = :black)
+    lines!(axSR2,stochReconfResSymm.ΔE,label = "Non-symmetric",color = :red)
+    axmag1 = Axis(fig[1,2],xlabel = "x",ylabel = "y",title = L"$m$ Non-symmetric",aspect=1,xlabelvisible=false,xticklabelsvisible=false)
+    axmag2 = Axis(fig[1,3],xlabel = "x",ylabel = "y",title = L"$m$ Symmetric",aspect=1, ylabelvisible = false,yticklabelsvisible = false,xlabelvisible=false,xticklabelsvisible=false)
+    
+    mag = reshape(ψGnew.m_i,size(S))
+    # magSymm = reshape(ψG.m_i,size(S))
+    magSymm = reshape(psiSymm.m_i,size(S))
 
-        txtcolor = vij[i, j] < mean(vij) ? :white : :black
+    cmap = min(minimum(mag),minimum(magSymm)),max(maximum(mag),maximum(magSymm))
 
-        # val = Int(vij[i,j])
-        val = (vij[i,j])
-        # text!(ax, "$(val)", position = (i, j),
-            # color = txtcolor, align = (:center, :center))
+    heatmap!(axmag1,mag;colormap = :viridis,colorrange = cmap)
+    hm = heatmap!(axmag2,magSymm;colormap = :viridis,colorrange = cmap)
+    Colorbar(fig[1,4],hm)
 
-        # text!(ax, [Point(i,j)], string(round(Int, v)), color = :white,fontsize = 25)
-    end
-    Colorbar(fig[1,2],hm)
+    ax = Axis(fig[2,2],xlabel = "x",ylabel = "y",title = L"$v_{ij}$ Non-symmetric",aspect=1)
+    ax2 = Axis(fig[2,3],xlabel = "x",ylabel = "y",title = L"$v_{ij}$ Symmetric",aspect=1, ylabelvisible = false,yticklabelsvisible = false)
+
+    vijFull = reshape(ψGnew.v_ij,size(S,1),size(S,2),size(S,1),size(S,2))
+
+    # x,y = 4,3
+    x,y = 4,4
+
+    vijSymm = reshape(psiSymm.v_ij,size(S,1),size(S,2),size(S,1),size(S,2))
+
+    v = vijFull[x,y,:,:]
+    vSymm = vijSymm[x,y,:,:]
+
+    cmap = min(minimum(v),minimum(vSymm)),max(maximum(v),maximum(vSymm))
+
+    heatmap!(ax,v;colormap = :viridis,colorrange = cmap)
+    hm = heatmap!(ax2,vSymm;colormap = :viridis,colorrange = cmap)
+    scatter!(ax,[x],[y],color = :red)
+    scatter!(ax2,[x],[y],color = :red)
+
+    Colorbar(fig[2,4],hm)
+
+    colsize!(fig.layout,1,Relative(0.4))
+    axislegend(axSR1)
+
     fig
 end
 
 ##
 
 SW.Random.seed!(1234)
-NWalkers = 28*6
+NWalkers = 20*3
 NSteps = 2000
-@time resultsNaive = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψGold;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
+@time resultsNaive = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψGold;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:20*4])
 
-# @time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψG;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
+# @time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψG;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:20*4])
+##
+@time resultsHighAcc = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,20NWalkers,2NSteps,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:10])
+
 ##
 SW.Random.seed!(1234)
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψGnew;equilibration_steps=10nThermal,pre_equilibration_steps=100nThermal,scatter_fraction= 0.9) for _ in 1:20*4])
+@time resultsSymm = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,psiSymm;equilibration_steps=10nThermal,pre_equilibration_steps=100nThermal,scatter_fraction= 0.9) for _ in 1:20*4])
 ##
 
 
@@ -128,19 +161,21 @@ SW.Random.seed!(1234)
 plotEnergies(resultsNaive,CT,normalize=false,dense=true,τ = 20)
 # plotEnergies!(resultsOld,CT,normalize=false,dense=true,τ = 20,color = :blue)
 plotEnergies!(results,CT;color=:red,nThermal = 100,normalize=false,dense=true,τ = 20) # L=15
+plotEnergies!(resultsSymm,CT;color=:blue,nThermal = 100,normalize=false,dense=true,τ = 20) # L=15
+plotEnergies!(resultsHighAcc,CT;color=:cyan,normalize=false,dense=true,τ = 20) # L=15
+
 # plotEnergies!(resultsPlaq,CT;nThermal=100,p=30,color=:blue,normalize=false,dense=true,τ = 20) # L=15
 # plotEnergies(results,DT.nBranch;nThermal=1,p=1000,color=:red) # L=15
 current_figure()
 # plotEnergies(results,nBra,-49.7;Emin=-50.5,Emax=-46)
 ## 
-@time resultsHighAcc = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,5NWalkers,2NSteps,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:28])
-plotEnergies!(resultsHighAcc,CT;color=:darkblue,normalize=true,dense=true,τ = 20) # L=15
 current_figure()
 ##
 plotVarEn(stochReconfRes,movavg = 10,E_exact = mean(last.(SW.getEnergies.(resultsNaive,1,50))))
 ##
-SqsGFMCNaive = SW.getSqsGFMC(resultsNaive,1:70)
-SqsGFMC = SW.getSqsGFMC(results,1:70)
+SqsGFMCNaive = SW.getSqsGFMC(resultsNaive,1:150)
+SqsGFMCSymm = SW.getSqsGFMC(resultsSymm,1:150)
+SqsGFMC = SW.getSqsGFMC(results,1:150)
 ##
 with_theme(theme_SimpleTicks()) do 
     fig = Figure(fontsize = 22,size = (500,400))
@@ -148,22 +183,28 @@ with_theme(theme_SimpleTicks()) do
     
     linestyles = [:solid,:dash,:dot,:dashdot,:dashdotdot]
     colors = [:black,:red,:green,:purple,:orange]
-    for (SqsGFMC,color) in zip((SqsGFMCNaive,SqsGFMC),colors)
+
+    sqex = dropmean(SqsGFMCSymm,dims=4)[:,:,end]
+
+    inds = sort(collect(CartesianIndices(sqex))[:], by = x -> sqex[x],rev=true)
+    for (SqsGFMC,color) in zip((SqsGFMCNaive,SqsGFMCSymm),colors)
 
         Sqmean = dropmean(SqsGFMC,dims = 4)
         Sqerr = dropstd(SqsGFMC,dims = 4)
 
-        inds = [
-            (4,5),
-            # (5,5),
-            # (6,5),
-            # (5,4),
-            # (5,6),
-            Tuple(argmax(Sqmean[:,:,end]))
-        ]
+        # inds = [
+        #     (4,5),
+        #     # (5,5),
+        #     # (6,5),
+        #     # (5,4),
+        #     # (5,6),
+        #     Tuple(argmax(Sqmean[:,:,end]))
+        # ]
+        indsplot = inds[1:10:30]
 
         x = axes(SqsGFMC)[3] .* CT.τ
-        for (linestyle, (i,j)) in zip(linestyles,inds)
+        for (linestyle, I) in zip(linestyles,indsplot)
+            i,j = Tuple(I)
             sqm = Sqmean[i,j,:]
             sqe = Sqerr[i,j,:]
             
@@ -180,9 +221,9 @@ with_theme(theme_PiTicks()) do
     kx = ky = 2pi .* LinRange(0,1,size(Sq,1))
     fig = Figure(fontsize = 22,size = (800,400))
     axMC = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"k_y",title = L"GFMC$$",aspect = 1)
-    axerr = Axis(fig[1,2],xlabel = L"k_x",ylabel = L"k_y",title = L"std error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
+    axerr = Axis(fig[1,2],xlabel = L"k_x",ylabel = L"k_y",title = L"std error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible = false,yticklabelsvisible=false)
 
-    axFT = Axis(fig[1,3],xlabel = L"k_x",ylabel = L"k_y",title = L"U(1) theory$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
+    axFT = Axis(fig[1,3],xlabel = L"k_x",ylabel = L"k_y",title = L"U(1) theory$$",aspect = 1,ylabelvisible = false,yticklabelsvisible = false,yticklabelsvisible=false)
 
     err = dropstd(SqsGFMC,dims=4)[:,:,10] ./4
     hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
