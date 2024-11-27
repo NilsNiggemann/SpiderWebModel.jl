@@ -164,6 +164,9 @@ function generate_equivalent(type,k,T::TranslationalSymmetry,ψ::SimpleJastrowFu
         sites = generate_equivalent_site_pairs(siteI,siteJ,T,S)
         i_sites = getindex.(sites,1)
         j_sites = getindex.(sites,2)
+        sites2 = generate_equivalent_site_pairs(siteJ,siteI,T,S)
+        append!(i_sites,getindex.(sites2,1))
+        append!(j_sites,getindex.(sites2,2))
         return site_pair_to_index.(i_sites,j_sites,Ref(S),Ref(ψ.v_ij))
     else
         error("Invalid type")
