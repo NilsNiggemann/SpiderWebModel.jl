@@ -174,7 +174,7 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
         # α = get_alpha_i(ψG)
         w_avg = mean(res.TotalWeights[range])
         if verbose && i % report_steps == 0
-            @info "optimization step $i" dt[i] numConfigs = NSteps[i]*Nwalkers length(params) "max(|α|)" = maximum(abs,params) "||δα||" = normDelta δα[1] E0 ΔE0 = ΔE0 convergedSteps w_avg
+            @info "optimization step $i" dt[i] numConfigs = NSteps[i]*Nwalkers length(uniqueInds) length(params) "max(|α|)" = maximum(abs,params) "||δα||" = normDelta δα[1] E0 ΔE0 = ΔE0 convergedSteps
         end
         ind = i
         if normDelta < rel_tolerance

@@ -11,15 +11,32 @@ function errlines!(ax::Makie.AbstractAxis,x,y,err;bandkwargs = (;),kwargs...)
 end
 errlines!(x,y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),x,y,err;bandkwargs,kwargs...)
 errlines!(y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),eachindex(y),y,err;bandkwargs,kwargs...)
+errlines!(ax::Makie.AbstractAxis,y,err;bandkwargs = (;),kwargs...) = errlines!(ax,eachindex(y),y,err;bandkwargs,kwargs...)
 errlines!(ax::Makie.AbstractAxis,y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),eachindex(y),y,err;bandkwargs,kwargs...)
-function errlines(args...;kwargs...)
+function errlines(args...;axis = (;),kwargs...)
     fig = Figure()
-    ax = Axis(fig[1,1])
+    ax = Axis(fig[1,1];axis...)
     errlines!(ax,args...;kwargs...)
 
     fig
 end
 
+function numberheatmap!(ax::Makie.AbstractAxis,x,y,z;kwargs...)
+    heatmap!(ax,x,y,z;kwargs...)
+    for (i,xi) in enumerate(x), (j,yj) in enumerate(y)
+        color = z[i, j] < mean(z) ? :white : :black
+        text!(ax,xi,yj,text = string(z[i,j]),align = (:center, :center);color)
+    end
+end
+numberheatmap!(args...;kwargs...) = numberheatmap!(current_axis(),args...;kwargs...)
+function numberheatmap(args...;axis = (;),kwargs...)
+    fig = Figure()
+    ax = Axis(fig[1,1];axis...)
+    numberheatmap!(ax,args...;kwargs...)
+    fig
+end
+numberheatmap!(z::AbstractMatrix;kwargs...) = numberheatmap!(axes(z,1),axes(z,2),z;kwargs...)
+numberheatmap(z::AbstractMatrix;kwargs...) = numberheatmap(axes(z,1),axes(z,2),z;kwargs...)
 
 _getkwargs(::Any) = (;xlabel = L"projection order $$")
 _getkwargs(m::SW.ContinuousTimeMethod) = (;xlabel = L"\tau")
@@ -217,7 +234,7 @@ function getBranchingHistory!(BranchingMatrix::AbstractMatrix,reconfigurationTab
     return BranchingMatrix
 end
 
-function plotVarEn(stochReconfRes;normalization=1,movavg = 1,E_exact = NaN,alpha_index = 1)
+function plotVarEn(stochReconfRes;normalization=1,movavg = 1,E_exact = NaN,alpha_index = 1,plotDiff = true)
     fig = Figure(theme = theme_SimpleTicks())
 
     ax = Axis(fig[1, 1], xlabel = "Iteration", ylabel = "Energy",xlabelvisible=false,xticklabelsvisible=false)
@@ -240,8 +257,15 @@ function plotVarEn(stochReconfRes;normalization=1,movavg = 1,E_exact = NaN,alpha
     parslice = parsteps[alpha_index,:]
     lastdim = length(size(stochReconfRes.params_steps))
 
-    diffs = diff(stochReconfRes.params_steps,dims = lastdim)
-    norms = SW.norm.(eachslice(diffs,dims = lastdim))
+    norms = let 
+        if plotDiff
+            pars = stochReconfRes.params_steps[1:100:end,:]
+            diffs = diff(pars,dims = lastdim)
+            SW.norm.(eachslice(diffs,dims = lastdim))
+        else
+            fill(NaN,length(x)-1)
+        end
+    end
 
     if movavg > 1
         Epl = movingaverage(Epl,movavg)

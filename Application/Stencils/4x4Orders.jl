@@ -10,53 +10,7 @@ include("plottingUtils.jl")
 meanstd(x) = (mean(x),std(x))
 include("4x4Orders_base.jl")
 ##
-function shuffleSector!(S,N)
 
-    flips = (:diag,:anti)
-    # flips = (:row,:col,:diag,:anti)
-    spin = SW.getSpin(S)
-    function transformSpins!(vec,sgn)
-        any(==(sgn*spin),vec) && return
-        vec .+= sgn
-        return
-    end
-
-    function applyMove!(S)
-        whichflip = rand(flips)
-        sgn = -sign(sum(S))
-        if sgn == 0 
-            sgn = rand((-1,1))
-        end
-        if whichflip == :row
-            i = rand(axes(S,1))
-            row = @view S[i,begin+iseven(i):2:end]
-            transformSpins!(row,sgn)
-        elseif whichflip == :col
-            j = rand(axes(S,2))
-            col = @view S[begin+iseven(j):2:end,j]
-            transformSpins!(col,sgn)
-        elseif whichflip == :diag
-            i = rand(axes(S,2)[1:2:end])
-            diag = SW.getDiagonal(S,i,1,true)
-            transformSpins!(diag,sgn)
-        elseif whichflip == :anti
-            i = rand(axes(S,2)[1:2:end])
-            diag = SW.getDiagonal(S,i,-1,true)
-            transformSpins!(diag,sgn)
-        end
-        return S
-    end
-
-    for iteration in 1:N
-        applyMove!(S)
-    end
-    while sum(S) != 0
-        applyMove!(S)
-    end
-    S .= 2S
-    SW.fulFillsConstraint(S) || error("Constraint not fulfilled")
-    return S
-end
 ##
 a = generatePeriodic(4,1)
 a_st = sort!(collect(filterConfs(a,1)),by=x->sum(abs,x))
