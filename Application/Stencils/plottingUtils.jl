@@ -11,6 +11,7 @@ function errlines!(ax::Makie.AbstractAxis,x,y,err;bandkwargs = (;),kwargs...)
 end
 errlines!(x,y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),x,y,err;bandkwargs,kwargs...)
 errlines!(y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),eachindex(y),y,err;bandkwargs,kwargs...)
+errlines!(ax::Makie.AbstractAxis,y,err;bandkwargs = (;),kwargs...) = errlines!(ax,eachindex(y),y,err;bandkwargs,kwargs...)
 errlines!(ax::Makie.AbstractAxis,y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),eachindex(y),y,err;bandkwargs,kwargs...)
 function errlines(args...;axis = (;),kwargs...)
     fig = Figure()
@@ -20,6 +21,22 @@ function errlines(args...;axis = (;),kwargs...)
     fig
 end
 
+function numberheatmap!(ax::Makie.AbstractAxis,x,y,z;kwargs...)
+    heatmap!(ax,x,y,z;kwargs...)
+    for (i,xi) in enumerate(x), (j,yj) in enumerate(y)
+        color = z[i, j] < mean(z) ? :white : :black
+        text!(ax,xi,yj,text = string(z[i,j]),align = (:center, :center);color)
+    end
+end
+numberheatmap!(args...;kwargs...) = numberheatmap!(current_axis(),args...;kwargs...)
+function numberheatmap(args...;axis = (;),kwargs...)
+    fig = Figure()
+    ax = Axis(fig[1,1];axis...)
+    numberheatmap!(ax,args...;kwargs...)
+    fig
+end
+numberheatmap!(z::AbstractMatrix;kwargs...) = numberheatmap!(axes(z,1),axes(z,2),z;kwargs...)
+numberheatmap(z::AbstractMatrix;kwargs...) = numberheatmap(axes(z,1),axes(z,2),z;kwargs...)
 
 _getkwargs(::Any) = (;xlabel = L"projection order $$")
 _getkwargs(m::SW.ContinuousTimeMethod) = (;xlabel = L"\tau")
