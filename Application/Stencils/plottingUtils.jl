@@ -12,9 +12,9 @@ end
 errlines!(x,y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),x,y,err;bandkwargs,kwargs...)
 errlines!(y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),eachindex(y),y,err;bandkwargs,kwargs...)
 errlines!(ax::Makie.AbstractAxis,y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),eachindex(y),y,err;bandkwargs,kwargs...)
-function errlines(args...;kwargs...)
+function errlines(args...;axis = (;),kwargs...)
     fig = Figure()
-    ax = Axis(fig[1,1])
+    ax = Axis(fig[1,1];axis...)
     errlines!(ax,args...;kwargs...)
 
     fig
@@ -217,7 +217,7 @@ function getBranchingHistory!(BranchingMatrix::AbstractMatrix,reconfigurationTab
     return BranchingMatrix
 end
 
-function plotVarEn(stochReconfRes;normalization=1,movavg = 1,E_exact = NaN,alpha_index = 1)
+function plotVarEn(stochReconfRes;normalization=1,movavg = 1,E_exact = NaN,alpha_index = 1,plotDiff = true)
     fig = Figure(theme = theme_SimpleTicks())
 
     ax = Axis(fig[1, 1], xlabel = "Iteration", ylabel = "Energy",xlabelvisible=false,xticklabelsvisible=false)
@@ -240,8 +240,15 @@ function plotVarEn(stochReconfRes;normalization=1,movavg = 1,E_exact = NaN,alpha
     parslice = parsteps[alpha_index,:]
     lastdim = length(size(stochReconfRes.params_steps))
 
-    diffs = diff(stochReconfRes.params_steps,dims = lastdim)
-    norms = SW.norm.(eachslice(diffs,dims = lastdim))
+    norms = let 
+        if plotDiff
+            pars = stochReconfRes.params_steps[1:100:end,:]
+            diffs = diff(pars,dims = lastdim)
+            SW.norm.(eachslice(diffs,dims = lastdim))
+        else
+            fill(NaN,length(x)-1)
+        end
+    end
 
     if movavg > 1
         Epl = movingaverage(Epl,movavg)
