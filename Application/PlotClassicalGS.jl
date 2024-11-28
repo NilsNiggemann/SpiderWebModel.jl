@@ -92,7 +92,7 @@ end
 with_theme(theme_PiTicks()) do
     fig = Figure(size = (350,300))
     ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect = 1)
-    kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqRK,1)-1)
+    kx = ky = trueMomenta(-0.5pi,1.5pi,size(Sq.Sq,1)-1)
     SqLN = [SqLargeN(kx,ky) for kx in kx , ky in ky]
     
     hm = heatmap!(kx,ky,SqLN)
@@ -117,16 +117,17 @@ with_theme(theme_PiTicks()) do
     fig
 end
 ##
-with_theme(theme_PiTicks()) do
-    fig = Figure(size = (350,300))
-    ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect = 1)
-    Sq = SW.getSqCont(SqRK)
-    kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqRK,1)-1)
-    hm = heatmap!(kx,ky,Sq.(Iterators.product(kx,ky)))
-    Colorbar(fig[1,2],hm)
-    save("../Application/figs/TalkFigs/SqRK.pdf",fig)
-    fig
-end
+# SqRK = SW.getStructureFac(States, getRKWavefunction(SolStair.ψ0))
+# with_theme(theme_PiTicks()) do
+#     fig = Figure(size = (350,300))
+#     ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect = 1)
+#     Sq = SW.getSqCont(SqRK)
+#     kx = ky = trueMomenta(-0.5pi,1.5pi,size(Sq.Sq,1)-1)
+#     hm = heatmap!(kx,ky,Sq.(Iterators.product(kx,ky)))
+#     Colorbar(fig[1,2],hm)
+#     save("../Application/figs/TalkFigs/SqRK.pdf",fig)
+#     fig
+# end
 
 ##
 import SpiderWebModel as SW
@@ -210,8 +211,9 @@ SqRK = SW.getStructureFac(States, getRKWavefunction(SolStair.ψ0))
 ##
 SqGFMCStaircase = h5read("../Application/Data/StaircaseS12_L40_RK.h5","Sqs") ./4
 ##
-with_theme(theme_PiTicks()) do
-    fig = Figure(size = 0.9 .*(600,370))
+function makeSqPlot(SqED,SqRK,SqGFMCStaircase)
+        
+    fig = Figure(size = 0.9 .*(420,340))
     ticks = PiTicks([0,pi])
 
     L40RescalingFactor = 3
@@ -239,12 +241,14 @@ with_theme(theme_PiTicks()) do
     axkwargs...
     )
 
-    SqFunc = SW.getSqCont(real(Sq.Sq) ./ (1/2*(1/2+1)))
+
+    SqFunc = SW.getSqCont(real(Sq.Sq))
 
     kx = collect(trueMomenta(-0.5pi,1.5pi,size(Sq.Sq,1)-1))
     # kx = kx
     ky = kx
-    kxSpin1 = collect(trueMomenta(-0.5pi,1.5pi,size(SqSpin1,1)-1))
+    # kxSpin1 = collect(trueMomenta(-0.5pi,1.5pi,size(SqSpin1,1)-1))
+    kxSpin1 = collect(trueMomenta(-0.5pi,1.5pi,size(Sq.Sq,1)-1))
     # kxSpin1 = 2pi .* (0.5:1)
     kySpin1 = kxSpin1
 
@@ -265,22 +269,22 @@ with_theme(theme_PiTicks()) do
     axkwargs...,
     # xtickcolor = :white,ytickcolor = :white,xminortickcolor = :white,yminortickcolor = :white
     )
-    
+
     kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqED.Sq,1)-1)
 
-    SqFunc = SW.getSqCont(SqED.Sq  ./ (1/2*(1/2+1)))
+    SqFunc = SW.getSqCont(SqED.Sq)
     SqMat = [real(SqFunc(x,y)) for x in kx, y in ky] 
 
     colorrange = extrema(SqMat)
 
-    SqRKFunc = SW.getSqCont(SqRK.Sq  ./ (1/2*(1/2+1)))
+    SqRKFunc = SW.getSqCont(SqRK.Sq)
     SqRKMat = [real(SqRKFunc(x,y)) for x in kx, y in ky]
     colorrange = extrema(SqRKMat)
 
     
     kxGFMC = kyGFMC = trueMomenta(-0.5pi,1.5pi,size(SqGFMCStaircase,1)-1)
     
-    SqGFMCStaircaseFunc = SW.getSqCont(mean(eachslice(SqGFMCStaircase,dims=3))  ./ (1/2*(1/2+1)) ./ L40RescalingFactor) 
+    SqGFMCStaircaseFunc = SW.getSqCont(mean(eachslice(SqGFMCStaircase,dims=3)) ./ L40RescalingFactor) 
     SqGFMCStaircaseMat = [real(SqGFMCStaircaseFunc(x,y)) for x in kxGFMC, y in kyGFMC]
 
     colorrange = (0,maximum(maximum.((SqGFMCStaircaseMat,SqMat,SqRKMat))))
@@ -299,23 +303,27 @@ with_theme(theme_PiTicks()) do
     textpos = Point(-pi/2,3pi/2)
 
 
-    Colorbar(subgl_top[1,3], hm2,height = Relative(1),width = Relative(0.8),label = L"\mathcal{S}(q)/S(S+1)",ticks = SimpleTicks([0,0.2,0.4,0.6]))
-    Colorbar(subgl_bot[1,3], hmED2,height = Relative(1),width = Relative(0.8),label = L"\mathcal{S}(q)/S(S+1)",ticks = SimpleTicks())
+    Colorbar(subgl_top[1,3], hm2,height = Relative(0.95),width = Relative(0.8),label = L"\mathcal{S}(q)",ticks = SimpleTicks([0,0.2,0.4,0.6]))
+    Colorbar(subgl_bot[1,3], hmED2,height = Relative(0.95),width = Relative(0.8),label = L"\mathcal{S}(q)",ticks = SimpleTicks())
 
 
     text!(ax, textpos ,text = L"a)",color = :black,align = (:left,:top),fontsize = 18)
     text!(ax2, textpos ,text = L"b)",color = :black,align = (:left,:top),fontsize = 18)
 
-    text!(axED1, textpos ,text = L"d)",color = :white,align = (:left,:top),fontsize = 18)
-    text!(axED2, textpos ,text = L"f)",color = :white,align = (:left,:top),fontsize = 18)
+    text!(axED1, textpos ,text = L"c)",color = :white,align = (:left,:top),fontsize = 18)
+    text!(axED2, textpos ,text = L"d)",color = :white,align = (:left,:top),fontsize = 18)
     text!(axED2, Point(pi,3pi/2) ,text = L"\times \frac{1}{%$(L40RescalingFactor)}",color = :white,align = (:left,:top),fontsize = 14)
     
-    # rowsize!(fig.layout,2,Relative(0.6))
-    rowgap!(fig.layout,1,4)
-
-
+    colsize!(subgl_top,3,Relative(0.05))
+    colsize!(subgl_bot,3,Relative(0.05))
+    rowgap!(fig.layout,1,3)
+    colgap!(subgl_top,1,3)
+    colgap!(subgl_top,2,3)
+    colgap!(subgl_bot,1,3)
+    colgap!(subgl_bot,2,3)
     save("../Application/figs/Sq_comparison_2.png", fig,px_per_unit=4)
     # Colorbar(fig[1, 2], hm)
     fig
-    
 end
+##
+makeSqPlot(SqED,SqRK,SqGFMCStaircase)
