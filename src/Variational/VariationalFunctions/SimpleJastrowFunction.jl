@@ -86,9 +86,9 @@ function compute_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::SimpleJastrow
     h = Buffer.h_i
     # fill!(h,0.0)
 
-    for i in axes(v,1)
+    LoopVectorization.@turbo for i in axes(v,1)
         hi = 0.
-        LoopVectorization.@turbo for j in axes(v,2)
+        for j in axes(v,2)
             hi += x[j]*v[j,i]
         end
         h[i] = hi
