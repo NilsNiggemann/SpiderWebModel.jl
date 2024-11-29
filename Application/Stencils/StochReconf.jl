@@ -7,7 +7,7 @@ using MakieHelpers
 # using MKL
 include("plottingUtils.jl")
 ##
-S = SW.stencilConfig(zeros(16,16),1;
+S = SW.stencilConfig(zeros(28,28),1;
 boundaryCondition = :periodic
 )
 S .= SW.periodicStateDenseLoops(size(S,1))
@@ -28,17 +28,17 @@ S .= SW.periodicStateDenseLoops(size(S,1))
 # ψG = SW.orderGuidingFunction(S)
 # ψG = SW.PlaquetteRBM(S,1,Float64)
 # Symmetry = SW.SymmetryGroup(SW.TranslationalSymmetry(SA[2,2],SA[-2,2]),SW.ExchangeSymmetry())
-Symmetry = SW.TranslationalSymmetry(SA[2,2],SA[-2,2])
+Symmetry = SW.TranslationalSymmetry([2,2],[-2,2])
 # Symmetry = SW.SymmetryGroup(SW.ExchangeSymmetry())
 # ψGSymm = SW.getNonSymmetric(ψG)
-ψGSymm = SW.symmetrize(ψG,Symmetry,S)
+@time ψGSymm = SW.symmetrize(ψG,Symmetry,S)
 # SW.reduceParams!(ψGSymm,,S)
 SW.Random.seed!(1234)
 # ψGSymm = SW.symmetrize(S,ψG,(4,4))
 # ψG = SW.RBM(S,1)
 # SW.rand!(SW.get_params(ψG)) .*= 1e-3
 SW.rand!(ψGSymm,1e-3)
-ψG.v_ij .= SW.Symmetric(ψG.v_ij)
+# ψG.v_ij .= SW.Symmetric(ψG.v_ij)
 # ψG.α .= 0.1
 ##
 
@@ -53,7 +53,7 @@ CTSR = SW.ContinuousTimeMethod(15,Hxx = CT.Hxx)
 
 ##
 cappedGrowth(x,start,stop,offset,growth) = start + 0.5(stop-start)* (1 +tanh(growth *(x -offset)))
-SRSteps = 1500
+SRSteps = 500
 
 numSteps(i) = round(Int,cappedGrowth(i,20,40,SRSteps - SRSteps÷2,10/SRSteps))
 learningRate(i) = cappedGrowth(i,8e-1,4e-1,SRSteps - SRSteps÷2,5/SRSteps)
@@ -77,7 +77,7 @@ SW.get_params(ψGnew) .= stochReconfRes.params
 plotVarEn(stochReconfRes,movavg = 30,alpha_index = 1)
 ##
 
-stochReconfResSymm = SW.stochastic_reconfiguration(S,CTSR,15 ,ψGSymm,SRSteps,1e-3,SW.IterativeSRSolver();Nwalkers = 1*20,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
+stochReconfResSymm = SW.stochastic_reconfiguration(S,CTSR,20 ,ψGSymm,SRSteps,8e-3,SW.IterativeSRSolver();Nwalkers = 3*20,reconfigure=false,rel_tolerance=0,equilibration_steps=nThermal,pre_equilibration_steps=40_000,
 report_steps = 20,
 reset = false,
 # outfile = "tempSR/SR2.h5"
@@ -109,7 +109,7 @@ with_theme(theme_SimpleTicks()) do
 
     heatmap!(axmag1,mag;colormap = :viridis,colorrange = cmap)
     hm = heatmap!(axmag2,magSymm;colormap = :viridis,colorrange = cmap)
-    Colorbar(fig[1,4],hm)
+    Colorbar(fig[1,4],hm,ticks = SimpleTicks())
 
     ax = Axis(fig[2,2],xlabel = "x",ylabel = "y",title = L"$v_{ij}$ Non-symmetric",aspect=1)
     ax2 = Axis(fig[2,3],xlabel = "x",ylabel = "y",title = L"$v_{ij}$ Symmetric",aspect=1, ylabelvisible = false,yticklabelsvisible = false)
@@ -131,7 +131,7 @@ with_theme(theme_SimpleTicks()) do
     scatter!(ax,[x],[y],color = :red)
     scatter!(ax2,[x],[y],color = :red)
 
-    Colorbar(fig[2,4],hm)
+    Colorbar(fig[2,4],hm,ticks = SimpleTicks())
 
     colsize!(fig.layout,1,Relative(0.4))
     axislegend(axSR1)
@@ -176,18 +176,19 @@ plotVarEn(stochReconfRes,movavg = 10,E_exact = mean(last.(SW.getEnergies.(result
 SqsGFMCNaive = SW.getSqsGFMC(resultsNaive,1:150)
 SqsGFMCSymm = SW.getSqsGFMC(resultsSymm,1:150)
 SqsGFMC = SW.getSqsGFMC(results,1:150)
+SqsGFMCHighAcc = SW.getSqsGFMC(resultsHighAcc,1:150)
 ##
 with_theme(theme_SimpleTicks()) do 
     fig = Figure(fontsize = 22,size = (500,400))
     ax = Axis(fig[1,1],xlabel = L"\tau",ylabel = L"\mathcal{S}^{zz}(\textbf{q})")
     
     linestyles = [:solid,:dash,:dot,:dashdot,:dashdotdot]
-    colors = [:black,:red,:green,:purple,:orange]
+    colors = [:red,:blue,:cyan,:green,:purple,:orange]
 
     sqex = dropmean(SqsGFMCSymm,dims=4)[:,:,end]
 
     inds = sort(collect(CartesianIndices(sqex))[:], by = x -> sqex[x],rev=true)
-    for (SqsGFMC,color) in zip((SqsGFMCNaive,SqsGFMCSymm),colors)
+    for (SqsGFMC,color) in zip((SqsGFMC,SqsGFMCSymm,SqsGFMCHighAcc),colors)
 
         Sqmean = dropmean(SqsGFMC,dims = 4)
         Sqerr = dropstd(SqsGFMC,dims = 4)
@@ -200,7 +201,7 @@ with_theme(theme_SimpleTicks()) do
         #     # (5,6),
         #     Tuple(argmax(Sqmean[:,:,end]))
         # ]
-        indsplot = inds[1:10:30]
+        indsplot = inds[1:20:60]
 
         x = axes(SqsGFMC)[3] .* CT.τ
         for (linestyle, I) in zip(linestyles,indsplot)
@@ -217,15 +218,16 @@ with_theme(theme_SimpleTicks()) do
 end
 ##
 with_theme(theme_PiTicks()) do 
-    Sq = dropmean(SqsGFMC,dims=4)[:,:,30] ./4
+    Sq = dropmean(SqsGFMC,dims=4)[:,:,end] ./4
+    err = dropstd(SqsGFMC,dims=4)[:,:,end] ./4
+
     kx = ky = 2pi .* LinRange(0,1,size(Sq,1))
     fig = Figure(fontsize = 22,size = (800,400))
     axMC = Axis(fig[1,1],xlabel = L"k_x",ylabel = L"k_y",title = L"GFMC$$",aspect = 1)
-    axerr = Axis(fig[1,2],xlabel = L"k_x",ylabel = L"k_y",title = L"std error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible = false,yticklabelsvisible=false)
+    axerr = Axis(fig[1,2],xlabel = L"k_x",ylabel = L"k_y",title = L"std error$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
 
-    axFT = Axis(fig[1,3],xlabel = L"k_x",ylabel = L"k_y",title = L"U(1) theory$$",aspect = 1,ylabelvisible = false,yticklabelsvisible = false,yticklabelsvisible=false)
+    axFT = Axis(fig[1,3],xlabel = L"k_x",ylabel = L"k_y",title = L"U(1) theory$$",aspect = 1,ylabelvisible = false,yticklabelsvisible=false)
 
-    err = dropstd(SqsGFMC,dims=4)[:,:,10] ./4
     hmMC = heatmap!(axMC,kx,ky,Sq,colormap = :viridis)
 
     fittingcoefs = optimizeCoeffs(Sq)
@@ -243,8 +245,36 @@ with_theme(theme_PiTicks()) do
 end
 
 ##
+function NNCorrFunc(x)
+    res = 0.
+    for I in CartesianIndices(x)
+        i,j = Tuple(I)
+        J1 = (i+1,j)
+        J2 = (i,j+1)
+        J3 = (i-1,j)
+        J4 = (i,j-1)
+        xi = x[I]
+        xjsum = 0.
+        for J in (J1,J2,J3,J4)
+            J´ = SW.wrap_indices_periodic(J...,size(x)...,0)
+            xjsum += x[CartesianIndex(J´)]
+        end
+        res += xi * xjsum
+    end
+    return res
+end
+##
 let 
-    Gnp
-    sqtau = getImagTimeCorr(Gnp,reconfigurationTable,ObsFunc::T,mtau=size(Gnp,2)÷4, m=size(Gnp,2)÷2)
-    
+    sqtau = SW.getImagTimeCorr(results[1:6],NNCorrFunc,60,30)
+    fig = Figure(fontsize = 22,size = (800,700))
+    ax1 = Axis(fig[1,1],xlabel = L"\tau",ylabel = L"\mathcal{S}^{zz}(\tau)")
+    ax2 = Axis(fig[2,1],xlabel = L"\tau",ylabel = L"δ\mathcal{S}^{zz}(\tau)")
+
+    y = dropmean(sqtau,dims=2)
+    yerr = dropstd(sqtau,dims=2)
+
+    errlines!(ax1,CT.τ .* eachindex(y), y,yerr)
+
+    lines!(ax2,yerr ./ abs.(y))
+    fig
 end
