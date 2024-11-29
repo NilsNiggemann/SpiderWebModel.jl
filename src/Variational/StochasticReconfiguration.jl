@@ -40,13 +40,11 @@ function reconf_obs(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,c
     )
     plaqs = collect(plaquetteIterator(InitialState))
     Guiding_function_buffers = allocate_GWF_buffers_threads(ψG,InitialState)
-    
-    NThreads = Threads.nthreads()
 
     Nparams = length(inequivParams)
 
 
-    WorkChunks = ChunkSplitters.chunks(eachindex(IndexLinear(),configs),n=NThreads)
+    WorkChunks = ChunkSplitters.chunks(eachindex(IndexLinear(),configs),n=length(Guiding_function_buffers))
     
     Threads.@threads for (ichunk,chunkinds) in enumerate(WorkChunks)
         Guiding_function_buffer = Guiding_function_buffers[ichunk]
@@ -115,7 +113,7 @@ function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatri
 end
 stochastic_reconfiguration_step(E_i,Ok_i,::AbstractSRSolver) = error("solver not implemented")
 
-function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,GWF::SymmetryReducedWaveFunction,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,outfile=nothing,reconfigure=true,initializer = UnguidedWalkInitializer(equilibration_steps,0.8);verbose=true,report_steps=1,reset = true)
+function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,GWF::SymmetryReducedWaveFunction,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,nThreads=2*Threads.nthreads(),outfile=nothing,reconfigure=true,initializer = UnguidedWalkInitializer(equilibration_steps,0.8);verbose=true,report_steps=1,reset = true)
     
     (;psi,indicesMapping,uniqueInds) = GWF
     ψG = deepcopy(psi)
@@ -128,7 +126,7 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
     # _, = getDistReduction(InitialState,ψG)
 
     maxNSteps = maximum(NSteps)
-    prob = setup_GFMC_problem(InitialState,method,Nwalkers,maxNSteps,ψG)
+    prob = setup_GFMC_problem(InitialState,method,Nwalkers,maxNSteps,nThreads,ψG)
     initializeGFMC!(prob,equilibration_steps,initializer)
 
     results = get_stoch_rec_Observables(n,ψG,outfile)

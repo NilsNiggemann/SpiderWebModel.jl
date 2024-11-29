@@ -1,6 +1,6 @@
-function _setup_GFMC_problem(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,NSteps::Integer,ψG,outfile)
-    setup = setup_many_walker_GFMC(InitialState,Nwalkers)
-    Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState)
+function _setup_GFMC_problem(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,NSteps::Integer,nThreads,ψG,outfile)
+    setup = setup_many_walker_GFMC(InitialState,Nwalkers,nThreads)
+    Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState,nThreads)
     
     (;Walkers,weights,reconfiguration_buffer) = setup
     ObsSetup = setupObservables(InitialState,Nwalkers,NSteps,outfile)
@@ -11,10 +11,10 @@ function _setup_GFMC_problem(InitialState::StencilSpinConfig,method::AbstractGFM
     return SpiderwebGFMCProblem(method,InitialState,ψG,Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,Observables)
 end
 
-function setup_GFMC_problem(InitialState::ConfType, method::AbstractGFMCMethod, Nwalkers::Integer, NSteps::Integer, ψG;
+function setup_GFMC_problem(InitialState::ConfType, method::AbstractGFMCMethod, Nwalkers::Integer, NSteps::Integer,nThreads::Integer, ψG;
     outfile = nothing
     ) where {ConfType <: StencilSpinConfig}
-    _setup_GFMC_problem(InitialState,method,Nwalkers,NSteps,ψG,outfile)
+    _setup_GFMC_problem(InitialState,method,Nwalkers,NSteps,nThreads,ψG,outfile)
 end
 
 function getMoves!(
@@ -243,12 +243,24 @@ function setupProjector(weights,nThermal)
     Gn1 = bn./meanweight
 end
 
-function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers::Integer) where {ConfType <: StencilSpinConfig}
-    plaquettePositions = collect(plaquetteIterator(InitialState))
+"""
+Allocates walkers in a multithreaded way such that the memory of each walker is associated with the correct memory domain
+...hopefully...
+"""
+function _allocateWalkers(InitialState::ConfType,Nwalkers,nThreads,plaquettePositions) where {ConfType <: StencilSpinConfig}
     Walkers = Vector{SpiderWebWalker{ConfType}}(undef,Nwalkers)
-    Threads.@threads for α in eachindex(Walkers)
-        Walkers[α] = spiderWebWalker(InitialState,plaquettePositions)
+    chunks = ChunkSplitters.chunks(eachindex(Walkers), n = nThreads)
+    Threads.@threads for (i_chunk,αinds) in enumerate(chunks)
+        for α in αinds
+            Walkers[α] = spiderWebWalker(InitialState,plaquettePositions)
+        end
     end
+    return Walkers
+end
+
+function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers::Integer,nThreads) where {ConfType <: StencilSpinConfig}
+    plaquettePositions = collect(plaquetteIterator(InitialState))
+    Walkers = _allocateWalkers(InitialState,Nwalkers,nThreads,plaquettePositions)
     weights = ones(Nwalkers)
     reconfiguration_buffer = zeros(Nwalkers)
     
@@ -409,8 +421,8 @@ end
 #     startManyWalkerGFMC(InitialState,outfile,Nwalkers,NSteps,equilibration_steps,pre_equilibration_steps,G)
 # end
 
-function startManyWalkerGFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,ψG; equilibration_steps = 0, pre_equilibration_steps = equilibration_steps ÷ 5, scatter_fraction = 0.8,initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),kwargs...)
-    prob = setup_GFMC_problem(InitialState,method,Nwalkers,nSteps,ψG;kwargs...)
+function startManyWalkerGFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,ψG; equilibration_steps = 0, pre_equilibration_steps = equilibration_steps ÷ 5, scatter_fraction = 0.8,initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),nThreads=2*Threads.nthreads(),kwargs...)
+    prob = setup_GFMC_problem(InitialState,method,Nwalkers,nSteps,nThreads,ψG;kwargs...)
     startManyWalkerGFMC!(prob,equilibration_steps,initializer)
 end
 
@@ -441,7 +453,7 @@ function propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method::D
 
     w_avg_estimate⁻¹ = 1. / w_avg_estimate
 
-    batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
+    batches = ChunkSplitters.chunks(eachindex(Walkers), n = length(Guiding_function_buffer))
 
     Threads.@threads for (i_chunk,αinds) in enumerate(batches)
         GWFBuffer = Guiding_function_buffer[i_chunk]
@@ -463,7 +475,7 @@ end
 function propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method::ContinuousTimeMethod)
     (;Hxx,nBranch,τ,w_avg_estimate) = method
     
-    batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
+    batches = ChunkSplitters.chunks(eachindex(Walkers), n = length(Guiding_function_buffer),split=ChunkSplitters.RoundRobin())
 
     Threads.@threads for (i_chunk,αinds) in enumerate(batches)
         GWFBuffer = Guiding_function_buffer[i_chunk]

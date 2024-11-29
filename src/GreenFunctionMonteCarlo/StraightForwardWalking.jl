@@ -133,7 +133,7 @@ end
 
 function initialize_forward_walking!(Walkers,weights,O::AbstractOperator,Configs,J,ψG::T,Guiding_function_buffer) where T
     # @inbounds for (α, Walker) in enumerate(Walkers)
-    batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
+    batches = ChunkSplitters.chunks(eachindex(Walkers), n = length(Guiding_function_buffer))
     
     Threads.@threads for (i_chunk,αinds) in enumerate(batches)
         for α in αinds

@@ -139,7 +139,7 @@ function buffer_BBQ_WFWeights(Walker::SpiderWebWalker,ψG::AbstractGuidingFuncti
 end
 
 function buffer_BBQ_WFWeights(Walkers::Vector{<:SpiderWebWalker},ψG::AbstractGuidingFunction,Guiding_function_buffer)
-    chunks = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
+    chunks = ChunkSplitters.chunks(eachindex(Walkers), n = length(Guiding_function_buffer))
     allbuffers = Vector{BBQ_WaveFunctionBuffer}(undef,length(Walkers))
     Threads.@threads for (i_chunk,αinds) in enumerate(chunks)
         GWFBuffer = Guiding_function_buffer[i_chunk]
@@ -186,7 +186,7 @@ end
 
 function _initialize_buffered_forward_walking!(Walkers,weights,O::AbstractOperator,Configs,q,ψG::T,Guiding_function_buffer,WF_buffers) where T
     # @inbounds for (α, Walker) in enumerate(Walkers)
-    batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
+    batches = ChunkSplitters.chunks(eachindex(Walkers), n = length(Guiding_function_buffer))
     
     # for (i_chunk,αinds) in enumerate(batches)
     Threads.@threads for (i_chunk,αinds) in enumerate(batches)

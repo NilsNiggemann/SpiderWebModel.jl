@@ -10,8 +10,8 @@ get_params(P::AbstractGuidingFunction) = P.params
 """Allocates a buffer for the guiding wave function to be used for efficient computation. Can be anything depending on the model"""
 allocate_GWF_buffer(ψG::AbstractGuidingFunction,S::Any) = precomputeAffectedPlaquettes(S)
 
-function allocate_GWF_buffers_threads(ψG::AbstractGuidingFunction,InitialState)
-    fetch.([Threads.@spawn allocate_GWF_buffer(ψG, InitialState) for _ in 1:Threads.nthreads()])
+function allocate_GWF_buffers_threads(ψG::AbstractGuidingFunction,InitialState,numThreads)
+    fetch.([Threads.@spawn allocate_GWF_buffer(ψG, InitialState) for _ in 1:numThreads])
 end
 
 """precomputes the guiding wave function for the given configuration. Can be overloaded for more complex wavefunctions in which case a Buffer is filled. In this case the buffer needs to be returned"""
