@@ -39,7 +39,7 @@ function reconf_obs(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,c
     inequivParams=eachindex(get_params(ψG))
     )
     plaqs = collect(plaquetteIterator(InitialState))
-    Guiding_function_buffers = allocate_GWF_buffers_threads(ψG,InitialState)
+    Guiding_function_buffers = allocate_GWF_buffers_threads(ψG,InitialState,Threads.nthreads())
 
     Nparams = length(inequivParams)
 
@@ -122,12 +122,10 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
     convergedSteps = 0
 
     normDelta = Inf
-
     # _, = getDistReduction(InitialState,ψG)
-
     maxNSteps = maximum(NSteps)
     prob = setup_GFMC_problem(InitialState,method,Nwalkers,maxNSteps,nThreads,ψG)
-    initializeGFMC!(prob,equilibration_steps,initializer)
+    initializeGFMC!(prob,nThreads,equilibration_steps,initializer,reconfigure)
 
     results = get_stoch_rec_Observables(n,ψG,outfile)
 
@@ -137,16 +135,18 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
     All_Ok_i = zeros(Float32,maxNSteps*Nwalkers,Nparams)
     All_E_i = zeros(Float32,maxNSteps*Nwalkers)
 
+    Guiding_function_buffers = allocate_GWF_buffers_threads(ψG,InitialState,Nwalkers)
     
     for i in 1:n
         range = eachindex(prob.Observables.TotalWeights)[1:NSteps[i]]
         # for w in prob.Walkers
         #     get_config(w) .= InitialState
         # end
-        reset && initializeGFMC!(prob,equilibration_steps,initializer)
+        fill_all_Buffers!(prob,nThreads)
+        reset && initializeGFMC!(prob,nThreads,equilibration_steps,initializer,reconfigure)
 
         # @time res = runGFMC!(prob,range,reconfigure)
-        res = runGFMC!(prob,range,reconfigure)
+        res = runGFMC!(prob,range,nThreads,reconfigure)
 
         resSlice = @view res.SaveConfigs[:,:,:,range]
         confs = eachslice( resSlice,dims=(3,4))
@@ -183,7 +183,8 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
             convergedSteps = 0
         end
 
-        Accessors.@reset prob.Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState) # recompute GWF buffers in case they change
+        # fill_all_Buffers!(prob,nThreads)
+        Accessors.@reset prob.Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState,Nwalkers) # recompute GWF buffers in case they change
     end
 
     params = selectdim(results.params_steps,arraydim(results.params_steps),ind)
@@ -200,6 +201,7 @@ function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSte
     pre_equilibration_steps=5*equilibration_steps,
     scatter_fraction=0.8,
     reconfigure=true,
+    nThreads=2*Threads.nthreads(),
     initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),
     kwargs...)
     
@@ -207,7 +209,7 @@ function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSte
     dtVec = makeVec(dt,n)
     GWF = _default_symmetry(InitialState,ψG)
 
-    return _stochastic_reconfiguration(InitialState,method,solver,NStepsVec,GWF,n,dtVec,equilibration_steps,rel_tolerance,Nwalkers,outfile,reconfigure,initializer;kwargs...)
+    return _stochastic_reconfiguration(InitialState,method,solver,NStepsVec,GWF,n,dtVec,equilibration_steps,rel_tolerance,Nwalkers,nThreads,outfile,reconfigure,initializer;kwargs...)
 end
 
 _default_symmetry(InitialState,ψG::AbstractGuidingFunction) = getDistReduction(InitialState,ψG)

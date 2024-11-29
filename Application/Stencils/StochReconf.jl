@@ -53,7 +53,7 @@ CTSR = SW.ContinuousTimeMethod(15,Hxx = CT.Hxx)
 
 ##
 cappedGrowth(x,start,stop,offset,growth) = start + 0.5(stop-start)* (1 +tanh(growth *(x -offset)))
-SRSteps = 500
+SRSteps = 1500
 
 numSteps(i) = round(Int,cappedGrowth(i,20,40,SRSteps - SRSteps÷2,10/SRSteps))
 learningRate(i) = cappedGrowth(i,8e-1,4e-1,SRSteps - SRSteps÷2,5/SRSteps)
@@ -148,21 +148,21 @@ NSteps = 2000
 
 # @time resultsOld = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψG;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:20*4])
 ##
-@time resultsHighAcc = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,20NWalkers,2NSteps,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:10])
+# @time resultsHighAcc = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,20NWalkers,2NSteps,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=nThermal) for _ in 1:10])
 
 ##
 SW.Random.seed!(1234)
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψGnew;equilibration_steps=10nThermal,pre_equilibration_steps=100nThermal,scatter_fraction= 0.9) for _ in 1:20*4])
-@time resultsSymm = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,psiSymm;equilibration_steps=10nThermal,pre_equilibration_steps=100nThermal,scatter_fraction= 0.9) for _ in 1:20*4])
+@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,ψGnew;equilibration_steps=nThermal,pre_equilibration_steps=100nThermal,scatter_fraction= 0.9) for _ in 1:20*4])
+@time resultsSymm = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,NWalkers,NSteps,psiSymm;equilibration_steps=nThermal,pre_equilibration_steps=100nThermal,scatter_fraction= 0.9) for _ in 1:20*4])
 ##
 
 
 # plotEnergies(results,nBra,-20.35;Emin=-20.5,Emax=-19.8) # L=10
 plotEnergies(resultsNaive,CT,normalize=false,dense=true,τ = 20)
-# plotEnergies!(resultsOld,CT,normalize=false,dense=true,τ = 20,color = :blue)
+# plotEnergies(resultsOld,CT,normalize=false,dense=true,τ = 20,color = :blue)
 plotEnergies!(results,CT;color=:red,nThermal = 100,normalize=false,dense=true,τ = 20) # L=15
 plotEnergies!(resultsSymm,CT;color=:blue,nThermal = 100,normalize=false,dense=true,τ = 20) # L=15
-plotEnergies!(resultsHighAcc,CT;color=:cyan,normalize=false,dense=true,τ = 20) # L=15
+# plotEnergies!(resultsHighAcc,CT;color=:cyan,normalize=false,dense=true,τ = 20) # L=15
 
 # plotEnergies!(resultsPlaq,CT;nThermal=100,p=30,color=:blue,normalize=false,dense=true,τ = 20) # L=15
 # plotEnergies(results,DT.nBranch;nThermal=1,p=1000,color=:red) # L=15

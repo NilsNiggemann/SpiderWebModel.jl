@@ -45,6 +45,15 @@ struct SimpleJastrow_GWF_Buffer{T<:Number}
     safe_parent_indices::Matrix{SVector{8,Int}}
 end
 
+function GWFBuffer_set_to!(A::SimpleJastrow_GWF_Buffer,B::SimpleJastrow_GWF_Buffer)
+    A.x_i .= B.x_i
+    A.h_i .= B.h_i
+    # A.prefac_moves .= B.prefac_moves
+    # A.safe_parent_indices .= B.safe_parent_indices
+    return A
+end
+
+
 function allocate_GWF_buffer(ψG::SimpleJastrowFunction{T},S::AbstractMatrix) where T
     x_i = zeros(T,length(S))
     h_i = zeros(T,length(S))
@@ -97,6 +106,7 @@ function compute_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::SimpleJastrow
     return Buffer
 end
 
+
 function post_move_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::SimpleJastrowFunction,Walker::SpiderWebWalker,move::Tuple)
     Config = get_config(Walker)
 
@@ -124,8 +134,6 @@ function guidingfuncRatio_log(ψG::SimpleJastrowFunction,Walker::SpiderWebWalker
 
     (;h_i,prefac_moves) = Buffer
     
-    x = get_config(Walker)
-
     i,j,opSign = move
     prefac = prefac_moves[i,j]
 
@@ -137,12 +145,12 @@ function guidingfuncRatio_log(ψG::SimpleJastrowFunction,Walker::SpiderWebWalker
 
     @inbounds @simd for idx in eachindex(sites)
         I = sites[idx]
-        s = P1_STENCIL[idx]*opSign
+        s = P1_STENCIL[idx]
         exp_h += h_i[I]*s
         exp_m += m[I]*s
     end
 
-    return exp_h + exp_m + prefac
+    return opSign*(exp_h + exp_m) + prefac
 end
 
 function getOx_k(ψG::SimpleJastrowFunction,W::SpiderWebWalker,k)

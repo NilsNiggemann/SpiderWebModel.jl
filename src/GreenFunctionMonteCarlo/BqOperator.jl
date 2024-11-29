@@ -67,7 +67,7 @@ function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveCo
     
     results = setup_operatorObservables(mProj,length(Allqs),NSteps,O,outfile)
 
-    Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState,nThreads)
+    Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState,Nwalkers)
     Problem = SpiderwebGFMCProblem(method,InitialState,ψG,setup.Walkers,setup.weights,Guiding_function_buffer,setup.reconfiguration_buffer,results)
 
     reconfigurationList = zeros(Int,length(Problem.Walkers))
