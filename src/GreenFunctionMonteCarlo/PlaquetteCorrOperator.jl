@@ -139,7 +139,7 @@ function buffer_BBQ_WFWeights(Walker::SpiderWebWalker,ψG::AbstractGuidingFuncti
 end
 
 function buffer_BBQ_WFWeights(Walkers::Vector{<:SpiderWebWalker},ψG::AbstractGuidingFunction,Guiding_function_buffer)
-    chunks = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
+    chunks = ChunkSplitters.chunks(eachindex(Walkers), n = length(Guiding_function_buffer))
     allbuffers = Vector{BBQ_WaveFunctionBuffer}(undef,length(Walkers))
     Threads.@threads for (i_chunk,αinds) in enumerate(chunks)
         GWFBuffer = Guiding_function_buffer[i_chunk]
@@ -151,13 +151,13 @@ function buffer_BBQ_WFWeights(Walkers::Vector{<:SpiderWebWalker},ψG::AbstractGu
     return allbuffers    
 end
 
-function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::BBqOperator,ψG::T,Allqs) where T
+function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::BBqOperator,ψG::T,Allqs,nThreads = 2*Threads.nthreads()) where T
     Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
     setup = setup_many_walker_GFMC(InitialState,Nwalkers)
     
     results = setup_operatorObservables(mProj,length(Allqs),NSteps,O,outfile)
 
-    Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState)
+    Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState,Nwalkers)
     Problem = SpiderwebGFMCProblem(method,InitialState,ψG,setup.Walkers,setup.weights,Guiding_function_buffer,setup.reconfiguration_buffer,results)
 
     reconfigurationList = zeros(Int,length(Problem.Walkers))
@@ -186,7 +186,7 @@ end
 
 function _initialize_buffered_forward_walking!(Walkers,weights,O::AbstractOperator,Configs,q,ψG::T,Guiding_function_buffer,WF_buffers) where T
     # @inbounds for (α, Walker) in enumerate(Walkers)
-    batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
+    batches = ChunkSplitters.chunks(eachindex(Walkers), n = length(Guiding_function_buffer))
     
     # for (i_chunk,αinds) in enumerate(batches)
     Threads.@threads for (i_chunk,αinds) in enumerate(batches)

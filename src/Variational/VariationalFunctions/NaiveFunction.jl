@@ -7,5 +7,5 @@ end
 
 guidingfunc_name(F::NaiveFunction) = "NaiveFunction"
 get_params(ψG::NaiveFunction) = get_params(ψG.psi)
-guidingfuncRatio_log(ψG::NaiveFunction,W::SpiderWebWalker,move::Tuple{Int,Int,Int},Guiding_function_buffer) = guidingfuncRatio_naive(ψG.psi,W,move)
+guidingfuncRatio_log(ψG::NaiveFunction,W::SpiderWebWalker,move::Tuple{Int,Int,Int},Guiding_function_buffer) = log(guidingfuncRatio_naive(ψG.psi,W,move))
 getOx_k(ψG::NaiveFunction,W::SpiderWebWalker,k) = getOx_k(ψG.psi,W,k)

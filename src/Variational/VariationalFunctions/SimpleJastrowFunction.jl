@@ -38,27 +38,49 @@ function _evaluate_jastrow_simple(ψG,x::AbstractMatrix)
     return exp(exp_m + exp_v)
 end
 
-struct SimpleJastrow_GWF_Buffer{T<:Number,D}
+struct SimpleJastrow_GWF_Buffer{T<:Number}
     x_i::Vector{T}
     h_i::Vector{T}
-    prefac_moves::D
+    prefac_moves::Matrix{T}
+    safe_parent_indices::Matrix{SVector{8,Int}}
 end
+
+function GWFBuffer_set_to!(A::SimpleJastrow_GWF_Buffer,B::SimpleJastrow_GWF_Buffer)
+    A.x_i .= B.x_i
+    A.h_i .= B.h_i
+    # A.prefac_moves .= B.prefac_moves
+    # A.safe_parent_indices .= B.safe_parent_indices
+    return A
+end
+
 
 function allocate_GWF_buffer(ψG::SimpleJastrowFunction{T},S::AbstractMatrix) where T
     x_i = zeros(T,length(S))
     h_i = zeros(T,length(S))
     
     prefac_moves = _precompute_prefac_moves(ψG,S)
-    return SimpleJastrow_GWF_Buffer(x_i,h_i,prefac_moves)
+    safe_parent_indices = _precompute_neighbor_indices(S)
+    return SimpleJastrow_GWF_Buffer(x_i,h_i,prefac_moves,safe_parent_indices)
 end
 
 
 function _precompute_prefac_moves(ψG::SimpleJastrowFunction,Conf::StencilSpinConfig)
     AllPlaqs = collect(plaquetteIterator(Conf))
     vij = get_v_ij(ψG)
-    AllWeights = Dict((i,j) => _precompute_jastrow_weight(vij,(i,j),Conf) for (i,j) in AllPlaqs)
+    AllWeights = fill(NaN,size(Conf))
+    for (i,j) in AllPlaqs
+        AllWeights[i,j] = _precompute_jastrow_weight(vij,(i,j),Conf)
+    end
+    return AllWeights
 end
 
+function _precompute_neighbor_indices(S::StencilSpinConfig)
+    safeInds = zeros(SVector{8,Int},size(S))
+    for I in CartesianIndices(S)
+        safeInds[I] = safe_parent_indices_linear(parent(S),I)
+    end
+    return safeInds
+end
 function premove_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::SimpleJastrowFunction,Walker::SpiderWebWalker) 
     return Buffer
 end
@@ -73,9 +95,9 @@ function compute_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::SimpleJastrow
     h = Buffer.h_i
     # fill!(h,0.0)
 
-    for i in axes(v,1)
+    LoopVectorization.@turbo for i in axes(v,1)
         hi = 0.
-        LoopVectorization.@turbo for j in axes(v,2)
+        for j in axes(v,2)
             hi += x[j]*v[j,i]
         end
         h[i] = hi
@@ -84,21 +106,20 @@ function compute_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::SimpleJastrow
     return Buffer
 end
 
+
 function post_move_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::SimpleJastrowFunction,Walker::SpiderWebWalker,move::Tuple)
     Config = get_config(Walker)
 
     i,j,opSign = move
 
-    affected_sites = safe_parent_indices(parent(Config), (i, j))
+    affected_sites = Buffer.safe_parent_indices[i, j]
+
 
     v = get_v_ij(ψG)
     h = Buffer.h_i
-
-    LI = LinearIndices(Config)
     
-    for (index,site) in enumerate(affected_sites)
+    for (index,i) in enumerate(affected_sites)
 
-        i = LI[CartesianIndex(site)]
         s = P1_STENCIL[index]*opSign
 
         LoopVectorization.@turbo for j in eachindex(h)
@@ -113,27 +134,23 @@ function guidingfuncRatio_log(ψG::SimpleJastrowFunction,Walker::SpiderWebWalker
 
     (;h_i,prefac_moves) = Buffer
     
-    x = get_config(Walker)
-
     i,j,opSign = move
-    prefac = prefac_moves[(i,j)]
+    prefac = prefac_moves[i,j]
 
-    sites = safe_parent_indices(parent(x), (i, j))
+    sites = Buffer.safe_parent_indices[i, j]
 
-    LI = LinearIndices(x)
 
     exp_h = zero(eltype(get_params(ψG)))
     exp_m = zero(eltype(get_params(ψG)))
 
     @inbounds @simd for idx in eachindex(sites)
-        i,j = sites[idx]
-        s = P1_STENCIL[idx]*opSign
-        I = LI[i,j]
+        I = sites[idx]
+        s = P1_STENCIL[idx]
         exp_h += h_i[I]*s
         exp_m += m[I]*s
     end
 
-    return exp_h + exp_m + prefac
+    return opSign*(exp_h + exp_m) + prefac
 end
 
 function getOx_k(ψG::SimpleJastrowFunction,W::SpiderWebWalker,k)

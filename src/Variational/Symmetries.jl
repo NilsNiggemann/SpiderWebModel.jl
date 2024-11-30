@@ -34,14 +34,19 @@ abstract type AbstractSymop end
 abstract type AbstractSymmetryGroup end
 
 struct TranslationalSymmetry{T} <: AbstractSymop
-    a1::T
-    a2::T
+    a1::SVector{2,T}
+    a2::SVector{2,T}
 end
-
+function TranslationalSymmetry(T1,T2)
+    @assert length(T1) == 2 
+    @assert length(T2) == 2
+    _type = promote_type(eltype(T1),eltype(T2))
+    TranslationalSymmetry(SVector{2,_type}(T1),SVector{2,_type}(T2))
+end
 struct SymmetryGroup{T<:Tuple} <: AbstractSymmetryGroup
     symmetries::T
 end
-SymmetryGroup(args...) = SymmetryGroup(args)
+SymmetryGroup(args::Vararg{T,N}) where {T,N} = SymmetryGroup(args)
 
 
 function symmetrize(ψ::AbstractGuidingFunction,Symms::AbstractSymmetryGroup,SpinConfig::AbstractMatrix)
@@ -75,16 +80,38 @@ function reduce_indices_Mapping!(ψSymm::SymmetryReducedWaveFunction,Symms::Abst
     indicesMapping = ψSymm.indicesMapping
     params = get_params(ψSymm.psi)
 
-    for (i,par) in enumerate(indicesMapping)
-        indicesMapping[par] == par || continue
+    lenUnique = 0
+    uniqueInds = Set(indicesMapping)
 
-        type,k = _getParamsTypeAndIndex(params,par)
-        equivalent_params = generate_equivalent(type,k,Symms,ψSymm.psi,SpinConfig)
-        equivalent_params .= remap_index.(type,equivalent_params,Ref(params))
-        indicesMapping[i] = minimum(equivalent_params)
-        # indicesMapping[equivalent_params] .= minimum(equivalent_params)
+    maxiter = 100length(uniqueInds)
+    iter = 0
+
+    coveredIndices = Set{Int}()
+    while lenUnique != length(uniqueInds)
+        lenUnique = length(uniqueInds)
+        for (i,par) in enumerate(uniqueInds)
+            iter += 1
+            par ∈ coveredIndices && continue
+            push!(coveredIndices,par)
+
+            # indicesMapping[par] == par || continue
+            type,k = _getParamsTypeAndIndex(params,par)
+            equivalent_params = generate_equivalent(type,k,Symms,ψSymm.psi,SpinConfig)
+            equivalent_params .= remap_index.(type,equivalent_params,Ref(params))
+            # indicesMapping[i] = minimum(equivalent_params)
+            indicesMapping[equivalent_params] .= minimum(equivalent_params)
+
+            setdiff!(uniqueInds,equivalent_params)
+            push!(uniqueInds,minimum(equivalent_params))
+            if length(uniqueInds) < lenUnique
+                break
+            end
+        end
 
     end
+
+
+
     # indicesMapping = indicesMapping[indicesMapping]
 
     return indicesMapping
@@ -94,7 +121,13 @@ generate_equivalent(type,k,Symm::T1,ψSymm::T2,S) where {T1 <:AbstractSymop, T2 
 
 function generate_equivalent(type,k,SymmGroup::T1,ψSymm::T2,S) where {T1 <:AbstractSymmetryGroup, T2 <: AbstractGuidingFunction}
     
-    append!([generate_equivalent(type,k,Symm,ψSymm,S) for Symm in SymmGroup.symmetries]...)
+    # append!([generate_equivalent(type,k,Symm,ψSymm,S) for Symm in SymmGroup.symmetries]...)
+    equiv_sym = [generate_equivalent(type,k,Symm,ψSymm,S) for Symm in SymmGroup.symmetries]
+    res = equiv_sym[begin]
+    for i in eachindex(equiv_sym)[2:end]
+        append!(res,equiv_sym[i])
+    end
+    return res
 end
 
 function generate_equivalent_sites(site::siteType,T::TranslationalSymmetry,S::AbstractMatrix) where {siteType}
@@ -156,9 +189,10 @@ plaquette_to_index(plaquettesite,AllPlaqs) = findfirst(==(plaquettesite),AllPlaq
 """given the index k and the type of the parameter and the ArrayPartition containing all parameters, returns the linear index of the parameter. Is the inverse of _getParamsTypeAndIndex"""
 Base.@propagate_inbounds function remap_index(partition,k,params::RecursiveArrayTools.ArrayPartition)
     partition == 1 && return k
-    lens = length.(params.x[1:partition])
-    Base.@boundscheck k > sum(lens) && error("Index out of bounds")
-    return sum(lens[1:end-1]) + k
+    lens = length.(params.x)
+    sumlens = sum(lens[1:partition-1])
+    Base.@boundscheck k > sumlens+lens[partition] && error("Index out of bounds")
+    return sumlens + k
 end
 
 

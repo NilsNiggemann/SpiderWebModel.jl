@@ -10,9 +10,10 @@ get_params(P::AbstractGuidingFunction) = P.params
 """Allocates a buffer for the guiding wave function to be used for efficient computation. Can be anything depending on the model"""
 allocate_GWF_buffer(ψG::AbstractGuidingFunction,S::Any) = precomputeAffectedPlaquettes(S)
 
-function allocate_GWF_buffers_threads(ψG::AbstractGuidingFunction,InitialState)
-    fetch.([Threads.@spawn allocate_GWF_buffer(ψG, InitialState) for _ in 1:Threads.nthreads()])
+function allocate_GWF_buffers_threads(ψG::AbstractGuidingFunction,InitialState,numBuffers)
+    fetch.([Threads.@spawn allocate_GWF_buffer(ψG, InitialState) for _ in 1:numBuffers])
 end
+
 
 """precomputes the guiding wave function for the given configuration. Can be overloaded for more complex wavefunctions in which case a Buffer is filled. In this case the buffer needs to be returned"""
 compute_GWF_buffer!(Buff,ψG::AbstractGuidingFunction,Walker) = ψG(Walker)
@@ -23,7 +24,12 @@ premove_update_GWF_buffer!(Buff,ψG::AbstractGuidingFunction,Walker) = compute_G
 """Like compute_GWF_buffer! but can be overloaded to allow for more efficient computation. Is only called after a move is accepted. Defaults to doing nothing."""
 post_move_update_GWF_buffer!(Buff,ψG::AbstractGuidingFunction,Walker,move) = Buff
 
-# allocate_GWF_buffer(ψG::AbstractGuidingFunction,S::StencilSpinConfig) = nothing
+"""
+Sets the buffer to the value of another buffer. This function is a safety implementation and should be overloaded for performance
+This function is a safety implementation and should be overloaded for performance"""
+function GWFBuffer_set_to!(Guiding_function_buffer_a::T,Guiding_function_buffer_b::T) where T
+    return deepcopy(Guiding_function_buffer_b)
+end
 
 function updateWeightList!(Walker::SpiderWebWalker,Buffer,ψG::AbstractGuidingFunction)
     weights = Walker.weights

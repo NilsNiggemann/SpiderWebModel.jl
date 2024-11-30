@@ -29,7 +29,7 @@ function saveAllStates(
 )
     UIntStates = getproperty.(AllStates, :x)
     h5open(filename, "cw") do file
-        file[key*"/AllStates", blosc = 9] = UIntStates
+        file[key*"/AllStates"] = UIntStates
     end
 end
 
@@ -42,11 +42,11 @@ end
 
 function saveHamiltonian(filename::AbstractString, key::AbstractString, H::SparseMatrixCSC)
     h5open(filename, "cw") do file
-        file[key*"/Hamiltonian/colptr", blosc = 9] = H.colptr
+        file[key*"/Hamiltonian/colptr"] = H.colptr
         file[key*"/Hamiltonian/m"] = H.m
         file[key*"/Hamiltonian/n"] = H.n
-        file[key*"/Hamiltonian/nzval", blosc = 9] = H.nzval
-        file[key*"/Hamiltonian/rowval", blosc = 9] = H.rowval
+        file[key*"/Hamiltonian/nzval"] = H.nzval
+        file[key*"/Hamiltonian/rowval"] = H.rowval
     end
     return H
 end

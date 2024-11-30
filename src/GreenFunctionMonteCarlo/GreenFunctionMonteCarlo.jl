@@ -1,6 +1,6 @@
-function _setup_GFMC_problem(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,NSteps::Integer,ψG,outfile)
-    setup = setup_many_walker_GFMC(InitialState,Nwalkers)
-    Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState)
+function _setup_GFMC_problem(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,NSteps::Integer,nThreads,ψG,outfile)
+    setup = setup_many_walker_GFMC(InitialState,Nwalkers,nThreads)
+    Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState,Nwalkers)
     
     (;Walkers,weights,reconfiguration_buffer) = setup
     ObsSetup = setupObservables(InitialState,Nwalkers,NSteps,outfile)
@@ -11,10 +11,10 @@ function _setup_GFMC_problem(InitialState::StencilSpinConfig,method::AbstractGFM
     return SpiderwebGFMCProblem(method,InitialState,ψG,Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,Observables)
 end
 
-function setup_GFMC_problem(InitialState::ConfType, method::AbstractGFMCMethod, Nwalkers::Integer, NSteps::Integer, ψG;
+function setup_GFMC_problem(InitialState::ConfType, method::AbstractGFMCMethod, Nwalkers::Integer, NSteps::Integer,nThreads::Integer, ψG;
     outfile = nothing
     ) where {ConfType <: StencilSpinConfig}
-    _setup_GFMC_problem(InitialState,method,Nwalkers,NSteps,ψG,outfile)
+    _setup_GFMC_problem(InitialState,method,Nwalkers,NSteps,nThreads,ψG,outfile)
 end
 
 function getMoves!(
@@ -243,12 +243,24 @@ function setupProjector(weights,nThermal)
     Gn1 = bn./meanweight
 end
 
-function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers::Integer) where {ConfType <: StencilSpinConfig}
-    plaquettePositions = collect(plaquetteIterator(InitialState))
+"""
+Allocates walkers in a multithreaded way such that the memory of each walker is associated with the correct memory domain
+...hopefully...
+"""
+function _allocateWalkers(InitialState::ConfType,Nwalkers,nThreads,plaquettePositions) where {ConfType <: StencilSpinConfig}
     Walkers = Vector{SpiderWebWalker{ConfType}}(undef,Nwalkers)
-    Threads.@threads for α in eachindex(Walkers)
-        Walkers[α] = spiderWebWalker(InitialState,plaquettePositions)
+    chunks = ChunkSplitters.chunks(eachindex(Walkers), n = nThreads)
+    Threads.@threads for (i_chunk,αinds) in enumerate(chunks)
+        for α in αinds
+            Walkers[α] = spiderWebWalker(InitialState,plaquettePositions)
+        end
     end
+    return Walkers
+end
+
+function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers::Integer,nThreads) where {ConfType <: StencilSpinConfig}
+    plaquettePositions = collect(plaquetteIterator(InitialState))
+    Walkers = _allocateWalkers(InitialState,Nwalkers,nThreads,plaquettePositions)
     weights = ones(Nwalkers)
     reconfiguration_buffer = zeros(Nwalkers)
     
@@ -381,7 +393,7 @@ function initialize!(Walkers::AbstractVector{<:SpiderWebWalker},I::CombinedIniti
     initialize!(Walkers,I.I2)
 end
 
-function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8))
+function initializeGFMC!(prob::AbstractGFMCProblem,nThreads,equilibration_steps=0,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8),reconfigure = true)
     
     (;Guiding_function_buffer,Walkers,weights,reconfiguration_buffer,Observables,method,ψG) = prob
     (;outfile,reconfigurationTable) = Observables
@@ -393,59 +405,80 @@ function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0,initial
     #fill buffers for available steps and weights
     reconfigurationList = @view reconfigurationTable[:,1]
     for _ in 1:equilibration_steps
-        propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method)
-        reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
+        propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,method)
+        if reconfigure
+            reconfiguration!(Walkers,Guiding_function_buffer,reconfigurationList,reconfiguration_buffer,weights)
+        end
     end
 
     return prob,Observables
 end
 
-function startManyWalkerGFMC!(prob::AbstractGFMCProblem,equilibration_steps::Int,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8))
-    initializeGFMC!(prob,equilibration_steps,initializer)
+function startManyWalkerGFMC!(prob::AbstractGFMCProblem,nThreads::Int,equilibration_steps::Int,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8))
+    initializeGFMC!(prob,nThreads,equilibration_steps,initializer)
+    fill_all_Buffers!(prob,nThreads)
     runGFMC!(prob)
 end
 
+function fill_all_Buffers!(prob::AbstractGFMCProblem,nThreads)
+    (;Walkers,Guiding_function_buffer,ψG) = prob
+    batches = ChunkSplitters.chunks(eachindex(Walkers,Guiding_function_buffer), n = nThreads)
+    Threads.@threads for (i_chunk,αinds) in enumerate(batches)
+        for α in αinds
+            GWFBuffer = Guiding_function_buffer[α]
+            Walker = Walkers[α]
+            compute_GWF_buffer!(GWFBuffer,ψG,Walker)
+        end
+    end
+    return nothing
+end
 # function startManyWalkerGFMC(InitialState,Nwalkers,NSteps,G::AbstractPropagator;equilibration_steps = 0,outfile=nothing,pre_equilibration_steps=5*equilibration_steps)
 #     startManyWalkerGFMC(InitialState,outfile,Nwalkers,NSteps,equilibration_steps,pre_equilibration_steps,G)
 # end
 
-function startManyWalkerGFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,ψG; equilibration_steps = 0, pre_equilibration_steps = equilibration_steps ÷ 5, scatter_fraction = 0.8,initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),kwargs...)
-    prob = setup_GFMC_problem(InitialState,method,Nwalkers,nSteps,ψG;kwargs...)
-    startManyWalkerGFMC!(prob,equilibration_steps,initializer)
+function startManyWalkerGFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,ψG; equilibration_steps = 0, pre_equilibration_steps = equilibration_steps ÷ 5, scatter_fraction = 0.8,initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),nThreads=2*Threads.nthreads(),kwargs...)
+    prob = setup_GFMC_problem(InitialState,method,Nwalkers,nSteps,nThreads,ψG;kwargs...)
+    startManyWalkerGFMC!(prob,nThreads,equilibration_steps,initializer)
 end
 
-function runGFMC!(prob::AbstractGFMCProblem,range,reconfigure::Bool=true)
+function runGFMC!(prob::AbstractGFMCProblem,range,nThreads,reconfigure::Bool=true)
     (;Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,Observables,ψG,method) = prob
     (;energies,SaveConfigs,outfile,TotalWeights, reconfigurationTable) = Observables
     
     for i in range
         # for (α,Config) in enumerate(Walkers)
-        propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method)
+        propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,method)
 
         energies[i] = getLocalEnergyWalkers_before(weights,Walkers,method)
         TotalWeights[i] = mean(weights)
         
         if reconfigure
             reconfigurationList = @view reconfigurationTable[:,i]
-            reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
+            reconfiguration!(Walkers,Guiding_function_buffer,reconfigurationList,reconfiguration_buffer,weights)
+            # fill_all_Buffers!(prob,nThreads)
+
         end
         saveConfigs!(SaveConfigs,i,Walkers)
+
+        if i%1000 == 0 # recompute buffers only occasionally to avoid accumulation of floating point errors 
+            fill_all_Buffers!(prob,nThreads)
+        end
     end
     return Observables
 end
-runGFMC!(prob::AbstractGFMCProblem;reconfigure=true) = runGFMC!(prob,eachindex(prob.Observables.TotalWeights),reconfigure)
-runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int;reconfigure=true) = runGFMC!(prob,eachindex(prob.Observables.TotalWeights)[1:Nsteps],reconfigure)
+runGFMC!(prob::AbstractGFMCProblem;reconfigure=true,nThreads = 2*Threads.nthreads()) = runGFMC!(prob,eachindex(prob.Observables.TotalWeights),nThreads,reconfigure)
+runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int;reconfigure=true,nThreads = 2*Threads.nthreads()) = runGFMC!(prob,eachindex(prob.Observables.TotalWeights)[1:Nsteps],nThreads,reconfigure)
 
-function propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method::DiscreteTimeMethod)
+function propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,method::DiscreteTimeMethod)
     (;Λ,nBranch,w_avg_estimate) = method
 
     w_avg_estimate⁻¹ = 1. / w_avg_estimate
 
-    batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
+    batches = ChunkSplitters.chunks(eachindex(Walkers), n = nThreads)
 
     Threads.@threads for (i_chunk,αinds) in enumerate(batches)
-        GWFBuffer = Guiding_function_buffer[i_chunk]
         for α in αinds
+            GWFBuffer = Guiding_function_buffer[α]
             Walker = Walkers[α]
             w = 1.
             for step in 1:nBranch
@@ -460,16 +493,16 @@ function propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method::D
     end
 end
 
-function propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method::ContinuousTimeMethod)
+function propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,method::ContinuousTimeMethod)
     (;Hxx,nBranch,τ,w_avg_estimate) = method
     
-    batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
+    batches = ChunkSplitters.chunks(eachindex(Walkers), n = nThreads)
 
     Threads.@threads for (i_chunk,αinds) in enumerate(batches)
-        GWFBuffer = Guiding_function_buffer[i_chunk]
         for α in αinds
             Walker = Walkers[α]
-            compute_GWF_buffer!(GWFBuffer,ψG,Walker)
+            # compute_GWF_buffer!(GWFBuffer,ψG,Walker)
+            GWFBuffer = Guiding_function_buffer[α]
             log_w = 0.
             weightList = updateWeightList!(Walker,GWFBuffer,ψG)
             H_xx = Hxx(Walker)
@@ -504,7 +537,7 @@ end
 Matteo Calandra Buonaura and Sandro Sorella
 Phys. Rev. B 57, 11446 (1998)
 """
-function reconfiguration!(Walkers::AbstractVector{<:AbstractWalker},reconfigurationList,reconfiguration_buffer,weights)
+function reconfiguration!(Walkers::AbstractVector{<:AbstractWalker},Guiding_function_buffer,reconfigurationList,reconfiguration_buffer,weights)
     Nw = length(Walkers)
     reconfiguration_buffer = cumsum!(reconfiguration_buffer,weights) 
     wTotal = sum(weights)
@@ -521,6 +554,7 @@ function reconfiguration!(Walkers::AbstractVector{<:AbstractWalker},reconfigurat
     for (α,α´) in enumerate(reconfigurationList)
         if α´ != α
             get_config(Walkers[α]) .= get_config(Walkers[α´])
+            Guiding_function_buffer[α] = GWFBuffer_set_to!(Guiding_function_buffer[α],Guiding_function_buffer[α´])
         end
     end
 end
