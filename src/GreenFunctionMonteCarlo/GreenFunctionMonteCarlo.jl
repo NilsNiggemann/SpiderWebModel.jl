@@ -417,7 +417,7 @@ end
 function startManyWalkerGFMC!(prob::AbstractGFMCProblem,nThreads::Int,equilibration_steps::Int,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8))
     initializeGFMC!(prob,nThreads,equilibration_steps,initializer)
     fill_all_Buffers!(prob,nThreads)
-    runGFMC!(prob)
+    runGFMC!(prob;nThreads)
 end
 
 function fill_all_Buffers!(prob::AbstractGFMCProblem,nThreads)
