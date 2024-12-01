@@ -3,7 +3,7 @@ struct RKFunction <: AbstractGuidingFunction end
 (psi::RKFunction)(x::Any) = 1.
 
 guidingfunc_name(F::RKFunction) = "RKFunction"
-get_params(ψG::RKFunction) = nothing
+get_params(ψG::RKFunction) = zeros(0)
 guidingfuncRatio_log(ψG::RKFunction,Walker::SpiderWebWalker,move,Buffer) = 0.
 allocate_GWF_buffer(ψG::RKFunction,S::StencilSpinConfig) = nothing
 # function updateWeightList!(Walker::SpiderWebWalker,AffectedPlaquetteList,ψG::RKFunction,Λ=0)
