@@ -49,7 +49,7 @@ function buffer_BQ_WFWeights(Walker::SpiderWebWalker,ψG::AbstractGuidingFunctio
 end
 
 function buffer_BQ_WFWeights(Walkers::Vector{<:SpiderWebWalker},ψG::AbstractGuidingFunction,Guiding_function_buffer)
-    chunks = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads())
+    chunks = ChunkSplitters.chunks(eachindex(Walkers), n = length(Guiding_function_buffer))
     allbuffers = Vector{BQ_WaveFunctionBuffer}(undef,length(Walkers))
     Threads.@threads for (i_chunk,αinds) in enumerate(chunks)
         GWFBuffer = Guiding_function_buffer[i_chunk]
@@ -61,13 +61,13 @@ function buffer_BQ_WFWeights(Walkers::Vector{<:SpiderWebWalker},ψG::AbstractGui
     return allbuffers    
 end
 
-function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::BqOperator,ψG::T,Allqs) where T
+function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::BqOperator,ψG::T,Allqs,nThreads=2*Threads.nthreads()) where T
     Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
-    setup = setup_many_walker_GFMC(InitialState,Nwalkers)
+    setup = setup_many_walker_GFMC(InitialState,Nwalkers,nThreads)
     
     results = setup_operatorObservables(mProj,length(Allqs),NSteps,O,outfile)
 
-    Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState)
+    Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState,Nwalkers)
     Problem = SpiderwebGFMCProblem(method,InitialState,ψG,setup.Walkers,setup.weights,Guiding_function_buffer,setup.reconfiguration_buffer,results)
 
     reconfigurationList = zeros(Int,length(Problem.Walkers))

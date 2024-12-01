@@ -111,8 +111,8 @@ with_theme(theme_SimpleTicks()) do
     ax = Axis(fig[1, 1], xlabel = L"\mu", ylabel = L"E_0 / N_\textrm{sites}")
     Nsites = 16^2
     for i in axes(ens,1)
-        en = ens[i,:] ./ Nsites ./ (1 .- mu)
-        deltaen = Δens[i,:]./ Nsites ./ (1 .- mu)
+        en = ens[i,:] ./ Nsites ./ (1 .- mus)
+        deltaen = Δens[i,:]./ Nsites ./ (1 .- mus)
 
         scatterlines!(ax,mus,en;label = "Sector $i",marker = 'x')
         errorbars!(ax,mus,en,deltaen;label = "")

@@ -12,7 +12,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=48
 #SBATCH --mem=90GB         # memory , more means less gc time
-#SBATCH --time=0-10:00:00          # total run time limit (HH:MM:SS)
+#SBATCH --time=0-24:00:00          # total run time limit (HH:MM:SS)
 #SBATCH --mail-type=END
 #SBATCH --output=/p/project/pmfrg/niggemann1/JobsOutput/Spiderweb/GFMC/EnergySweep/4x4Spin1_%a.out    # File to which standard Out- will be written
 
@@ -37,7 +37,10 @@ using SpiderWebModel.HDF5
 i_arg = parse(Int, ARGS[1])
 
 function upscale(Conf,L)
-    S = similar(Conf,L,L)
+    S = SW.stencilConfig(zeros(L,L),SW.getSpin(Conf);
+    boundaryCondition = :periodic
+    )
+
     per = SW.PeriodicMatrix(Conf,L,L)
     for I in CartesianIndices(S)
         S[I] = per[I]
@@ -61,16 +64,19 @@ function findEnergies(Configs,CT,ψG;Nwalkers = 28*2,NSteps = 2000,equilibration
     Δen = zeros(length(Configs))
     getOutfile(i,j) = isnothing(outfileDIR) ? nothing : joinpath(outfileDIR,"$(i)_$(j).h5")
 
-    Threads.@threads for i in eachindex(Configs,en)
+    for i in eachindex(Configs,en)
         S = Configs[i]
+        # display(SW.plotApplPlaquettes(S))
         if length(SW.getApplicablePlaquettes(S)) == 0
             en[i] = 0
             Δen[i] = 0
             continue
         end
-        Nwalkers = Nwalkers*round(Int,length(SW.getNPlaq(S))/ 5)
-        results = [SW.startManyWalkerGFMC(S,CT,Nwalkers,NSteps,ψG;equilibration_steps,pre_equilibration_steps=NSteps,scatter_fraction = 0.8,outfile = getOutfile(i,i_st)) for i_st in 1:6]
-
+        NwalkersNew = max(48*2, round(Int,Nwalkers * (sum(SW.getNPlaq(S))/ 48 / 10)^2)*48)
+        @info "starting $i" NwalkersNew
+        
+        results = [SW.startManyWalkerGFMC(S,CT,NwalkersNew,NSteps,ψG;equilibration_steps,pre_equilibration_steps=NSteps,scatter_fraction = 0.8,outfile = getOutfile(i,i_st)) for i_st in 1:6]
+        GC.gc()
         energies = SW.getEnergies.(results,1,min(NSteps÷3, 300))
         energiesMean = SW.mean.(energies)
         energiesStd = SW.std.(energies)
@@ -82,14 +88,14 @@ function findEnergies(Configs,CT,ψG;Nwalkers = 28*2,NSteps = 2000,equilibration
 end
 function makeConf(UC,L,Spin)
     S = SW.stencilConfig(zeros(L,L),Spin;
-    boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+    boundaryCondition = :periodic
     )
     S .= SW.getPeriodicState(UC,L,L)
     return S
 end  
 ##
 L = 16
-Nwalkers = 48*60
+Nwalkers = 48*10
 NSteps = 6000
 
 reducedConfigs = makeConf.(collect.(eachslice(SW.h5read("../../Data/reducedConfigs.h5","reducedConfigs"),dims=3)),L,1)
