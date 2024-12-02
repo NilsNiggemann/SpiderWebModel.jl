@@ -1,9 +1,54 @@
 using CairoMakie, MakieHelpers,Statistics, HDF5
 import SpiderWebModel as SW
 include("plottingUtils.jl")
+
 ##
-dropmean(A; dims=:) = dropdims(mean(A; dims=dims); dims=dims)
-dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
+function getxi(Sq,I::CartesianIndex,dI::CartesianIndex)
+    L = size(Sq,1)-1
+    xi_L = sqrt(Sq[I]/Sq[I+dI] -1 )
+    return xi_L * L
+end
+
+function getxi(Sq,I::CartesianIndex)
+    # neighbors = [(-1,-1)]
+    neighbors = [(i,j) for i in -1:1,j in -1:1 if i != 0 || j != 0]
+    # neighbors = [(1,0),(0,1),(-1,0),(0,-1)]
+    return maximum(getxi(Sq,I,CartesianIndex(dI)) for dI in neighbors)
+end
+
+function getxi(Sq)
+    # L = size(Sq,1)-1
+    I = argmax(Sq)
+    # return Sq[I] / L^2
+    return getxi(Sq,I)
+end
+
+##
+function getXis(Sqs)
+    xis = zeros(size(Sqs,4))
+    for (i,ii) in enumerate(axes(Sqs,4))
+        Sq = @views dropmean(Sqs[:,:,:,ii],dims=3)
+
+        xis[i] = getxi(Sq./4)
+    end
+    return xis
+end
+function getXis_err(Sqs)
+    xis = zeros(size(Sqs)[3:4])
+    for (i,ii) in enumerate(axes(Sqs,4))
+        for (j,jj) in enumerate(axes(Sqs,3))
+            Sq = @views Sqs[:,:,jj,ii]
+
+            xis[j,i] = getxi(Sq./4)
+        end
+    end
+    ximean = dropmean(xis,dims=1)
+    xistd = dropstd(xis,dims=1)
+    return (;ximean,xistd)
+end
+
+
+##
 function getFiles(L)
     files = [joinpath(root,file) for (root,_,files) in walkdir( "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=$L/") for file in files]
 end
@@ -23,9 +68,21 @@ end
 # entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equiv_open/",0.30)
 # entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/L=32/",0.65)
 ##
+function is_valid_file(filename)
+    allkeys = ["energies","mu","tau","SqsGFMC","p_Sq"]
+    h5open(filename,"r") do file
+        return all(k->haskey(file,k),allkeys)
+    end
+end
 function getRes(folder)
     files = let
         filesunsrt = [joinpath(root,file) for (root,_,files) in walkdir(folder) for file in files]
+        validfiles = is_valid_file.(filesunsrt)
+        if !all(validfiles)
+            println("invalid files:")
+            println(filesunsrt[.!validfiles])
+        end
+        filter!(is_valid_file,filesunsrt)
         mus = [h5read(file,"mu") for file in filesunsrt]
         filesunsrt[sortperm(mus)]
     end
@@ -55,36 +112,40 @@ function getSq_tau_mean_std(res,tau)
     dropmean(Sqtau,dims=4), dropstd(Sqtau,dims=4)
 end
 
-res = Dict(L=>getRes("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=$L/") for L in (20,24,))
+res = Dict(L=>getRes("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=$L/") for L in (20,24,28))
 ##
 with_theme(theme_SimpleTicks()) do
-    ind = 4
-    Nsites = length(res[24].Sqs[1:end-1,1:end-1,1,ind,begin])
-    enmean = mean(res[24].energies,dims=2)[1:250,1,ind] ./ Nsites
+    ind = 1
+    L = 28
+    Nsites = length(res[28].Sqs[1:end-1,1:end-1,1,ind,begin])
+    enmean = mean(res[28].energies,dims=2)[1:250,1,ind] ./ Nsites
 
-    enstd = std(res[24].energies,dims=2)[1:250,1,ind] ./ Nsites
+    enstd = std(res[28].energies,dims=2)[1:250,1,ind] ./ Nsites
     # enmean = mean(entest,dims=2)[:,1]
     # enstd = std(entest,dims=2)[:,1]
-    tau = res[24].taus[ind]
-    lines((eachindex(enmean).-1) .*tau,enmean,axis = (;ylabel = L"E/N_\text{sites}",xlabel = L"\tau"))
-    band!((eachindex(enmean).-1) .*tau,enmean - enstd , enmean + enstd,color = (:black,0.2))
-    current_figure()
+    tau = res[28].taus[ind]
+    errlines((eachindex(enmean).-1) .*tau,enmean,enstd,axis = (;ylabel = L"E/N_\text{sites}",xlabel = L"\tau"))
+    # lines((eachindex(enmean).-1) .*tau,enmean,axis = (;ylabel = L"E/N_\text{sites}",xlabel = L"\tau"))
+    # band!((eachindex(enmean).-1) .*tau,enmean - enstd , enmean + enstd,color = (:black,0.2))
+    # current_figure()
 
 end
 ##
 with_theme(theme_SimpleTicks()) do 
-    tauindices = [round(Int,8 ÷ tau) for tau in res[24].taus]
-    energies_slice = zeros(size(res[24].energies,2),size(res[24].energies,3))
+    L = 20
+
+    tauindices = [round(Int,8 ÷ tau) for tau in res[L].taus]
+    energies_slice = zeros(size(res[L].energies,2),size(res[L].energies,3))
     for (i,tau) in enumerate(tauindices)
-        energies_slice[:,i] .= @view res[24].energies[tau,:,i]
+        energies_slice[:,i] .= @view res[L].energies[tau,:,i]
     end
 
     enmean = dropdims(mean(energies_slice,dims=1),dims=1)
     enstd = dropdims(std(energies_slice,dims=1),dims=1)
-    Nsites = 30^2
+    Nsites = L^2
     # push!(enmean,0)
     # push!(enstd,0)
-    mus2 = copy(res[24].mus)
+    mus2 = copy(res[L].mus)
     # push!(mus2,1)
     ord = sortperm(mus2)
     mus2 = mus2[ord]
@@ -145,7 +206,7 @@ end
 
 ##
 with_theme(theme_PiTicks()) do
-    L = 24
+    L = 28
     Sq = dropmean(res[L].Sqs,dims=4)[:,:,10,:] ./ 4
     # muPlot = [-0.06,0.2,0.3,0.6,0.94,1.1]
     # muPlot = [0.0,0.4,0.9,1.05]
@@ -187,8 +248,8 @@ with_theme(theme_PiTicks()) do
 end
 ##
 with_theme(theme_SimpleTicks()) do
-    L = 24
-    muIndex = findfirst(>=(0.6),res[L].mus)
+    L = 28
+    muIndex = findfirst(>=(0.5),res[L].mus)
     SqsGFMC = res[L].Sqs[:,:,:,:,muIndex]./ 4
     SqMat = dropmean(SqsGFMC,dims=4)
     SqErr = dropstd(SqsGFMC,dims=4)
@@ -201,11 +262,12 @@ with_theme(theme_SimpleTicks()) do
     Sq_examp = SqMat[:,:,10]
     inds = sort(collect(CartesianIndices(Sq_examp))[:],by = x->Sq_examp[x],rev=true)
     # for I in ((5,5),(7,7),(10,3),(5,9))
-    for I in inds[[1,5,10,15,12]]
+    for I in inds[[1,5,15,12,20,50]]
         i,j = Tuple(I)
-        range = 1:10
-        scatterlines!(ax,tau[range],SqMat[i,j,range],marker = '×')
-        errorbars!(ax,tau[range],SqMat[i,j,range],SqErr[i,j,range],whiskerwidth = 6,linewidth=0.5)
+        range = 1:120
+        # scatterlines!(ax,tau[range],SqMat[i,j,range],marker = '×')
+        # errorbars!(ax,tau[range],SqMat[i,j,range],SqErr[i,j,range],whiskerwidth = 6,linewidth=0.5)
+        errlines!(ax,tau[range],SqMat[i,j,range],SqErr[i,j,range],linewidth=0.5)
     end
     fig
 end
@@ -213,7 +275,7 @@ end
 with_theme(theme_SimpleTicks()) do 
     L = 24
     muIndex = findfirst(>=(0.7),res[L].mus)
-    SqsGFMC = res[L].Sqs[:,:,10,:,muIndex]./ 4
+    SqsGFMC = res[L].Sqs[:,:,100,:,muIndex]./ 4
     SqMat = dropmean(SqsGFMC,dims=3)
     SqErr = dropstd(SqsGFMC,dims=3)
     fittingCoefs = optimizeCoeffs(SqMat)
@@ -310,28 +372,8 @@ with_theme(theme_SimpleTicks()) do
     fig
 end
 
-##
-function getxi(Sq,I::CartesianIndex,dI::CartesianIndex)
-    L = size(Sq,1)-1
-    xi_L = sqrt(Sq[I]/Sq[I+dI] -1 )
-    return xi_L * L
-end
-
-function getxi(Sq,I::CartesianIndex)
-    # neighbors = [(-1,-1)]
-    # neighbors = [(i,j) for i in -1:1,j in -1:1 if i != 0 || j != 0]
-    neighbors = [(1,0),(0,1),(-1,0),(0,-1)]
-    return maximum(getxi(Sq,I,CartesianIndex(dI)) for dI in neighbors)
-end
-
-function getxi(Sq)
-    I = argmax(Sq)
-    return getxi(Sq,I)
-end
-
-
 with_theme(theme_PiTicks()) do 
-    mu = 0.75
+    mu = 0.7
     fig = Figure(fontsize = 22,size = 400 .*(1.4,2.4))
     ticks = PiTicks([0,pi])
     axes = [
@@ -344,7 +386,6 @@ with_theme(theme_PiTicks()) do
         mus = res[L].mus
         
         muIndex = findfirst(>=(mu),mus)
-        println(mus[muIndex])
         SqsGFMC = res[L].Sqs[:,:,end,:,muIndex]./ 4
         # SqsGFMC = Sq[:,:,:,muIndex]./ 4
 
@@ -361,64 +402,48 @@ with_theme(theme_PiTicks()) do
         # hm = heatmap!(ax1,kx,ky,SqFunc.(Iterators.product(kx,ky)),colormap = :viridis)
         hm = heatmap!(ax1,kx,ky,SqFunc.(Iterators.product(kx,ky)),colormap = :viridis)
         xi = getxi(SqMat)
-        @info "" L maximum(SqMat) /L^2 xi xi/L
+        @info "" L maximum(SqMat) /L^2 xi xi/L mus[muIndex]
         Colorbar(fig[i,2],hm)
     end
     fig
 end
 
 ##
-function getXis(Sqs)
-    xis = zeros(size(Sqs,4))
-    for (i,ii) in enumerate(axes(Sqs,4))
-        Sq = @views dropmean(Sqs[:,:,:,ii],dims=3)
-
-        xis[i] = getxi(Sq./4,argmax(Sq))
-    end
-    return xis
-end
-function getXis_err(Sqs)
-    xis = zeros(size(Sqs)[3:4])
-    for (i,ii) in enumerate(axes(Sqs,4))
-        for (j,jj) in enumerate(axes(Sqs,3))
-            Sq = @views Sqs[:,:,jj,ii]
-
-            xis[j,i] = getxi(Sq./4,argmax(Sq))
-        end
-    end
-    ximean = dropmean(xis,dims=1)
-    xistd = dropstd(xis,dims=1)
-    return (;ximean,xistd)
-end
 
 with_theme(theme_SimpleTicks()) do 
     fig = Figure(fontsize = 22,size = 400 .*(1.4,1.))
     ax = Axis(fig[1,1],xlabel = L"μ",ylabel = L"\xi/L")
-    ax2 = insetAtPoint(fig,ax,(0.6,7),(110,60))
+    # ax2 = insetAtPoint(fig,ax,(0.6,3.2),(110,60))
     # ax2 = Axis(fig[2,1],xlabel = L"μ",ylabel = L"\xi/L")
     # linkaxes!(ax,ax2)
 
     Linestyles = [:dash,:dot,:solid,:dashdot]
     # allmus = [musSmall,musMedium,mus]
     # allxis = [xisSmall,xisMedium,xis]
-    for (L,linestyle) in zip((20,24),Linestyles)
+    scatterkwargs = Dict(20 => (;marker = '▲'),24 => (;marker = '▲') ,28 => (;marker = '■')) 
+    for (L,linestyle) in zip((20,24,28),Linestyles)
     # for (L,linestyle) in zip(keys(res),Linestyles)
         # Sq = res[L].Sqs[:,:,5,:,:]
         Sq = getSq_tau(res[L],5)
         xis = getXis_err(Sq)
         mus = res[L].mus
-        scatterlines!(ax,mus,xis.ximean/L,label = L"L=%$L";linestyle)
+        scatterlines!(ax,mus,xis.ximean/L,label = L"L=%$L";linestyle,scatterkwargs[L]...)
         errorbars!(ax,mus,xis.ximean/L,xis.xistd/L,whiskerwidth = 5)
+        # errlines!(ax,mus,xis.ximean/L,xis.xistd/L,label = L"L=%$L")
         
         muFilter = findall(x->x>=(0.1) && x<=0.9,mus)
         # muFilter = findall(x->x>=(0.3) && x<=0.45,mus)
 
-        scatterlines!(ax2,mus[muFilter],xis.ximean[muFilter]/L,label = L"L=%$L";linestyle)
-        errorbars!(ax2,mus[muFilter],xis.ximean[muFilter]/L,xis.xistd[muFilter]/L,whiskerwidth = 5)
+        # scatterlines!(ax2,mus[muFilter],xis.ximean[muFilter]/L,label = L"L=%$L";linestyle)
+        # errorbars!(ax2,mus[muFilter],xis.ximean[muFilter]/L,xis.xistd[muFilter]/L,whiskerwidth = 5)
+        # errlines!(ax2,mus[muFilter],xis.ximean[muFilter]/L,xis.xistd[muFilter]/L,label = L"L=%$L")
     end
-    vlines!(ax,[0.41],color = :grey,linestyle = :dashdot)
-    vlines!(ax2,[0.41],color = :grey,linestyle = :dashdot)
-    axislegend(ax,position = :lt)
+    # vlines!(ax,[0.41],color = :grey,linestyle = :dashdot)
+    # vlines!(ax2,[0.41],color = :grey,linestyle = :dashdot)
+    vlines!(ax,[0.1,0.2],color = :grey,linestyle = :dash)
+    ylims!(ax,0,5)
+    # ylims!(ax2,0.04,1.8)
+    axislegend(ax,position = :lb)
     fig
     
 end
