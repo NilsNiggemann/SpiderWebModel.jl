@@ -153,7 +153,7 @@ end
 
 function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::BBqOperator,ψG::T,Allqs,nThreads = 2*Threads.nthreads()) where T
     Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
-    setup = setup_many_walker_GFMC(InitialState,Nwalkers)
+    setup = setup_many_walker_GFMC(InitialState,Nwalkers,nThreads)
     
     results = setup_operatorObservables(mProj,length(Allqs),NSteps,O,outfile)
 

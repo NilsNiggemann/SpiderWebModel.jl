@@ -258,7 +258,7 @@ function _allocateWalkers(InitialState::ConfType,Nwalkers,nThreads,plaquettePosi
     return Walkers
 end
 
-function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers::Integer,nThreads) where {ConfType <: StencilSpinConfig}
+function setup_many_walker_GFMC(InitialState::ConfType,Nwalkers::Integer,nThreads::Integer) where {ConfType <: StencilSpinConfig}
     plaquettePositions = collect(plaquetteIterator(InitialState))
     Walkers = _allocateWalkers(InitialState,Nwalkers,nThreads,plaquettePositions)
     weights = ones(Nwalkers)

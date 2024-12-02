@@ -131,14 +131,15 @@ function getWeight2Moves!(Walker::SpiderWebWalker,AffectedPlaquettes,ψG::T,I,J,
     return weight
 end
 
-function initialize_forward_walking!(Walkers,weights,O::AbstractOperator,Configs,J,ψG::T,Guiding_function_buffer) where T
+function initialize_forward_walking!(Walkers,weights,O::AbstractOperator,Configs,J,ψG::T,Guiding_function_buffer,nThreads) where T
     # @inbounds for (α, Walker) in enumerate(Walkers)
-    batches = ChunkSplitters.chunks(eachindex(Walkers), n = length(Guiding_function_buffer))
+    batches = ChunkSplitters.chunks(eachindex(Walkers), n = nThreads)
     
     Threads.@threads for (i_chunk,αinds) in enumerate(batches)
         for α in αinds
             GWFBuffer = Guiding_function_buffer[i_chunk]
             Walker = Walkers[α]
+            compute_GWF_buffer!(GWFBuffer,ψG,Walker)
             ConfView = @view Configs[:,:,α]
             get_config(Walker) .= ConfView
             wa = apply_operator!(Walker,O,GWFBuffer,ψG,J)
@@ -146,28 +147,27 @@ function initialize_forward_walking!(Walkers,weights,O::AbstractOperator,Configs
         end
     end
 end
-initialize_forward_walking!(Problem::AbstractGFMCProblem,O::AbstractOperator,Configs,OperatorList) = initialize_forward_walking!(Problem.Walkers,Problem.weights,O,Configs,OperatorList,Problem.ψG,Problem.Guiding_function_buffer)
+initialize_forward_walking!(Problem::AbstractGFMCProblem,O::AbstractOperator,Configs,OperatorList,nThreads) = initialize_forward_walking!(Problem.Walkers,Problem.weights,O,Configs,OperatorList,Problem.ψG,Problem.Guiding_function_buffer,nThreads)
 
-function straight_forward_walking!(prob::AbstractGFMCProblem,TotalWeights,reconfigurationList)
+function straight_forward_walking!(prob::AbstractGFMCProblem,TotalWeights,reconfigurationList,nThreads::Integer)
     
     (;Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,ψG,method) = prob
 
     NSteps = size(TotalWeights,1)
     Operator_weight = mean(weights)
 
-    reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
+    reconfiguration!(Walkers,Guiding_function_buffer,reconfigurationList,reconfiguration_buffer,weights)
     
     if all(iszero,weights)
         TotalWeights .= 0
         return TotalWeights
     end
     for i in 1:NSteps
-        
-        propagateWalkers!(Walkers,weights,Guiding_function_buffer,ψG,method)
+        propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,method)
         
         TotalWeights[i] = mean(weights)
 
-        reconfiguration!(Walkers,reconfigurationList,reconfiguration_buffer,weights)
+        reconfiguration!(Walkers,Guiding_function_buffer,reconfigurationList,reconfiguration_buffer,weights)
     end
     TotalWeights[begin] *= Operator_weight
     return TotalWeights
@@ -186,22 +186,22 @@ setup_operatorObservables(mProj,NumObs,NSteps,Op::AbstractOperator,outfile::Noth
 function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::AbstractOperator,ψG::T,AllPlaqs = collect(plaquetteIterator(InitialState)),nThreads = 2*Threads.nthreads()) where T
     Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
 
-    setup = setup_many_walker_GFMC(InitialState,Nwalkers)
+    setup = setup_many_walker_GFMC(InitialState,Nwalkers,nThreads)
     
     results = setup_operatorObservables(mProj,length(AllPlaqs),NSteps,O,outfile)
 
     Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState,Nwalkers)
 
     Problem = SpiderwebGFMCProblem(method,InitialState,ψG,setup.Walkers,setup.weights,Guiding_function_buffer,setup.reconfiguration_buffer,results)
-
+    
     reconfigurationList = zeros(Int,length(Problem.Walkers))
     for n in 1:NSteps
         Configs = @view SaveConfigs[:,:,:,n]
         for (j,J) in enumerate(AllPlaqs)
-            initialize_forward_walking!(Problem,O,Configs,J)
-
+            initialize_forward_walking!(Problem,O,Configs,J,nThreads)
+            
             TotalWeights = @view results[:,j,n]
-            straight_forward_walking!(Problem,TotalWeights,reconfigurationList)
+            straight_forward_walking!(Problem,TotalWeights,reconfigurationList,nThreads)
             # results[:,j,n] .= res
 
         end
@@ -209,8 +209,8 @@ function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveCo
     return results
 end
 
-function measure_operator(InitialState,method::AbstractGFMCMethod,SaveConfigs,mProj,O::AbstractOperator,ψG,AllPlaqs = collect(plaquetteIterator(InitialState));outfile = nothing)
-    measure_operator(InitialState,method,outfile,SaveConfigs,mProj,O,ψG,AllPlaqs)
+function measure_operator(InitialState,method::AbstractGFMCMethod,SaveConfigs,mProj,O::AbstractOperator,ψG,AllPlaqs = collect(plaquetteIterator(InitialState));outfile = nothing,nThreads=2*Threads.nthreads())
+    measure_operator(InitialState,method,outfile,SaveConfigs,mProj,O,ψG,AllPlaqs,nThreads)
 end
 
 function get_observables_sfw(Gnp,sfw_weights,meanweight,m = size(sfw_weights,2))
@@ -247,14 +247,13 @@ function apply_operator!(Walker::SpiderWebWalker,O::RandomPlaquetteFlipOperator,
     return w
 end
 
-function measureObservables(S::StencilSpinConfig,BOp::AbstractOperator,OperatorList,p::Integer,Nwalkers::Integer,NSteps::Integer,method::AbstractGFMCMethod,ψG::AbstractGuidingFunction;kwargs...)
+function measureObservables(S::StencilSpinConfig,BOp::AbstractOperator,OperatorList,p::Integer,Nwalkers::Integer,NSteps::Integer,method::AbstractGFMCMethod,ψG::AbstractGuidingFunction;nThreads=Threads.nthreads(), kwargs...)
     result = startManyWalkerGFMC(S,method,Nwalkers,NSteps,ψG;kwargs...)
-    return measureObservables(result,S,BOp,OperatorList,p,method,ψG)
+    return measureObservables(result,S,BOp,OperatorList,p,method,ψG,nThreads)
 end
 
-function measureObservables(result::GFMCObservables,S::StencilSpinConfig,BOp::AbstractOperator,OperatorList,p::Integer,method::AbstractGFMCMethod,ψG::AbstractGuidingFunction)
-    resSFW = measure_operator(S,method,result.SaveConfigs,p,BOp,ψG,OperatorList)
-
+function measureObservables(result::GFMCObservables,S::StencilSpinConfig,BOp::AbstractOperator,OperatorList,p::Integer,method::AbstractGFMCMethod,ψG::AbstractGuidingFunction,nThreads)
+    resSFW = measure_operator(S,method,result.SaveConfigs,p,BOp,ψG,OperatorList;nThreads)
     Gnp = precomputeNormalizedAccWeight(result.TotalWeights,1,max(p,2))
 
     ObVal = stack([get_observables_sfw(Gnp,resSFW[:,j,:]',mean(result.TotalWeights)) for j in eachindex(IndexLinear(),OperatorList)])
