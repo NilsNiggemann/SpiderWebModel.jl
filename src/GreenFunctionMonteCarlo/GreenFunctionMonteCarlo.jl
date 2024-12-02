@@ -514,6 +514,10 @@ function propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,
                     # dτ = log(1-ξ)/(el_x - H_xx)
                     dτ = min(βleft,log(1-ξ)/(el_x - H_xx))
                     βleft -= dτ
+                    if isinf(βleft)
+                        @info "" dτ el_x H_xx βleft maximum(weightList)
+                        error("Infinite propagation time encountered. Check for too large values in guiding wavefunction or its Buffers!")
+                    end
                     log_w += -dτ*el_x
                     if βleft > 0 
                         last_move = performMarkovStep!(Walker)
