@@ -169,7 +169,8 @@ function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveCo
             initialize_buffered_forward_walking!(Problem,O,Configs,q,WF_buffers)
 
             TotalWeights = @view results[:,j,n]
-            straight_forward_walking!(Problem,TotalWeights,reconfigurationList)
+            fill_all_Buffers!(Problem,nThreads)
+            straight_forward_walking!(Problem,TotalWeights,reconfigurationList,nThreads)
             # results[:,j,n] .= res
 
         end
@@ -197,6 +198,7 @@ function _initialize_buffered_forward_walking!(Walkers,weights,O::AbstractOperat
             Walker = Walkers[α]
             ConfView = @view Configs[:,:,α]
             get_config(Walker) .= ConfView
+            compute_GWF_buffer!(GWFBuffer,ψG,Walker)
             wa = apply_operator_buffer!(Walker,O,GWFBuffer,ψG,q,operatorBuffer)
             weights[α] = wa
         end

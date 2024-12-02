@@ -17,6 +17,7 @@ function apply_operator!(Walker::SpiderWebWalker,O::PlaquetteFlipOperator,Guidin
     w = sum(weights)
     
     applyPlaquette!(Walker.Config, I[1], I[2], move[1])
+    post_move_update_GWF_buffer!(GuidingFuncBuffer,ψG,Walker,move)
     return w
 end
 
@@ -74,7 +75,7 @@ function apply_operator!(Walker::SpiderWebWalker,O::BBOperator,GuidingFuncBuffer
         (-1,-1), #(-,-)
     ]
     
-    weights = getWeightList2Moves!(Walker,B2_flip_moves,O.AffectedPlaquettes,ψG,I,J)
+    weights = getWeightList2Moves!(Walker,B2_flip_moves,GuidingFuncBuffer,ψG,I,J)
     w = sum(weights)
     if iszero(w)
         return w
@@ -83,21 +84,26 @@ function apply_operator!(Walker::SpiderWebWalker,O::BBOperator,GuidingFuncBuffer
 
     move = B2_flip_moves[moveidx]
 
-    applyPlaquette!(Walker.Config, I[1], I[2], move[1])
-    applyPlaquette!(Walker.Config, J[1], J[2], move[2])
+    move1 = (I[1],I[2],move[1])
+    move2 = (J[1],J[2],move[2])
+    applyPlaquette!(Walker.Config, move1)
+    post_move_update_GWF_buffer!(GuidingFuncBuffer,ψG,Walker,move1)
+    applyPlaquette!(Walker.Config, move2)
+    post_move_update_GWF_buffer!(GuidingFuncBuffer,ψG,Walker,move2)
+
     return w
 end
 
-function getWeightList2Moves!(Walker::SpiderWebWalker,moves,AffectedPlaquettes,ψG::T,I,J) where T
-    getNPlaq!(Walker)
+function getWeightList2Moves!(Walker::SpiderWebWalker,moves,GuidingFuncBuffer,ψG::T,I,J) where T
+    premove_update_GWF_buffer!(GuidingFuncBuffer,ψG,Walker)
 
     weights = map(moves) do move
-        getWeight2Moves!(Walker,AffectedPlaquettes,ψG,I,J,move)
+        getWeight2Moves!(Walker,GuidingFuncBuffer,ψG,I,J,move)
     end
     return weights
 end
 
-function getWeight2Moves!(Walker::SpiderWebWalker,AffectedPlaquettes,ψG::T,I,J,move) where T
+function getWeight2Moves!(Walker::SpiderWebWalker,GuidingFuncBuffer,ψG::T,I,J,move) where T
     (;Config) = Walker
 
     idx_I,idx_J = @. 1 + (1-move) ÷ 2
@@ -105,21 +111,21 @@ function getWeight2Moves!(Walker::SpiderWebWalker,AffectedPlaquettes,ψG::T,I,J,
 
     P_applicable(Config,I)[idx_I] || return 0.
     i1,i2 = I
-    n_x = getNPlaq!(Walker)
-
+    premove_update_GWF_buffer!(GuidingFuncBuffer,ψG,Walker)
     ψx = ψG(Walker)
 
     applyPlaquette!(Config, i1,i2, move_I)
-    
+
     if !P_applicable(Config,J)[idx_J] 
         applyPlaquette!(Config, i1,i2, -move_I)
         return 0.
     end
+    post_move_update_GWF_buffer!(GuidingFuncBuffer,ψG,Walker,(i1,i2,move_I))
+
     j1,j2 = J
     applyPlaquette!(Config, j1,j2, move_J)
     
-    indices = AffectedPlaquettes[j1,j2]
-    n_x´ = getNPlaqfilled!(Walker,indices)
+    # indices = AffectedPlaquettes[j1,j2]
 
     # weight = guidingfuncRatio(ψG,n_x,n_x´,indices)
     ψx´ = ψG(Walker)
@@ -139,9 +145,9 @@ function initialize_forward_walking!(Walkers,weights,O::AbstractOperator,Configs
         for α in αinds
             GWFBuffer = Guiding_function_buffer[i_chunk]
             Walker = Walkers[α]
-            compute_GWF_buffer!(GWFBuffer,ψG,Walker)
             ConfView = @view Configs[:,:,α]
             get_config(Walker) .= ConfView
+            compute_GWF_buffer!(GWFBuffer,ψG,Walker)
             wa = apply_operator!(Walker,O,GWFBuffer,ψG,J)
             weights[α] = wa
         end
@@ -157,12 +163,13 @@ function straight_forward_walking!(prob::AbstractGFMCProblem,TotalWeights,reconf
     Operator_weight = mean(weights)
 
     reconfiguration!(Walkers,Guiding_function_buffer,reconfigurationList,reconfiguration_buffer,weights)
-    
     if all(iszero,weights)
         TotalWeights .= 0
         return TotalWeights
     end
+
     for i in 1:NSteps
+
         propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,method)
         
         TotalWeights[i] = mean(weights)
@@ -201,6 +208,7 @@ function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveCo
             initialize_forward_walking!(Problem,O,Configs,J,nThreads)
             
             TotalWeights = @view results[:,j,n]
+            fill_all_Buffers!(Problem,nThreads)
             straight_forward_walking!(Problem,TotalWeights,reconfigurationList,nThreads)
             # results[:,j,n] .= res
 
