@@ -233,7 +233,7 @@ copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
 end
 
 
-@views function getSqGFMC(res,m_values::ABSTRACTCOLLECTION;UseBuffer=true)
+@views function getSqGFMC(res,m_values::ABSTRACTCOLLECTION;useBuffer=true)
     pMax = maximum(m_values)
     Gnp = precomputeNormalizedAccWeight(res.TotalWeights,1,2pMax)
 
@@ -243,7 +243,7 @@ end
     SqFunc = SqFFT(size(Conf))
     SaveConfs = res.SaveConfigs
     reconfTable = res.reconfigurationTable
-    if UseBuffer
+    if useBuffer
         res_m = getObs(Gnp,SaveConfs,reconfTable,SqFunc,m_values)
     else
         res_m = getObs_smallBuffer(Gnp,SaveConfs,reconfTable,SqFunc,m_values)
