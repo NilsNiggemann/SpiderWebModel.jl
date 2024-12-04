@@ -32,6 +32,9 @@ exit
 import Pkg
 Pkg.activate(@__DIR__)
 cd(@__DIR__)
+import Pkg
+Pkg.instantiate()
+Pkg.precompile()
 import SpiderWebModel as SW
 using SpiderWebModel.HDF5
 i_arg = parse(Int, ARGS[1])
@@ -59,7 +62,23 @@ function findFirstMiIndex(arr)
     return i_min
 end
 
-function findEnergies(Configs,CT,ψG;Nwalkers = 28*2,NSteps = 2000,equilibration_steps = NSteps ÷6,outfileDIR = nothing)
+function optimizeWF(S,CT)
+    CTSR = SW.ContinuousTimeMethod(100*CT.τ,w_avg_estimate = CT.w_avg_estimate,Hxx = CT.Hxx)
+
+    psi = SW.SimpleJastrowFunction(S)
+
+    ψGSymm = SW.symmetrize(psi,SW.TranslationalSymmetry([-2,2],[2,2]),S)
+
+    stochReconfResSymm = SW.stochastic_reconfiguration(S,CTSR,20 ,ψGSymm,1500,8e-3,SW.IterativeSRSolver();Nwalkers = 2*Threads.nthreads(),reconfigure=false,rel_tolerance=0,equilibration_steps=100,pre_equilibration_steps=40_000,
+    report_steps = 100,
+    reset = false,
+    # outfile = "tempSR/SR2.h5"
+    )
+    SW.get_params(psi) .= stochReconfResSymm.params
+    return psi
+end
+
+function findEnergies(Configs,CT;Nwalkers = 28*2,NSteps = 2000,equilibration_steps = NSteps ÷6,outfileDIR = nothing)
     en = zeros(length(Configs))
     Δen = zeros(length(Configs))
     getOutfile(i,j) = isnothing(outfileDIR) ? nothing : joinpath(outfileDIR,"$(i)_$(j).h5")
@@ -72,6 +91,9 @@ function findEnergies(Configs,CT,ψG;Nwalkers = 28*2,NSteps = 2000,equilibration
             Δen[i] = 0
             continue
         end
+
+        ψG = optimizeWF(S,CT)
+
         NwalkersNew = max(48*2, round(Int,Nwalkers * (sum(SW.getNPlaq(S))/ 48 / 10)^2)*48)
         @info "starting $i" NwalkersNew
         
@@ -95,7 +117,7 @@ function makeConf(UC,L,Spin)
 end  
 ##
 L = 16
-Nwalkers = 48*10
+Nwalkers = 48*15
 NSteps = 6000
 
 reducedConfigs = makeConf.(collect.(eachslice(SW.h5read("../../Data/reducedConfigs.h5","reducedConfigs"),dims=3)),L,1)
@@ -105,17 +127,16 @@ mus_sectors = LinRange(-0.15,0.99,30)
 mu = mus_sectors[i_arg]
 ##
 CT = SW.ContinuousTimeMethod(0.2,1,-0.266length(reducedConfigs[1]),SW.Hxx_RK(mu))
-ψG = SW.PlaquetteNumberGuidingFunction(0.15*(1-mu))
 outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/SectorComp/runs/L=$(L)/mu=$(mu)_$(i_arg)/"
 rm(outfileDIR,recursive=true,force=true)
 mkpath(outfileDIR)
 
-res = findEnergies(upscale.(reducedConfigs,L),CT,ψG;Nwalkers,NSteps,outfileDIR)
+res = findEnergies(upscale.(reducedConfigs,L),CT;Nwalkers,NSteps,outfileDIR)
 ##
 AllresEn = res.en
 AllresΔEn = res.Δen
 
-outfileTotal = "/p/scratch/pmfrg/niggemann1/Spiderweb/DataS1_CT_RK_equil/SectorComp2/L=$(L)/mu=$(mu).h5"
+outfileTotal = "/p/scratch/pmfrg/niggemann1/Spiderweb/DataS1_CT_RK_equil/SectorComp3/L=$(L)/mu=$(mu).h5"
 mkpath(dirname(outfileTotal))
 
 h5write(outfileTotal,"energies",AllresEn)

@@ -96,9 +96,9 @@ function makeConf(UC,L,Spin)
     S .= SW.getPeriodicState(UC,L,L)
     return S
 end  
-reducedConfigs = makeConf.(collect.(eachslice(SW.h5read("../../Data/reducedConfigs.h5","reducedConfigs"),dims=3)),4,1)
+reducedConfigs = [SW.stencilConfig(zeros(4,4),1,boundaryCondition= :periodic) .= SW.get4x4PeriodicState(4,i) for i in 1:28]
 
-files =  [joinpath(root,file) for (root,_,files) in walkdir("/p/scratch/pmfrg/niggemann1/Spiderweb/DataS1_CT_RK_equil/SectorComp/L=16") for file in files]
+files =  [joinpath(root,file) for (root,_,files) in walkdir("/p/scratch/pmfrg/niggemann1/Spiderweb/DataS1_CT_RK_equil/SectorComp2/L=16") for file in files]
 
 mus = stack([h5read(file,"mu") for file in files])
 perm = sortperm(mus)

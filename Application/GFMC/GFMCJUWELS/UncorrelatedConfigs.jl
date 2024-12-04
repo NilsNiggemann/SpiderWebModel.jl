@@ -36,10 +36,10 @@ using HDF5
 using SpiderWebModel.Statistics
 i_arg = isinteractive() ? 12 : parse(Int, ARGS[1])
 
-μs = (0.0,0.5,0.8,1.0)
+μs = (0.0,0.3,0.4,0.5,0.8,1.0)
 # μs = 0.2:0.025:0.45
 
-Ls = (8,12,16)
+Ls = (8,12,)
 jobs_array = [(;L,μ) for L in Ls for μ in μs]
 
 # μs = μs[1:2:end]
@@ -50,15 +50,15 @@ nBra = 1
 τ = 0.2+ 0.1μ
 ##
 NSteps = 20
-NConfigs = 10_000
-equilibration_steps = 1000
+NConfigs = 8_000
+equilibration_steps = 500
 pre_equilibration_steps = 0
-NWalkers = round(Int,48*120*(L/28)^2)
-NStepsEnd = 40
+NWalkers = round(Int,48*100*(L/12)^4)
+NStepsEnd = 30
 scatter_fraction = 0.0
 NBins = 2000
 stoch_rec_learning_rate = 3e-3
-NWalkers_stochRec = Threads.nthreads() * 2
+NWalkers_stochRec = Threads.nthreads() 
 equilibration_steps_stochRec = equilibration_steps
 report_steps_SR = 2
 ##
@@ -141,20 +141,29 @@ sleep(2)
 CT = SW.ContinuousTimeMethod(τ,nBra,w_avg_estimate,SW.Hxx_RK(μ))
 ##
 
-outfileTotal = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_EquilConfigs/L=$(L)/mu=$(μ)/Spin1GFMC_Eval_periodic_$(SECTOR_NAME)_mu$(μ)_L$(L)_$(i_arg).h5"
+outfileTotal = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_EquilConfigs_2/L=$(L)/mu=$(μ)/Spin1GFMC_Eval_periodic_$(SECTOR_NAME)_mu$(μ)_L$(L)_$(i_arg).h5"
 mkpath(dirname(outfileTotal))
 # rm(outfileTotal,force=true)
 @assert !isfile(outfileTotal) "file already exists!"
+
 
 SavedConfigs = h5open(outfileTotal,"cw") do file 
     SW.createMMapArray(file,"configs",Int8,(L,L,NConfigs))
 end
 
+h5write(outfileTotal,"L",L)
+h5write(outfileTotal,"Nwalkers",NWalkers)
+
 initializer = SW.WeightedConfigsInitializers([parentState],[1.])
+@info "starting run of $NConfigs" L τ nBra NSteps NWalkers
+
+# outFileDir = ENV["MYSCRATCH"]*"/Spiderweb/temp/DataS1_EquilConfigs_2/L=$(L)/mu=$(μ)/"
+# mkpath(outFileDir)
 
 for run in 0:NConfigs
-    @info "starting run $run of $NConfigs" L τ nBra NSteps NWalkers
-
+    println(run)
+    # outfile = joinpath(outFileDir,"$(run)_($i_arg).h5")
+    # rm(outfile,force=true)
     @time results = SW.startManyWalkerGFMC(parentState,CT,NWalkers,NSteps,ψG;equilibration_steps,pre_equilibration_steps=0,initializer)
     empty!(initializer.configs)
     empty!(initializer.weights)
@@ -167,9 +176,9 @@ for run in 0:NConfigs
     if run != 0
         SavedConfigs[:,:,run] .= @view results.SaveConfigs[:,:,1,end]
     end
-
+    GC.gc()
+    # rm(outfile,force=true)
     flush(stdout)
 
 end
-
 println("GFMC done")
