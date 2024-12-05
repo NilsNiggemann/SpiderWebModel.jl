@@ -150,8 +150,11 @@ function buffer_BBQ_WFWeights(Walkers::Vector{<:SpiderWebWalker},ψG::AbstractGu
     end
     return allbuffers    
 end
+buffer_WFWeights(O::BBqOperator,Walkers,ψG,Guiding_function_buffer) = buffer_BBQ_WFWeights(Walkers,ψG,Guiding_function_buffer)
 
-function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::BBqOperator,ψG::T,Allqs,nThreads = 2*Threads.nthreads()) where T
+measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::BBqOperator,ψG::AbstractGuidingFunction,Allqs,nThreads = 2*Threads.nthreads()) = measure_operator_buffer(InitialState,method,outfile,SaveConfigs,mProj,O,ψG,Allqs,nThreads)
+
+function measure_operator_buffer(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::AbstractOperator,ψG::AbstractGuidingFunction,Allqs,nThreads = 2*Threads.nthreads())
     Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
     setup = setup_many_walker_GFMC(InitialState,Nwalkers,nThreads)
     
@@ -164,7 +167,7 @@ function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveCo
     for n in 1:NSteps
         Configs = @view SaveConfigs[:,:,:,n]
         fillWalkers!(Problem.Walkers,Configs)
-        WF_buffers = buffer_BBQ_WFWeights(Problem.Walkers,ψG,Guiding_function_buffer)
+        WF_buffers = buffer_WFWeights(O,Problem.Walkers,ψG,Guiding_function_buffer)
         for (j,q) in enumerate(Allqs)
             initialize_buffered_forward_walking!(Problem,O,Configs,q,WF_buffers)
 

@@ -1,7 +1,9 @@
 """Operator Σᵢ cos(q rᵢ) <Pᵢ+ Pᵢ†>.
 """
 struct BqOperator <: AbstractOperator 
+    phase::Float64
 end
+BqOperator() = BqOperator(0.)
 
 operatorname(X::BqOperator) = "BqOperator"
 
@@ -23,7 +25,7 @@ function apply_operator_buffer!(Walker::SpiderWebWalker,O::BqOperator,Guiding_fu
     wsum = 0.
     LoopVectorization.@turbo for i in eachindex(psiRatios,weights,Ri_x,Ri_y)
         qr_i = qx* Ri_x[i] + qy*Ri_y[i]
-        weights[i] = 2*psiRatios[i]*cos(qr_i*0.5)^2
+        weights[i] = 2*psiRatios[i]*cos(qr_i*0.5+O.phase)^2
         wsum += weights[i]
     end
     if iszero(wsum)
@@ -42,9 +44,10 @@ function buffer_BQ_WFWeights(Walker::SpiderWebWalker,ψG::AbstractGuidingFunctio
     compute_GWF_buffer!(Guiding_function_buffer,ψG,Walker)
     psiRatios = copy(updateWeightList!(Walker,Guiding_function_buffer,ψG))
 
+    I0 = getCentralPlaquette(get_config(Walker))
     weights = similar(psiRatios) .= 0. 
-    Ri_x = [ri[1] for ri in AllMoves]
-    Ri_y = [ri[2] for ri in AllMoves]
+    Ri_x = [ri[1]-I0[1] for ri in AllMoves]
+    Ri_y = [ri[2]-I0[2] for ri in AllMoves]
     return BQ_WaveFunctionBuffer(AllMoves,psiRatios,weights,Ri_x,Ri_y)
 end
 
@@ -60,28 +63,6 @@ function buffer_BQ_WFWeights(Walkers::Vector{<:SpiderWebWalker},ψG::AbstractGui
     end
     return allbuffers    
 end
+buffer_WFWeights(O::BqOperator,Walkers,ψG,Guiding_function_buffer) = buffer_BQ_WFWeights(Walkers,ψG,Guiding_function_buffer)
 
-function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::BqOperator,ψG::T,Allqs,nThreads=2*Threads.nthreads()) where T
-    Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
-    setup = setup_many_walker_GFMC(InitialState,Nwalkers,nThreads)
-    
-    results = setup_operatorObservables(mProj,length(Allqs),NSteps,O,outfile)
-
-    Guiding_function_buffer = allocate_GWF_buffers_threads(ψG,InitialState,Nwalkers)
-    Problem = SpiderwebGFMCProblem(method,InitialState,ψG,setup.Walkers,setup.weights,Guiding_function_buffer,setup.reconfiguration_buffer,results)
-
-    reconfigurationList = zeros(Int,length(Problem.Walkers))
-    for n in 1:NSteps
-        Configs = @view SaveConfigs[:,:,:,n]
-        fillWalkers!(Problem.Walkers,Configs)
-        WF_buffers = buffer_BQ_WFWeights(Problem.Walkers,ψG,Guiding_function_buffer)
-        for (j,q) in enumerate(Allqs)
-
-            initialize_buffered_forward_walking!(Problem,O,Configs,q,WF_buffers)
-            TotalWeights = @view results[:,j,n]
-            straight_forward_walking!(Problem,TotalWeights,reconfigurationList)
-            # results[:,j,n] .= res
-        end
-    end
-    return results
-end
+measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::BqOperator,ψG::AbstractGuidingFunction,Allqs,nThreads = 2*Threads.nthreads()) = measure_operator_buffer(InitialState,method,outfile,SaveConfigs,mProj,O,ψG,Allqs,nThreads)

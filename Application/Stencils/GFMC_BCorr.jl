@@ -9,14 +9,20 @@ using SpiderWebModel
 include("plottingUtils.jl")
 ##
 #___________Periodic Boundaries_______________________
-function getPeriodic(parent)
-    state = parent |> Array
-    SW.SpinConfig(SW.PeriodicMatrix(state), parent.S)
+function getPeriodic(mat,Spin)
+    SW.SpinConfig(SW.PeriodicMatrix(0.5*parent(mat)), Spin)
 end
 
 mu = 0.3
-S = SW.stencilConfig(parent(SW.getStairCase(8)),1/2;boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional())
-S_ED = getPeriodic(SW.getStairCase(size(S,1)))
+
+
+S = SW.stencilConfig(parent(SW.periodicState6x6_3(12)),1/2;boundaryCondition = :periodic)
+# SW.flipSpinsAlongDiagonal!(S,6,1)
+# SW.flipSpinsAlongRow!(S,3,1)
+
+S_ED = getPeriodic(S,1/2)
+SW.plotApplPlaquettes(S)
+##
 # S_ED = SW.getStairCase(size(S,1))
 # S = SW.stencilConfig(parent(SW.getStairCase(7)),1/2)
 # S_ED = SW.getStairCase(size(S,1))
@@ -25,7 +31,7 @@ SW.addRKPotential!(HStair,mu)
 ExSol = SW.SolveHKrylov(HStair.H)
 E0 = ExSol.values[1]
 v0 = ExSol.vectors[1]
-HConfs = getPeriodic.(SW.spinConfig.(HStair.AllStates,Ref(S_ED),Ref(HStair.plaqMapping)))
+HConfs = getPeriodic.(SW.spinConfig.(HStair.AllStates,Ref(S_ED),Ref(HStair.plaqMapping)),1/2)
 magEx = SW.getMagnetization(HConfs, v0)
 SqEx = SW.getStructureFac(HConfs,v0)
 ##
@@ -39,7 +45,7 @@ nThermal = 1000
 nBra = 3
 ψG = SW.SimpleJastrowFunction(S)
 SW.rand!(SW.getNonSymmetric(ψG),1e-3)
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,30,ψG,200,4e-3,SW.IterativeSRSolver();Nwalkers = 28,reconfigure = false,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000)
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,20,ψG,100,3e-3,SW.IterativeSRSolver();Nwalkers = 20,reconfigure = false,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,report_steps=10)
 SW.get_params(ψG) .= stochReconfRes.params
 plotVarEn(stochReconfRes)
 ##
@@ -56,7 +62,7 @@ plotEnergies(results,CT,E0,nThermal=10,normalize=true,Emin = E0-1e-2,Emax = E0+1
 ##___________ StraightForwardWalking _______________________
 # allPlaqs = collect(SW.plaquetteIterator(S))
 allPlaqs = SW.getApplicablePlaquettes(S_ED)
-refPlaq = first(SW.getApplicablePlaquettes(S_ED))
+refPlaq = first(allPlaqs)
 # pairPlaqs = filter(!=(refPlaq),allPlaqs)
 pairPlaqs = copy(allPlaqs)
 exactBB = [SW.getBij_square(HStair.AllStates,HStair.plaqMapping,v0,refPlaq,Pj) for Pj in pairPlaqs]
@@ -74,25 +80,24 @@ let
     fig
 end
 ##
-Gnps = [SW.precomputeNormalizedAccWeight(res.TotalWeights,1,5) for res in results]
-##
 BOp = SW.PlaquetteFlipOperator(S)
 # resB = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,10,BOp,ψG) for (i,res) in enumerate(results)])
 # BVals = stack(stack([[SW.get_observables_sfw(Gnp,res[:,j,:]',mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)[1:1]] for (Gnp,res,result) in zip(Gnps,resB,results) ]))
-BVals = stack([SW.measureObservables(S,BOp,allPlaqs,5,20*4,3000,CT,ψG;equilibration_steps = 3000,pre_equilibration_steps=20_000) for _ in 1:20])
+BVals = stack(fetch.([Threads.@spawn SW.measureObservables(S,BOp,allPlaqs,5,20*1,1000,CT,ψG;equilibration_steps = 3000,pre_equilibration_steps=20_000) for _ in 1:10]))
 ##
 BOp_rand = SW.RandomPlaquetteFlipOperator(S)
-BValsRand = stack([SW.measureObservables(S,BOp_rand,[nothing],5,20*3,3000,CT,ψG;equilibration_steps = 3000,pre_equilibration_steps=20_000) for _ in 1:20]) ./ length(allPlaqs)
+BValsRand = stack([SW.measureObservables(S,BOp_rand,[nothing],5,20*3,3000,CT,ψG;equilibration_steps = 3000,pre_equilibration_steps=20_000) for _ in 1:10]) ./ length(allPlaqs)
 ##
 # BVals = fetch.([Threads.@spawn SW.measureObservables(S,BOp,allPlaqs,5,20*1,1000,CT,ψG;equilibration_steps = 3000,pre_equilibration_steps=20_000) for _ in 1:20])
 ##
 BBOp = SW.BBOperator(S,refPlaq)
-GFMCPlaqs = SW.getApplicablePlaquettes(S)
+# GFMCPlaqs = SW.getApplicablePlaquettes(S)
+GFMCPlaqs = allPlaqs
 
 # resBB = fetch.([Threads.@spawn SW.measure_operator(S,CT,res.SaveConfigs,3,BBOp,ψG,SW.getApplicablePlaquettes(S)) for (i,res) in enumerate(results)])
 # BBVals = stack(stack([[SW.get_observables_sfw(Gnp,res[:,j,:]',mean(result.TotalWeights)) for j in eachindex(GFMCPlaqs)] for (Gnp,res,result) in zip(Gnps,resBB,results) ]))
 
-BBVals = stack([SW.measureObservables(S,BBOp,GFMCPlaqs,5,20*2,1000,CT,ψG;equilibration_steps = 3000,pre_equilibration_steps=20_000) for _ in 1:20]) 
+BBVals = stack([SW.measureObservables(S,BBOp,GFMCPlaqs,5,20*2,1000,CT,ψG;equilibration_steps = 3000,pre_equilibration_steps=20_000) for _ in 1:10]) 
 ##
 
 # GFMCPlaqs = collect(SW.plaquetteIterator(S))
@@ -104,26 +109,29 @@ let
     pointsGFMC = Point.(GFMCPlaqs)
     nth(x) = x[end]
     BBEnd = dropmean(BBVals,dims=3)[end,:]
-    BEnd = dropmean(BVals,dims=3)[1,end]
+    BEnd = dropmean(BVals,dims=3)[end,:]
     localCorr = only(findfirst(==(refPlaq),GFMCPlaqs))
-    corrEnd = BBEnd .- BEnd^2
+    # corrEnd = BBEnd .- BEnd[localCorr].*BEnd
+    corrEnd = BEnd
     # corrEnd = BEnd^2
     
     corrEnd[localCorr] /= 2
 
-    exactCorrsRescale = copy(exactCorrs)
+    # exactCorrsRescale = copy(exactCorrs)
+    exactCorrsRescale = copy(exactB)
+
     # exactCorrsRescale = exactB
     localCorr = only(findfirst(==(refPlaq),pairPlaqs))
     exactCorrsRescale[localCorr] /= 2
-
-    sizefunc(x) = x*30*25
+    
+    sizefunc(x::AbstractArray) = x.*100 ./ maximum(x)
+    sizefunc2(x) = sizefunc(x)
     # scatter!(ax,Point(refPlaq), marker = '×',markersize = 60, color = :red)
     
     points = Point.(pairPlaqs)
-    sizefunc2(x) = sizefunc(x)
-    scatter!(ax,points, markersize = sizefunc2.(exactCorrsRescale),colormap = :viridis, color = sizefunc2.(exactCorrsRescale),marker = '●',alpha = 1)
+    scatter!(ax,points, markersize = sizefunc(exactCorrsRescale),colormap = :viridis, color = sizefunc(exactCorrsRescale),marker = '●',alpha = 1)
     
-    scatter!(ax,pointsGFMC, markersize = sizefunc.(corrEnd),colormap = :viridis, color = :red,alpha = 0.0,marker = '●',strokewidth = 0.8000,strokecolor = :red) 
+    scatter!(ax,pointsGFMC, markersize = sizefunc(corrEnd),colormap = :viridis, color = :red,alpha = 0.0,marker = '●',strokewidth = 0.8000,strokecolor = :red) 
     # scatter!(ax,points, markersize = sizefunc2.(exactCorrs),colormap = :viridis, color = exactCorrs,marker = '∘')
     # scatter!(ax,points, markersize = sizefunc2.(exactCorrs),colormap = :viridis, color = exactCorrs,alpha = 0.4)
     fig
@@ -158,7 +166,7 @@ with_theme(theme_SimpleTicks()) do
 end
 ##
 
-function PlaqSumFT(S,BBCorr,refPlaq,allPlaqs)
+function PlaqSumFT(S,BBCorr,refPlaq,allPlaqs,shift = 0)
     kx = trueMomenta(0,2pi,size(S,1))
     ky = trueMomenta(0,2pi,size(S,2))
     FTres = zeros(length(kx),length(ky))
@@ -167,7 +175,7 @@ function PlaqSumFT(S,BBCorr,refPlaq,allPlaqs)
             BBq = 0.
             for (iP,P) in enumerate(allPlaqs)
                 rx,ry = P .- refPlaq
-                BBq += BBCorr[iP] * cos(kx*rx + ky*ry)
+                BBq += BBCorr[iP] * cos(kx*rx + ky*ry+shift)
             end
             FTres[i,j] = BBq
         end
@@ -176,48 +184,119 @@ function PlaqSumFT(S,BBCorr,refPlaq,allPlaqs)
     return FTres
 end
 
-with_theme(theme_PiTicks()) do 
-
-    fig = Figure()
-    ax = Axis(fig[1,1];aspect = 1)
+function PlaqSumFTPairs(S,BBCorr::AbstractMatrix,allPlaqs,shift = 0)
     kx = trueMomenta(0,2pi,size(S,1))
     ky = trueMomenta(0,2pi,size(S,2))
-
-#     exactBB
-# exactCorrs
-
-    FT = PlaqSumFT(S,exactBB,(1,2),allPlaqs)
-    hm = heatmap!(ax,kx,ky,FT,colormap = :viridis)
-    Colorbar(fig[1,2],hm)
-    fig
-    
+    FTres = zeros(length(kx),length(ky))
+    for (i,kx) in enumerate(kx)
+        for (j,ky) in enumerate(ky)
+            BBq = 0.
+            for (iP,P) in enumerate(allPlaqs)
+                for (jP,P2) in enumerate(allPlaqs)
+                    rx,ry = P .- P2
+                    BBq += BBCorr[iP,jP] * cos(kx*rx + ky*ry+shift)
+                end
+            end
+            FTres[i,j] = BBq
+        end
+        
+    end
+    return FTres
 end
+
 ##
 BBQOp = SW.BBqOperator()
 qvals = let 
     qx = trueMomenta(0,2pi,size(S,1))
     qy = trueMomenta(0,2pi,size(S,2))
     qvals = [SA[qx,qy] for (qx,qy) in Iterators.product(qx,qy)]
-    
 end
 BBQOp = SW.BBqOperator()
-results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,28*1,100,ψG,equilibration_steps=2000,pre_equilibration_steps=1_000,scatter_fraction=0.5) for i in 1:6])
 ##
 BBQ = stack(fetch.([Threads.@spawn SW.measureObservables(S,BBQOp,qvals,5,20*1,1000,CT,ψG;equilibration_steps = 5000,pre_equilibration_steps=20_000) for _ in 1:6]))
+
 ##
+exactBB_pairs = [SW.getBij_square(HStair.AllStates,HStair.plaqMapping,v0,Pi,Pj) for Pi in allPlaqs, Pj in allPlaqs] ./ length(allPlaqs)
+
 with_theme(theme_PiTicks()) do 
-    fig = Figure()
-    ax = Axis(fig[1,1];aspect = 1)
+    fig = Figure(size = (400,600))
+    ax1 = Axis(fig[1,1];aspect = 1,title = "exact BBq")
+
+    ax2 = Axis(fig[2,1];aspect = 1,title = "GFMC BBq op")
     kx = trueMomenta(0,2pi,size(S,1))
     ky = trueMomenta(0,2pi,size(S,2))
+
+    FTex = PlaqSumFTPairs(S,exactBB_pairs,allPlaqs)
+    hm = heatmap!(ax1,kx,ky,FTex,colormap = :viridis)
+    Colorbar(fig[1,2],hm)
+    fig
+
     FTmean = dropmean(BBQ,dims=3)[end,:] ./ length(allPlaqs)
     FT = zeros(length(kx),length(ky))
     FT[:] .= FTmean
     FT .-= FT[1,1]*0.5
-    hm = heatmap!(ax,kx,ky,FT,colormap = :viridis)
-    Colorbar(fig[1,2],hm)
+    hm = heatmap!(ax2,kx,ky,FT,colormap = :viridis)
+    Colorbar(fig[2,2],hm)
     fig
 end
+##___________Bq Operator test_______________________
+
+BQOp = SW.BqOperator()
+BQ = stack(fetch.([Threads.@spawn SW.measureObservables(S,BQOp,qvals,1,20*1,1000,CT,ψG;equilibration_steps = 5000,pre_equilibration_steps=20_000) for _ in 1:6]))
+
+##
+BQSin = stack(fetch.([Threads.@spawn SW.measureObservables(S,BQOp,qvals,1,20*1,1000,CT,ψG;equilibration_steps = 5000,pre_equilibration_steps=20_000) for _ in 1:6]))
+##
+with_theme(theme_PiTicks()) do 
+    fig = Figure(size = (400,600))
+    ax1 = Axis(fig[1,1];aspect = 1,title = "exact Bq")
+
+    ax2 = Axis(fig[2,1];aspect = 1,title = "GFMC Bq op")
+    kx = trueMomenta(0,2pi,size(S,1))
+    ky = trueMomenta(0,2pi,size(S,2))
+
+    FTex = PlaqSumFT(S,exactB,SW.getCentralPlaquette(S),allPlaqs)
+    hm = heatmap!(ax1,kx,ky,FTex,colormap = :viridis)
+    Colorbar(fig[1,2],hm)
+    fig
+
+    FTmean = dropmean(BQ,dims=3)[end,:] #./ length(allPlaqs)
+    FT = zeros(length(kx),length(ky))
+    FT[:] .= FTmean
+    FT .-= FT[1,1]*0.5
+    hm = heatmap!(ax2,kx,ky,FT,colormap = :viridis)
+    Colorbar(fig[2,2],hm)
+    fig
+end
+## _________together_______________________
+BiBj = [exactB[i]*exactB[j] for i in eachindex(exactB), j in eachindex(exactB)] ./length(allPlaqs)
+# exactBB_pairs_decor = [SW.getBij_square(HStair.AllStates,HStair.plaqMapping,v0,Pi,Pj) for Pi in allPlaqs, Pj in allPlaqs] ./ length(allPlaqs)
+
+
+with_theme(theme_PiTicks()) do 
+    fig = Figure(size = (400,600))
+    ax1 = Axis(fig[1,1];aspect = 1,title = "exact B(q)B(-q)")
+
+    ax2 = Axis(fig[2,1];aspect = 1,title = "GFMC Bq op")
+    kx = trueMomenta(0,2pi,size(S,1))
+    ky = trueMomenta(0,2pi,size(S,2))
+
+    FTex = PlaqSumFTPairs(S,exactBB_pairs .- BiBj ,allPlaqs)
+    # FTex = PlaqSumFTPairs(S,exactBB_pairs ,allPlaqs) .-( PlaqSumFT(S,exactB,SW.getCentralPlaquette(S),allPlaqs)./length(allPlaqs)).^2
+
+
+    hm = heatmap!(ax1,kx,ky,FTex,colormap = :viridis)
+    Colorbar(fig[1,2],hm)
+
+    FTmean = dropmean(BQ,dims=3)[end,:] #./ length(allPlaqs)
+    FT = zeros(length(kx),length(ky))
+    FT[:] .= FTmean
+    FT .-= FT[1,1]*0.5
+    hm = heatmap!(ax2,kx,ky,FT,colormap = :viridis)
+    Colorbar(fig[2,2],hm)
+    fig
+end
+
 ##
 #___________Spin-1_______________________
 S = SW.stencilConfig(zeros(8,8),1;boundaryCondition = :periodic)
