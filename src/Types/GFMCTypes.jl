@@ -69,5 +69,31 @@ struct GFMCObservables{DT<:AbstractFloat,T,T2} <: AbstractGFMCObservables
     outfile::T2
 end
 
+struct GFMCObservables_StructureFac_1{DT<:AbstractFloat,DT2<:AbstractFloat,T2} <: AbstractGFMCObservables
+    energies::Vector{DT}
+    SqBuffer::Matrix{DT2}
+    StructureFactors::Array{DT2,4}
+    TotalWeights::Vector{DT}
+    reconfigurationTable::Matrix{Int}
+    outfile::T2
+end
+
+struct CyclicMatrixBuffer{T<:AbstractFloat}
+    buffer::Matrix{T}
+    n::Int
+end
+Base.getindex(buffer::CyclicMatrixBuffer,α,n) = buffer.buffer[α,n]
+
+function fillCyclicBuffer!(ObsBuffer::CyclicMatrixBuffer,nRange)
+    wrap_idx(n) = (n-1) % (pMax) + 1
+    obsBuffer(α,n) = ObsBuffer[α,wrap_idx(n)]
+
+    for n in nRange, α in axes(AllConfigs,3)
+        conf = @view AllConfigs[:,:,α,n]
+        ObsFunc!(obsBuffer(α,n),conf)
+    end
+    return
+end
+
 abstract type AbstractOperator end
 operatorname(X::T) where T <: AbstractOperator = string(T)

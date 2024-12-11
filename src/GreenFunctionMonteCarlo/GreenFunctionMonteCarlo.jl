@@ -443,7 +443,7 @@ end
 
 function runGFMC!(prob::AbstractGFMCProblem,range,nThreads,reconfigure::Bool=true)
     (;Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,Observables,ψG,method) = prob
-    (;energies,SaveConfigs,outfile,TotalWeights, reconfigurationTable) = Observables
+    (;energies,outfile,TotalWeights, reconfigurationTable) = Observables
     
     for i in range
         # for (α,Config) in enumerate(Walkers)
@@ -458,7 +458,7 @@ function runGFMC!(prob::AbstractGFMCProblem,range,nThreads,reconfigure::Bool=tru
             # fill_all_Buffers!(prob,nThreads)
 
         end
-        saveConfigs!(SaveConfigs,i,Walkers)
+        saveObservables!(Observables,i,Walkers)
 
         if i%1000 == 0 # recompute buffers only occasionally to avoid accumulation of floating point errors 
             fill_all_Buffers!(prob,nThreads)
@@ -576,7 +576,8 @@ function getLocalEnergyWalkers_before(weights,Walkers::AbstractVector{<:Abstract
     return num/denom
 end
 
-function saveConfigs!(SaveConfigs,i,Walkers::AbstractVector{<:AbstractWalker})
+function saveObservables!(Observables::GFMCObservables,i,Walkers::AbstractVector{<:AbstractWalker})
+    SaveConfigs = Observables.SaveConfigs
     for (α,Config) in enumerate(Walkers)
         SaveConfigs[:,:,α,i] .= get_config(Config)
     end
@@ -612,5 +613,12 @@ function random_init_walkers!(Walkers::AbstractVector{<:SpiderWebWalker},equilib
             P_applicable(Walker.Config, movepos)[movesgn] || continue
             applyPlaquette!(Walker.Config, movepos[1], movepos[2], (1,-1)[movesgn])
         end
+    end
+end
+
+function saveObservables!(Observables::GFMCObservables_StructureFac_1,i,Walkers)
+    (;SqBuffer,StructureFactors,TotalWeights) = Observables
+    for (α,Config) in enumerate(Walkers)
+        SqBuffer[:,α] .= getStructureFactor(Config)
     end
 end
