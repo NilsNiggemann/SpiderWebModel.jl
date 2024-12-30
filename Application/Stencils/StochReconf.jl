@@ -1,5 +1,6 @@
 import Pkg
-Pkg.activate("Application/")
+cd(@__DIR__)
+Pkg.activate("../")
 import SpiderWebModel as SW
 using CairoMakie
 using Statistics
@@ -7,7 +8,7 @@ using MakieHelpers
 # using MKL
 include("plottingUtils.jl")
 ##
-S = SW.stencilConfig(zeros(28,28),1;
+S = SW.stencilConfig(zeros(16,16),1;
 boundaryCondition = :periodic
 )
 S .= SW.periodicStateDenseLoops(size(S,1))
@@ -53,7 +54,7 @@ CTSR = SW.ContinuousTimeMethod(15,Hxx = CT.Hxx)
 
 ##
 cappedGrowth(x,start,stop,offset,growth) = start + 0.5(stop-start)* (1 +tanh(growth *(x -offset)))
-SRSteps = 1500
+SRSteps = 500
 
 numSteps(i) = round(Int,cappedGrowth(i,20,40,SRSteps - SRSteps÷2,10/SRSteps))
 learningRate(i) = cappedGrowth(i,8e-1,4e-1,SRSteps - SRSteps÷2,5/SRSteps)

@@ -26,10 +26,13 @@ Supported boundary conditions are
     :periodic # Periodic boundary conditions: the StencilArray is wrapped around the edges.
 Boundary properties of the StencilArray may also be passed directly as kwargs, which will override defaults.
 """
-function stencilConfig(A::AbstractMatrix{<:AbstractFloat}, S,paddingValue = Int8(typemax(Int8)); boundaryCondition = :open, kwargs...)
+function stencilConfig(A::AbstractMatrix{<:AbstractFloat}, S; kwargs...)
     @assert all(in(-S:S), A) "Spin configuration must be initialized within -S:S"
+    return stencilConfig(Int8.(2 .*A), S;kwargs...)
+end
+function parseBoundaryCondition(boundaryCondition)
+    paddingValue = Int8(typemax(Int8))
     if boundaryCondition == :open
-        paddingValue = Int8(typemax(Int8))
         boundary = Stencils.Remove(paddingValue)
         padding = Stencils.Conditional()
     elseif boundaryCondition == :open_soft
@@ -41,10 +44,10 @@ function stencilConfig(A::AbstractMatrix{<:AbstractFloat}, S,paddingValue = Int8
     else
         error("boundaryCondition $boundaryCondition not implemented!")
     end
-    return stencilConfig(Int8.(2 .*A), S,paddingValue; boundary, padding,kwargs...)
+    return paddingValue,boundary,padding
 end
 
-function stencilConfig(A::AbstractMatrix{Int8}, S,paddingValue = Int8(typemax(Int8));boundary = Stencils.Remove(paddingValue),kwargs...)
+function construct_stencilConfig(A::AbstractMatrix{Int8}, S,boundary = Stencils.Remove(paddingValue),paddingValue = Int8(typemax(Int8));kwargs...)
     St = Stencils.StencilArray(
         A,
         Stencils.Moore();
@@ -54,7 +57,11 @@ function stencilConfig(A::AbstractMatrix{Int8}, S,paddingValue = Int8(typemax(In
     M = Val(Int(2S)) # do not chose Int8 to avoid overflows
     return StencilSpinConfig(St, M)
 end
-
+function stencilConfig(A::AbstractMatrix{Int8},S;boundaryCondition=:open,kwargs...)
+    @assert all(in(-2S:2S), A) "Spin configuration must be initialized within -S:S"
+    paddingValue,boundary,padding = parseBoundaryCondition(boundaryCondition)
+    return construct_stencilConfig(A,S,boundary,paddingValue;padding,kwargs...)
+end
 stencilConfig(A::SpinConfig; kwargs...) = stencilConfig(parent(A), A.S; kwargs...)
 
 function SpinConfig(S::StencilSpinConfig)

@@ -447,3 +447,9 @@ function fetchKPath(points,res = 100)
     return PointIndices,Path
 end
 
+KPoints = Dict([
+    "Γ" => SVector(0,0),
+    "X" => SVector(pi,0),
+    "M" => SVector(pi,pi),
+    "X'" => SVector(0,pi)
+    ])
