@@ -10,13 +10,13 @@ SW.initGurobi()
 
 # SW.Random.seed!(1233)
 SW.Random.seed!(100)
-L = 20
-@time sols = SW.constructGroundstatesSpin1(L, 50000, 0.35,boundaryCondition = :periodic,STotZero=true,progress = true,TimeLimit = 100)
+L = 24
+@time sols = SW.constructGroundstatesSpin1(L, 80, 0.2,boundaryCondition = :periodic,STotZero=true,progress = true,TimeLimit = 100)
 ##
 confs = [SW.stencilConfig(float(x),1,boundaryCondition = :periodic) for x in sols.solutions]
 ##
 sort!(confs,by = SW.NPlaquettes,rev=true)
-S = confs[1]
+S = confs[end]
 SW.plotApplPlaquettes(S)
 ##
 SW.Random.seed!(1234)
@@ -51,7 +51,7 @@ results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,20*20,5000,ψG;equi
 plotEnergies(results,CT,normalize = false)
 
 ##
-SqsGFMC = SW.getSqsGFMC(results,1:50:100)
+SqsGFMC = SW.getSqsGFMC(results,1:20:100)
 ##
 
 
@@ -136,7 +136,7 @@ with_theme(theme_SimpleTicks()) do
     #     scatterlines!(ax2,qnorms_sq,SqFT,color = color,linestyle = :dash,marker = '●',markersize = 4)
     # end
     rowsize!(fig.layout,1,Relative(0.5))
-
+    ylims!(axPath,0,6)
     # text!(axFT,Point(pi,1.4pi),text=L"r = %$(strd(fittingCoefs[2]))",color = :white,align = (:center,:center))
     # Label(fig[1,1, TopLeft()],L"a)$$",padding = (-30,0,-10,0))
     # Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-10,0))
@@ -147,41 +147,27 @@ with_theme(theme_SimpleTicks()) do
 end
 
 ##
-using CairoMakie
-thetas = pi.*rand(100000)
-phis = 2pi.*rand(100000)
 
-sphere(theta,phi) = SA[sin(theta)*cos(phi),sin(theta)*sin(phi),cos(theta)]
+function generateAllS1Plaqs()
+    Spin = 1
+    S = SW.stencilConfig(zeros(3,3),Spin;
+    boundaryCondition = :open,
+    )
+    # SW.rand!(S)
+    UCSIt = 
+        Iterators.product((-Spin:Spin for i in 1:3,j in 1:3)...)
+    
+    function isGS(UC)
+        S[:] .= 2 .*UC
+        SW.fulFillsConstraint(S)
+    end
+    
+    UCS = Matrix{Int8}[]
 
-points = sphere.(thetas,phis)
-
-hist(getindex.(points,2),bins = 500)
-
-##
-function uniformOnSphere(rng = SW.Random.GLOBAL_RNG)
-    phi = 2.0 * pi * rand(rng)
-    z = 2.0 * rand(rng) - 1.0
-    r = sqrt(1.0 - z * z)
-    return SA[r * cos(phi), r * sin(phi), z]
+    for UC in UCSIt
+        isGS(UC) || continue
+        push!(UCS,copy(parent(parent(S))))
+    end
+    return UCS
 end
-
-##
-function uniformOnSphere()
-    phi = 2.0 * pi * rand()
-    z = 2.0 * rand() - 1.0
-    r = sqrt(1.0 - z * z)
-    return SA[r * cos(phi), r * sin(phi), z]
-end
-##
-
-@time pointsU = [uniformOnSphere() for _ in 1:200^2*2]
-##
-with_theme(theme_SimpleTicks()) do 
-    fig = Figure()
-    ax = Axis(fig[1,1],aspect = 1)
-    hist!(ax,getindex.(pointsU,1),bins = 100,label = "x", color = (:red,0.4))
-    hist!(ax,getindex.(pointsU,2),bins = 100,label = "y", color = (:green,0.4))
-    hist!(ax,getindex.(pointsU,3),bins = 100,label = "z", color = (:blue,0.4))
-    axislegend(ax)
-    fig
-end
+generateAllS1Plaqs()
