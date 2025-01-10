@@ -615,10 +615,3 @@ function random_init_walkers!(Walkers::AbstractVector{<:SpiderWebWalker},equilib
         end
     end
 end
-
-function saveObservables!(Observables::GFMCObservables_StructureFac_1,i,Walkers)
-    (;SqBuffer,StructureFactors,TotalWeights) = Observables
-    for (α,Config) in enumerate(Walkers)
-        SqBuffer[:,α] .= getStructureFactor(Config)
-    end
-end

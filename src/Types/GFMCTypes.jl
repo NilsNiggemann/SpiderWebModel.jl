@@ -78,19 +78,20 @@ struct GFMCObservables_StructureFac_1{DT<:AbstractFloat,DT2<:AbstractFloat,T2} <
     outfile::T2
 end
 
-struct CyclicMatrixBuffer{T<:AbstractFloat}
+struct CyclicMatrixBuffer{T<:AbstractFloat} <: AbstractMatrix{T}
     buffer::Matrix{T}
-    n::Int
 end
-Base.getindex(buffer::CyclicMatrixBuffer,α,n) = buffer.buffer[α,n]
+getBufferSize(buffer::CyclicMatrixBuffer) = size(buffer.buffer,2)
 
-function fillCyclicBuffer!(ObsBuffer::CyclicMatrixBuffer,nRange)
-    wrap_idx(n) = (n-1) % (pMax) + 1
-    obsBuffer(α,n) = ObsBuffer[α,wrap_idx(n)]
+Base.getindex(buffer::CyclicMatrixBuffer,α,n) = buffer.buffer[α,wrap_idx(n,getBufferSize(buffer))]
+Base.setindex!(buffer::CyclicMatrixBuffer,val,α,n) = setindex(buffer.buffer,val,α,wrap_idx(n,getBufferSize(buffer)))
 
-    for n in nRange, α in axes(AllConfigs,3)
+wrap_idx(n,pMax) = (n-1) % (pMax) + 1
+
+function fillCyclicBuffer!(ObsBuffer::CyclicMatrixBuffer,n,ObsFunc!)
+    for α in axes(AllConfigs,3)
         conf = @view AllConfigs[:,:,α,n]
-        ObsFunc!(obsBuffer(α,n),conf)
+        ObsFunc!(ObsBuffer[α,n],conf)
     end
     return
 end
