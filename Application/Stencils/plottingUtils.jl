@@ -379,14 +379,32 @@ function SqFieldTheory_full(qx::Real, qy::Real, K::Real, W::Real, U::Real)
     
     return sqrt(K / (4 * W)) * numerator / denominator
 end
-
 SqFieldTheory(qx, qy, A,r) = SqFieldTheory_full(qx, qy, 4*A^2,1, r)
-
-
 SqFieldTheory(q::AbstractVector,A::Real,r::Real) = SqFieldTheory(q[1],q[2],A,r)
-
 SqFieldTheory(q::AbstractVector,coefs::AbstractVector) = SqFieldTheory(q[1],q[2],coefs[1],coefs[2])
 SqFieldTheory(q::Tuple,coefs::AbstractVector) = SqFieldTheory(q[1],q[2],coefs[1],coefs[2])
+
+function AsymFieldTheory_full(qx::Real, qy::Real, K::Real, W::Real, U::Real, p::Real)
+    qx,qy = SA[
+        cos(pi/2) sin(pi/2); 
+        -sin(pi/2) cos(pi/2)
+    ] * SVector(qx,qy)
+    cx = cos(qx)
+    cy = cos(qy)
+    sx = sin(qx)
+    sy = sin(qy)
+    cxy = cos(qx+qy)
+
+    numerator = sqrt(K)*(cx - cy + 2 * sx * sy)^2
+    denominator1 = sqrt(U/4*(1+2p*(1+cxy)) + W*( (cx-cy)^2+4*sx^2*sy^2))
+    denominator2 = sqrt((cx-cy)^2+4*sx^2*sy^2)
+    return numerator / (denominator1 *denominator2 + 1e-30)
+end
+AsymFieldTheory(qx, qy, A,r,p) = AsymFieldTheory_full(qx, qy, 4*A^2,1, r,p)
+AsymFieldTheory(q::AbstractVector,A::Real,r::Real,p) = AsymFieldTheory(q[1],q[2],A,r,p)
+AsymFieldTheory(q::AbstractVector,coefs::AbstractVector) = AsymFieldTheory(q[1],q[2],coefs[1],coefs[2],coefs[3])
+AsymFieldTheory(q::Tuple,coefs::AbstractVector) = AsymFieldTheory(q[1],q[2],coefs[1],coefs[2],coefs[3])
+
 
 function optimizeCoeffs(SqMat,weightfunc=x->one(first(x)))
     q = trueMomenta(0., 2pi, size(SqMat, 1) - 1)[1:end-1]
@@ -410,6 +428,30 @@ function optimizeCoeffs(SqMat,weightfunc=x->one(first(x)))
     coefs = abs.(Optim.minimizer(res))
     return coefs
 end
+function optimizeCoeffsAsym(SqMat,weightfunc=x->one(first(x)))
+    q = trueMomenta(0., 2pi, size(SqMat, 1) - 1)[1:end-1]
+
+    function loss(v, w,r)
+        l = 0.0
+        v = abs(v)
+        w = abs(w)
+        r = abs(r)
+        for (i, qx) in enumerate(q), (j, qy) in enumerate(q)
+            l += abs2(SqMat[i, j] - AsymFieldTheory(qx, qy, v, w,r))*weightfunc(SA[qx,qy])
+        end
+        return l
+    end
+
+    loss(v) = loss(v[1], v[2],v[3])
+
+    x0 = [1., 1.,1.]
+
+    res = optimize(loss, x0)
+    @info res
+    coefs = abs.(Optim.minimizer(res))
+    return coefs
+end
+
 function rasterCurve(curvePoints,grid,t)
 
     getPos(point) = findmin(x->SW.norm(SW.SVector(x.-point)),grid)[2]
