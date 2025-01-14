@@ -278,7 +278,11 @@ with_theme(theme_SimpleTicks()) do
     fig
 end
 ##
+rm("/tmp/test.h5",force=true)
+resObs = SW.measure_Sq_GFMC(S,DT,10,1000,10,ψG)
 
+
+##
 #___________Spin-1_______________________
 
 ψG = SW.PlaquetteNumberGuidingFunction(0.13)

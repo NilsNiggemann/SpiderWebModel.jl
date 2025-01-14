@@ -41,6 +41,7 @@ include("ED/Observables.jl")
 
 include("GreenFunctionMonteCarlo/GreenFunctionMonteCarlo.jl")
 include("GreenFunctionMonteCarlo/Observables.jl")
+include("GreenFunctionMonteCarlo/Observables_run.jl")
 include("GreenFunctionMonteCarlo/StraightForwardWalking.jl")
 include("GreenFunctionMonteCarlo/PlaquetteCorrOperator.jl")
 include("GreenFunctionMonteCarlo/BqOperator.jl")
