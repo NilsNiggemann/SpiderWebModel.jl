@@ -340,6 +340,21 @@ _add_numerator!(Obsn::Number,Gnmult,O0::Number,Otau::Number) = (Obsn += Gnmult*O
 _set_to!(a,b) = (a=b)
 _set_to!(a::AbstractArray,b::AbstractArray) = (a.=b)
 
+function getPopulationMatrix!(PopulationMatrix,reconfigurationTable::AbstractMatrix,n,projectionLength)
+    PopulationMatrix .= 0 
+    for α in axes(reconfigurationTable,1)
+        α´ = α
+        for i_m in 0:projectionLength
+            if n-i_m < 1
+                break
+            end
+            α´ = reconfigurationTable[α´,n-i_m]
+            PopulationMatrix[α´,i_m+1] += 1
+        end
+    end
+    return PopulationMatrix
+end
+
 function getBranchingMatrix!(BranchingMatrix::AbstractMatrix,PopulationMatrix,reconfigurationTable::AbstractMatrix,n,projectionLength)
     # BranchingMatrix[:,begin] .= @view reconfigurationTable[:,begin]
     PopulationMatrix .= 0 

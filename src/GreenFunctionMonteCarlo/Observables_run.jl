@@ -1,4 +1,4 @@
-struct GFMCObservables_StructureFac_2{T_high<:AbstractFloat,T_low<:AbstractFloat,FFTType<:SqFFT,T2} <: AbstractGFMCObservables
+struct GFMCObservables_StructureFac{T_high<:AbstractFloat,T_low<:AbstractFloat,FFTType<:SqFFT,T2} <: AbstractGFMCObservables
     TotalWeights::Vector{T_high}
     energies::Vector{T_high}
     FFTBuffers::Vector{FFTType}
@@ -7,10 +7,11 @@ struct GFMCObservables_StructureFac_2{T_high<:AbstractFloat,T_low<:AbstractFloat
     Sq_denominator::Vector{T_high}
     Gnps::Matrix{T_high}
     reconfigurationTable::Matrix{Int}
+    PopulationMatrix::Matrix{Int}
     outfile::T2
 end
 
-get_pMax(O::GFMCObservables_StructureFac_2) = size(O.SqBuffers,4)
+get_pMax(O::GFMCObservables_StructureFac) = size(O.SqBuffers,4)
 
 function setup_Sq_Observables(InitConfig,NWalkers,NSteps,m_proj,outfile::Nothing)
     energies = zeros(NSteps)
@@ -25,8 +26,8 @@ function setup_Sq_Observables(InitConfig,NWalkers,NSteps,m_proj,outfile::Nothing
     
     TotalWeights = zeros(NSteps)
     reconfigurationTable = zeros(Int,NWalkers,NSteps)
-
-    return GFMCObservables_StructureFac_2(TotalWeights,energies,FFTBuffers,SqBuffers,Sq_numerator,Sq_denominator,Gnps,reconfigurationTable,outfile)
+    PopulationMatrix = zeros(Int,NWalkers,m_proj)
+    return GFMCObservables_StructureFac(TotalWeights,energies,FFTBuffers,SqBuffers,Sq_numerator,Sq_denominator,Gnps,reconfigurationTable,PopulationMatrix,outfile)
 end
 function setup_Sq_Observables(InitConfig,NWalkers,NSteps,m_proj,filename::String)
     Lx,Ly = size(InitConfig)
@@ -39,7 +40,8 @@ function setup_Sq_Observables(InitConfig,NWalkers,NSteps,m_proj,filename::String
         Sq_numerator = createMMapArray(file,"Sq_numerator",Float64,(Lx,Ly,m_proj))
         Sq_denominator = createMMapArray(file,"Sq_denominator",Float64,(m_proj,))
         Gnps = createMMapArray(file,"Gnps",Float64,(NSteps,2m_proj))
-        return GFMCObservables_StructureFac_2(TotalWeights,energies,FFTBuffers,SqBuffers,Sq_numerator,Sq_denominator,Gnps,reconfigurationTable,filename)
+        PopulationMatrix = zeros(Int,NWalkers,m_proj)
+        return GFMCObservables_StructureFac(TotalWeights,energies,FFTBuffers,SqBuffers,Sq_numerator,Sq_denominator,Gnps,reconfigurationTable,PopulationMatrix,filename)
     end
 end
 
@@ -73,20 +75,19 @@ end
 
 function updateGnp!(Gnp,TotalWeights,n)
     pMax = size(Gnp,2)
-    if n <= pMax
-        Gnp[n,:] .= 0
-        return
-    end
-
     for p in 1:pMax
+        if n-p < 1
+            Gnp[n,p] = 0
+            continue
+        end
         Gnp[n,p] = prod(@view TotalWeights[n-p:n])
     end
     return
 end
 
-function saveObservables!(Observables::GFMCObservables_StructureFac_2,n,Walkers::AbstractVector{<:SpiderWebWalker})
+function saveObservables!(Observables::GFMCObservables_StructureFac,n,Walkers::AbstractVector{<:SpiderWebWalker})
 
-    (;reconfigurationTable,SqBuffers,Sq_numerator,Sq_denominator) = Observables
+    (;reconfigurationTable,SqBuffers,Sq_numerator,Sq_denominator,PopulationMatrix) = Observables
 
     compute_Sq_Walkers!(Observables.SqBuffers,Walkers,n,Observables.FFTBuffers)
     updateGnp!(Observables.Gnps,Observables.TotalWeights,n)
@@ -94,21 +95,22 @@ function saveObservables!(Observables::GFMCObservables_StructureFac_2,n,Walkers:
     Nw = length(Walkers)
     
     pMax = get_pMax(Observables)
-    n <= pMax && return
+    # n <= pMax && return
     
+    getPopulationMatrix!(PopulationMatrix,reconfigurationTable,n,pMax-1)
     
-    (;BranchingMatrix,PopulationMatrix) = getBranchingMatrix(reconfigurationTable,n,pMax)
-    
+    Nw⁻¹ = 1/Nw
+
     m_values = 0:pMax-1
     Threads.@threads for m_index in eachindex(m_values)
         m = m_values[m_index]
         Gnp = Observables.Gnps[n,1+2m]
-        Sq_denominator[m_index] += Gnp*Nw
-        WalkerMultiplicities = @view PopulationMatrix[:,m_index]
+        Sq_denominator[m_index] += Gnp
+        # Sq_denominator[m_index] += Gnp*Nw
         @views for α in 1:Nw
-            mult = WalkerMultiplicities[α]
+            mult = PopulationMatrix[α,m_index]
             mult == 0 && continue
-
+            mult *= Nw⁻¹
             O = SqBuffers[:,:,α,wrap_idx(n-m,pMax)]
             @. Sq_numerator[:,:,m_index] += O*Gnp*mult
         end
@@ -135,7 +137,7 @@ function measure_Sq_GFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMet
     return prob.Observables    
 end
 
-function normalize_numerator!(Observables::GFMCObservables_StructureFac_2)
+function normalize_numerator!(Observables::GFMCObservables_StructureFac)
     numerator = Observables.Sq_numerator
     denominator = Observables.Sq_denominator
 

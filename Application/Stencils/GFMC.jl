@@ -475,7 +475,8 @@ plotEnergies(resultsCT,CT,nThermal=1,τ=2,normalize=true)
 ##
 SqsGFMC = SW.getSqsGFMC(resultsCT,1:100)
 ##
-@time SqsGFMC_direct = stack(fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,300,4000,300,ψG,equilibration_steps=1000).Sq_numerator for i in 1:24]))
+SW.Random.seed!(1234)
+@time SqsGFMC_direct = stack(fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,300,4000,300,ψG,equilibration_steps=1000).Sq_numerator for i in 1:6]))
 ##
 with_theme(theme_SimpleTicks()) do
     L = 20
