@@ -98,13 +98,13 @@ function saveObservables!(Observables::GFMCObservables_StructureFac_2,n,Walkers:
     n <= pMax && return
 
     
-    for m in 1:pMax
-        Gnp = Observables.Gnps[n,2m]
-        Sq_denominator[m] += Gnp*Nw
+    for (m_index,m) in enumerate(0:pMax-1)
+        Gnp = Observables.Gnps[n,1+2m]
+        Sq_denominator[m_index] += Gnp*Nw
         WalkerMultiplicities .= 0
         for α in 1:Nw
             α´ = α
-            for i_m in 1:m
+            for i_m in 0:m-1
                 α´ = reconfigurationTable[α´,n-i_m]
             end
             WalkerMultiplicities[α´] += 1
@@ -115,7 +115,7 @@ function saveObservables!(Observables::GFMCObservables_StructureFac_2,n,Walkers:
             mult == 0 && continue
 
             O = @view SqBuffers[:,:,α,wrap_idx(n-m,pMax)]
-            @. Sq_numerator[:,:,m] += O*Gnp*mult
+            @. Sq_numerator[:,:,m_index] += O*Gnp*mult
         end
     end
 
@@ -134,7 +134,7 @@ function normalize_numerator!(Observables::GFMCObservables_StructureFac_2)
 
     for i in eachindex(Observables.Sq_denominator)
         @. numerator[:,:,i] ./= denominator[i]
-        denominator[i] = 1
+        # denominator[i] = 1
     end
     return
 end

@@ -448,23 +448,61 @@ equilib_plots(resultsDT;scatter_fraction,averageSteps=10,Ntrack=30,p = 300)
 ##
 
 SW.Random.seed!(1234)
-S = SW.stencilConfig(zeros(16,16),,
+S = SW.stencilConfig(zeros(16,16),1,
 boundaryCondition = :periodic
 )
-# S .= SW.
+S .= SW.get4x4PeriodicState(16,2)
 CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2))
 ψG = SW.SimpleJastrowFunction(S)
 ψGSymm = SW.symmetrize(ψG,SW.TranslationalSymmetry([2,2],[2,-2]),S)
+SW.rand!(ψGSymm,1e-4)
 ##
-scatter_fraction = 0.9
-@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,6,10000,ψG;equilibration_steps=0,pre_equilibration_steps=50_000,scatter_fraction) for i in 1:24])
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,30 ,ψG,1000,2e-4,SW.IterativeSRSolver();Nwalkers = 1*20,reconfigure=false,rel_tolerance=0,equilibration_steps=1000,pre_equilibration_steps=40_000,
+report_steps = 5,
+reset = false,
+)
+# CTSR = SW.ContinuousTimeMethod(100*CT.τ,Hxx = CT.Hxx)
+# stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,20,ψGSymm,300,5e-3 ,SW.IterativeSRSolver();Nwalkers = 20,reconfigure = false,rel_tolerance=1e-8,equilibration_steps=100,pre_equilibration_steps=50_000,report_steps=10,reset=false)
+plotVarEn(stochReconfRes)
+##
+# CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2),w_avg_estimate = 1.1*(-stochReconfRes.E0[end] - stochReconfRes.ΔE[end]))
+CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2),w_avg_estimate = 51.63946676888214)
+SW.get_params(ψG) .= stochReconfRes.params
+@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,200,3000,ψG;equilibration_steps=1000) for i in 1:24])
 ##
 # results = resultsCT
 plotEnergies(resultsCT,CT,nThermal=1,τ=2,normalize=true)
 ##
-SqsGFMC = SW.getSqsGFMC(resultsCT,100,nBra=1)
-makeSqFTPlots(SqsGFMC)
+SqsGFMC = SW.getSqsGFMC(resultsCT,1:100)
 ##
-projection_orders = [800,300,100]
-SqsGFMC_p = [ fetch.([Threads.@spawn getSq(res,p÷nBra) for res in resultsCT]) for p in projection_orders]
-plotCut(SqsGFMC_p)
+SqsGFMC_direct = stack(fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,200,3000,100,ψG,equilibration_steps=1000).Sq_numerator for i in 1:24]))
+##
+with_theme(theme_SimpleTicks()) do
+    L = 20
+    # muIndex = findfirst(>=(0.5),res[L].mus)
+    # SqsGFMC = res[L].Sqs[:,:,:,:,muIndex]./ 4
+    SqMat = dropmean(SqsGFMC,dims=4)
+    SqErr = dropstd(SqsGFMC,dims=4)
+
+    SqMat2 = dropmean(SqsGFMC_direct,dims=4)
+    SqErr2 = dropstd(SqsGFMC_direct,dims=4)
+    # return SqMat2
+    fig = Figure(size = 120 .* (4,4))
+    ax = Axis(fig[1,1],xlabel = L"τ",ylabel = L"\mathcal{S}(\mathbf{q})")
+    p_Sq = 1:100
+    dTau = CT.τ
+    tau = p_Sq .*dTau
+    # return heatmap(SqMat[:,:,20])
+    Sq_examp = SqMat2[:,:,end-1]
+    inds = sort(collect(CartesianIndices(Sq_examp))[:],by = x->Sq_examp[x],rev=true)
+    # for I in ((5,5),(7,7),(10,3),(5,9))
+    for I in inds[[1,20,40]]
+        i,j = Tuple(I)
+        range = 1:100
+        # scatterlines!(ax,tau[range],SqMat[i,j,range],marker = '×')
+        # errorbars!(ax,tau[range],SqMat[i,j,range],SqErr[i,j,range],whiskerwidth = 6,linewidth=0.5)
+        errlines!(ax,tau[range],SqMat[i,j,range],SqErr[i,j,range],linewidth=0.5)
+        errlines!(ax,tau[range],SqMat2[i,j,range],SqErr2[i,j,range],linewidth=1.5,linestyle = :dash)
+    end
+    fig
+end
