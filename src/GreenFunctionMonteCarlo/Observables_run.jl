@@ -63,8 +63,6 @@ function compute_Sq_Walkers!(SqBuffers::Array{T,4},Walkers,n,FFTBuffers::Abstrac
         conf = get_config(Walkers[α])
         Sq_view = @view SqBuffers[:,:,α,wrap_idx(n,pMax)]
 
-        # Sq_view .= conf #a little dirty: we use the buffer to store the configuration since the FFT needs an array of
-
         ObsFunc! = FFTBuffers[α]
         Sq = obs(ObsFunc!)
         ObsFunc!(Sq,conf)
@@ -74,7 +72,7 @@ function compute_Sq_Walkers!(SqBuffers::Array{T,4},Walkers,n,FFTBuffers::Abstrac
 end
 
 function updateGnp!(Gnp,TotalWeights,n)
-    pMax = size(Gnp,2) ÷ 2
+    pMax = size(Gnp,2)
     if n <= pMax
         Gnp[n,:] .= 0
         return
@@ -83,7 +81,6 @@ function updateGnp!(Gnp,TotalWeights,n)
     for p in 1:pMax
         Gnp[n,p] = prod(@view TotalWeights[n-p:n])
     end
-    # println(sum(Gnp))
     return
 end
 
@@ -103,7 +100,7 @@ function saveObservables!(Observables::GFMCObservables_StructureFac_2,n,Walkers:
     
     for m in 1:pMax
         Gnp = Observables.Gnps[n,2m]
-        Sq_denominator[m] += Gnp
+        Sq_denominator[m] += Gnp*Nw
         WalkerMultiplicities .= 0
         for α in 1:Nw
             α´ = α
@@ -112,7 +109,6 @@ function saveObservables!(Observables::GFMCObservables_StructureFac_2,n,Walkers:
             end
             WalkerMultiplicities[α´] += 1
         end
-
 
         for α in 1:Nw
             mult = WalkerMultiplicities[α]

@@ -228,7 +228,7 @@ copytont!(B, A) = LoopVectorization.vmapnt!(identity, B, A)
 
     @views newRes[end,begin:end] .= newRes[begin,:]
     @views newRes[begin:end,end] .= newRes[:,begin]
-    return real(newRes ./NSites)
+    return real(newRes)
     # obs = fetch.([Threads.@spawn getObs(p) for p in 1:pmax])
 end
 
@@ -251,7 +251,7 @@ end
     newRes_m = [similar(real(res),size(res).+1) for res in res_m]
 
     for (res,newRes) in zip(res_m,newRes_m)
-        newRes[begin:end-1,begin:end-1] .= res ./NSites
+        newRes[begin:end-1,begin:end-1] .= res 
 
         @views newRes[end,begin:end] .= newRes[begin,:]
         @views newRes[begin:end,end] .= newRes[:,begin]

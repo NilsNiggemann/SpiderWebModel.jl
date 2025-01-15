@@ -36,8 +36,10 @@ copy(FFTSq::SqFFT) = SqFFT(copy(FFTSq.Si),copy(FFTSq.Sq),FFTSq.plan)
 
 function (FFTSq::SqFFT)(out,Conf::Matrix{ComplexF32})
     mul!(out, FFTSq.plan, Conf)
+    Nsites = length(Conf)
+    Nsites⁻¹ = 1/Nsites
     @inbounds for i in eachindex(out)
-        out[i] = abs2(out[i])
+        out[i] = abs2(out[i])*Nsites⁻¹
     end
     out
 end

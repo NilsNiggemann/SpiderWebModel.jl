@@ -279,8 +279,16 @@ with_theme(theme_SimpleTicks()) do
 end
 ##
 rm("/tmp/test.h5",force=true)
-resObs = SW.measure_Sq_GFMC(S,DT,10,1000,10,ψG)
-
+resObs = SW.measure_Sq_GFMC(S,DT,100,2000,10,ψG)
+with_theme(theme_PiTicks()) do 
+    Sq = resObs.Sq_numerator[:,:,4] ./4 #./10000
+    kx = ky = 2pi .* LinRange(0,1,size(Sq,1))
+    fig,ax,hm = heatmap(kx,ky,Sq,colormap = :viridis,axis=(;aspect=1,title = L"GFMC$$"),figure = (;size = (360,500)))
+    ax2 = Axis(fig[2,1],aspect=1,title = L"exact $$")
+    heatmap!(ax2,kx,ky,real(SqEx.Sq),colormap = :viridis,colorrange = extrema(Sq))
+    Colorbar(fig[1:2,2],hm,label = L"\langle \mathcal{S}^{zz}(\textbf{q})\rangle")
+    fig
+end
 
 ##
 #___________Spin-1_______________________
@@ -438,15 +446,15 @@ plotEnergies(resultsDT,DT.nBranch,p=500,nThermal=100,label = L"Continuous time$$
 ##
 equilib_plots(resultsDT;scatter_fraction,averageSteps=10,Ntrack=30,p = 300)
 ##
-# U field repulsion
 
 SW.Random.seed!(1234)
-S = SW.stencilConfig(parent(SW.getStairCase(4*10)),1/2,
-boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+S = SW.stencilConfig(zeros(16,16),,
+boundaryCondition = :periodic
 )
-
-CT = SW.ContinuousTimeMethod(0.3,Hxx = SW.Hxx_RK(1))
-ψG = SW.RKFunction()
+# S .= SW.
+CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2))
+ψG = SW.SimpleJastrowFunction(S)
+ψGSymm = SW.symmetrize(ψG,SW.TranslationalSymmetry([2,2],[2,-2]),S)
 ##
 scatter_fraction = 0.9
 @time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,6,10000,ψG;equilibration_steps=0,pre_equilibration_steps=50_000,scatter_fraction) for i in 1:24])
