@@ -92,35 +92,42 @@ function saveObservables!(Observables::GFMCObservables_StructureFac_2,n,Walkers:
     updateGnp!(Observables.Gnps,Observables.TotalWeights,n)
     
     Nw = length(Walkers)
-    WalkerMultiplicities = zeros(Int,Nw)
-
+    
     pMax = get_pMax(Observables)
     n <= pMax && return
-
     
-    for (m_index,m) in enumerate(0:pMax-1)
+    
+    (;BranchingMatrix,PopulationMatrix) = getBranchingMatrix(reconfigurationTable,n,pMax)
+    
+    m_values = 0:pMax-1
+    Threads.@threads for m_index in eachindex(m_values)
+        m = m_values[m_index]
         Gnp = Observables.Gnps[n,1+2m]
         Sq_denominator[m_index] += Gnp*Nw
-        WalkerMultiplicities .= 0
-        for α in 1:Nw
-            α´ = α
-            for i_m in 0:m-1
-                α´ = reconfigurationTable[α´,n-i_m]
-            end
-            WalkerMultiplicities[α´] += 1
-        end
-
-        for α in 1:Nw
+        WalkerMultiplicities = @view PopulationMatrix[:,m_index]
+        @views for α in 1:Nw
             mult = WalkerMultiplicities[α]
             mult == 0 && continue
 
-            O = @view SqBuffers[:,:,α,wrap_idx(n-m,pMax)]
+            O = SqBuffers[:,:,α,wrap_idx(n-m,pMax)]
             @. Sq_numerator[:,:,m_index] += O*Gnp*mult
         end
     end
 
 end
 
+function get_alpha_prime_table(reconfigurationTable::Matrix{Int},n::Integer,pMax::Integer)
+    Nw = size(reconfigurationTable,1)
+    alpha_prime_table = zeros(Int,Nw)
+    for α in 1:Nw
+        α´ = α
+        for i in 1:pMax
+            α´ = reconfigurationTable[α´,n-i]
+        end
+        alpha_prime_table[α] = α´
+    end
+    return alpha_prime_table
+end
 function measure_Sq_GFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,mProj,ψG; equilibration_steps = 0, pre_equilibration_steps = equilibration_steps ÷ 5, scatter_fraction = 0.8,initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),nThreads=2*Threads.nthreads(),outfile = nothing,kwargs...)
     prob = setup_Sq_problem(InitialState,method,Nwalkers,nSteps,mProj,nThreads,ψG,outfile)
     startManyWalkerGFMC!(prob,nThreads,equilibration_steps,initializer)

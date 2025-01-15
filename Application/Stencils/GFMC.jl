@@ -468,14 +468,14 @@ plotVarEn(stochReconfRes)
 # CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2),w_avg_estimate = 1.1*(-stochReconfRes.E0[end] - stochReconfRes.ΔE[end]))
 CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2),w_avg_estimate = 51.63946676888214)
 SW.get_params(ψG) .= stochReconfRes.params
-@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,200,3000,ψG;equilibration_steps=1000) for i in 1:24])
+@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,300,4000,ψG;equilibration_steps=1000) for i in 1:24])
 ##
 # results = resultsCT
 plotEnergies(resultsCT,CT,nThermal=1,τ=2,normalize=true)
 ##
 SqsGFMC = SW.getSqsGFMC(resultsCT,1:100)
 ##
-SqsGFMC_direct = stack(fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,200,3000,100,ψG,equilibration_steps=1000).Sq_numerator for i in 1:24]))
+@time SqsGFMC_direct = stack(fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,300,4000,300,ψG,equilibration_steps=1000).Sq_numerator for i in 1:24]))
 ##
 with_theme(theme_SimpleTicks()) do
     L = 20
