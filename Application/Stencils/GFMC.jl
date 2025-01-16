@@ -458,7 +458,7 @@ CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2))
 SW.rand!(ψGSymm,1e-4)
 ##
 CTSR = SW.ContinuousTimeMethod(100*CT.τ,Hxx = CT.Hxx)
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,20 ,ψG,800,1e-3,SW.IterativeSRSolver();Nwalkers = 1*20,reconfigure=false,rel_tolerance=0,equilibration_steps=1000,pre_equilibration_steps=40_000,
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,20 ,ψG,200,1e-3,SW.IterativeSRSolver();Nwalkers = 1*20,reconfigure=false,rel_tolerance=0,equilibration_steps=1000,pre_equilibration_steps=40_000,
 report_steps = 5,
 reset = false,
 )
@@ -469,17 +469,23 @@ plotVarEn(stochReconfRes)
 CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2),w_avg_estimate = -1.3*stochReconfRes.E0[end])
 SW.get_params(ψG) .= stochReconfRes.params
 @time begin
-    resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,50,2000,ψG;equilibration_steps=1000) for i in 1:24])
+    resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,50,1000,ψG;equilibration_steps=1000) for i in 1:80])
     SqsGFMC = SW.getSqsGFMC(resultsCT,1:100)
 end
 ##
-# results = resultsCT
-plotEnergies(resultsCT,CT,nThermal=1,τ=10,normalize=true)
+ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,50,1000,100,ψG,equilibration_steps=1000) for i in 1:80])
+
 ##
+en_direct = stack([SW.normalized_En(ObsRuns) for ObsRuns in ObsRuns])
+##
+plotEnergies(resultsCT,CT,nThermal=1,τ=10,normalize=false)
+errlines!((0:size(en_direct,1)-1).*CT.τ,dropmean(en_direct,dims=2),dropstd(en_direct,dims=2))
+current_figure()
 ##
 SW.Random.seed!(1234)
-@time SqsGFMC_direct = stack(fetch.([Threads.@spawn SW.normalized_Sq!(SW.measure_Sq_GFMC(S,CT,50,2000,100,ψG,equilibration_steps=1000)) for i in 1:24]))
+SqsGFMC_direct = stack([SW.normalized_Sq(Obs) for Obs in ObsRuns])
 ##
+
 with_theme(theme_SimpleTicks()) do
     L = 20
     # muIndex = findfirst(>=(0.5),res[L].mus)
