@@ -219,17 +219,23 @@ function getEnergies(weights,localEnergies,nthermalization,PMax;
     )
     
     EL_thermalized = @view localEnergies[nthermalization:end]
-    N = lastindex(EL_thermalized)
-    num = zeros(PMax)
-    denom = zeros(PMax)
-    for p in 1:PMax
+    Gnpnew = @view Gnp[nthermalization:end,:]
+    Energy = zeros(PMax)
+    return getEnergy!(Energy,Gnpnew,EL_thermalized)
+end
+
+function getEnergy!(Energy,Gnp,localEnergies)
+    N = lastindex(localEnergies)
+    for p in eachindex(Energy)
+        denom = 0.
         for n in p+1:N
             # G_np = p != 0 ? Gnp[n,p] : 1
-            num[p] += Gnp[n,p]*EL_thermalized[n]
-            denom[p] += Gnp[n,p]
+            Energy[p] += Gnp[n,p]*localEnergies[n]
+            denom += Gnp[n,p]
         end
+        Energy[p] /= denom
     end
-    return num ./denom
+    return Energy
 end
 
 function getEnergies(results,nthermalization,PMax);
