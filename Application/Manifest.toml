@@ -2,7 +2,7 @@
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "6c3cb2bc9cd18dfa33fd028c1a8621a99d70bde0"
+project_hash = "eaac39a04ddc24d5f93ec08a5e1f714704bcdca6"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -167,18 +167,6 @@ deps = ["Static"]
 git-tree-sha1 = "f21cfd4950cb9f0587d5067e69405ad2acd27b87"
 uuid = "62783981-4cbd-42fc-bca8-16325de8dc4b"
 version = "0.1.6"
-
-[[deps.Blosc]]
-deps = ["Blosc_jll"]
-git-tree-sha1 = "310b77648d38c223d947ff3f50f511d08690b8d5"
-uuid = "a74b3585-a348-5f62-a45c-50e91977d574"
-version = "0.7.3"
-
-[[deps.Blosc_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Lz4_jll", "Zlib_jll", "Zstd_jll"]
-git-tree-sha1 = "ef12cdd1c7fb7e1dfd6fa8fd60d4db6bc61d2f23"
-uuid = "0b7ba130-8d10-5ba8-a3d6-c5182647fed9"
-version = "1.21.6+0"
 
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -696,12 +684,6 @@ git-tree-sha1 = "91f655524b6600deeda43054793535db81569b11"
 uuid = "c018c7e6-a5b0-4aea-8f80-9c1ef9991411"
 version = "12.0.0"
 
-[[deps.H5Zblosc]]
-deps = ["Blosc", "HDF5"]
-git-tree-sha1 = "d778420e524bcf56066e8c63c7aa315ae7269da2"
-uuid = "c8ec2601-a99c-407f-b158-e79c03c2f5f7"
-version = "0.1.2"
-
 [[deps.HDF5]]
 deps = ["Compat", "HDF5_jll", "Libdl", "MPIPreferences", "Mmap", "Preferences", "Printf", "Random", "Requires", "UUIDs"]
 git-tree-sha1 = "e856eef26cf5bf2b0f95f8f4fc37553c72c8641c"
@@ -1143,12 +1125,6 @@ weakdeps = ["ChainRulesCore", "ForwardDiff", "SpecialFunctions"]
     [deps.LoopVectorization.extensions]
     ForwardDiffExt = ["ChainRulesCore", "ForwardDiff"]
     SpecialFunctionsExt = "SpecialFunctions"
-
-[[deps.Lz4_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "abf88ff67f4fd89839efcae2f4c39cbc4ecd0846"
-uuid = "5ced341a-0733-55b8-9ab6-a4889d929147"
-version = "1.10.0+1"
 
 [[deps.MKL_jll]]
 deps = ["Artifacts", "IntelOpenMP_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "oneTBB_jll"]
@@ -1697,10 +1673,10 @@ weakdeps = ["ChainRulesCore"]
     SpecialFunctionsChainRulesCoreExt = "ChainRulesCore"
 
 [[deps.SpiderWebModel]]
-deps = ["Accessors", "Arpack", "BitIntegers", "CairoMakie", "ChunkSplitters", "CircularArrays", "DataStructures", "Dictionaries", "FFTW", "Gurobi", "H5Zblosc", "HDF5", "IterativeSolvers", "JuMP", "KrylovKit", "LinearAlgebra", "LinearMaps", "LoopVectorization", "MathOptInterface", "OrderedCollections", "ProgressMeter", "Random", "RecursiveArrayTools", "SparseArrays", "StaticArrays", "Statistics", "StatsBase", "Stencils", "Test"]
+deps = ["Accessors", "Arpack", "BitIntegers", "CairoMakie", "ChunkSplitters", "CircularArrays", "DataStructures", "Dictionaries", "FFTW", "Gurobi", "HDF5", "IterativeSolvers", "JuMP", "KrylovKit", "LinearAlgebra", "LinearMaps", "LoopVectorization", "MathOptInterface", "OrderedCollections", "ProgressMeter", "Random", "RecursiveArrayTools", "SparseArrays", "StaticArrays", "Statistics", "StatsBase", "Stencils", "Test"]
 path = ".."
 uuid = "8e1b84da-b1d7-4311-a21b-52324f990117"
-version = "0.4.2"
+version = "0.4.5"
 
 [[deps.SpinFRGLattices]]
 deps = ["StaticArrays", "StructArrays", "Test"]

@@ -68,6 +68,10 @@ struct GFMCObservables{DT<:AbstractFloat,T,T2} <: AbstractGFMCObservables
     reconfigurationTable::Matrix{Int}
     outfile::T2
 end
+get_reconfigurationTable(Observables::AbstractGFMCObservables) = Observables.reconfigurationTable
+get_energies(Observables::AbstractGFMCObservables) = Observables.energies
+get_TotalWeights(Observables::AbstractGFMCObservables) = Observables.TotalWeights
+get_outfile(Observables::AbstractGFMCObservables) = Observables.outfile
 
 abstract type AbstractOperator end
 operatorname(X::T) where T <: AbstractOperator = string(T)

@@ -396,8 +396,8 @@ end
 function initializeGFMC!(prob::AbstractGFMCProblem,nThreads,equilibration_steps=0,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8),reconfigure = true)
     
     (;Guiding_function_buffer,Walkers,weights,reconfiguration_buffer,Observables,method,ψG) = prob
-    (;outfile,reconfigurationTable) = Observables
-
+    (;outfile) = Observables
+    reconfigurationTable = get_reconfigurationTable(Observables)
     saveParameters(outfile,equilibration_steps,method,ψG)
 
     initialize!(Walkers,initializer)
@@ -414,10 +414,10 @@ function initializeGFMC!(prob::AbstractGFMCProblem,nThreads,equilibration_steps=
     return prob,Observables
 end
 
-function startManyWalkerGFMC!(prob::AbstractGFMCProblem,nThreads::Int,equilibration_steps::Int,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8))
+function startManyWalkerGFMC!(prob::AbstractGFMCProblem,NStepsRange,nThreads::Int,equilibration_steps::Int,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8))
     initializeGFMC!(prob,nThreads,equilibration_steps,initializer)
     fill_all_Buffers!(prob,nThreads)
-    runGFMC!(prob;nThreads)
+    runGFMC!(prob,NStepsRange;nThreads)
 end
 
 function fill_all_Buffers!(prob::AbstractGFMCProblem,nThreads)
@@ -438,20 +438,21 @@ end
 
 function startManyWalkerGFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,ψG; equilibration_steps = 0, pre_equilibration_steps = equilibration_steps ÷ 5, scatter_fraction = 0.8,initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),nThreads=2*Threads.nthreads(),kwargs...)
     prob = setup_GFMC_problem(InitialState,method,Nwalkers,nSteps,nThreads,ψG;kwargs...)
-    startManyWalkerGFMC!(prob,nThreads,equilibration_steps,initializer)
+    startManyWalkerGFMC!(prob,nSteps,nThreads,equilibration_steps,initializer)
 end
 
 function runGFMC!(prob::AbstractGFMCProblem,range,nThreads,reconfigure::Bool=true)
     (;Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,Observables,ψG,method) = prob
-    (;energies,outfile,TotalWeights, reconfigurationTable) = Observables
+    energies = get_energies(Observables)
+    TotalWeights = get_TotalWeights(Observables)
+    reconfigurationTable = get_reconfigurationTable(Observables)
     
+    iter = 0
     for i in range
+        iter += 1
         # for (α,Config) in enumerate(Walkers)
         propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,method)
-
-        energies[i] = getLocalEnergyWalkers_before(weights,Walkers,method)
-        TotalWeights[i] = mean(weights)
-        
+        updateEnergies!(Observables,i,Walkers,weights,method)
         if reconfigure
             reconfigurationList = @view reconfigurationTable[:,i]
             reconfiguration!(Walkers,Guiding_function_buffer,reconfigurationList,reconfiguration_buffer,weights)
@@ -460,14 +461,13 @@ function runGFMC!(prob::AbstractGFMCProblem,range,nThreads,reconfigure::Bool=tru
         end
         saveObservables!(Observables,i,Walkers)
 
-        if i%1000 == 0 # recompute buffers only occasionally to avoid accumulation of floating point errors 
+        if iter%1000 == 0 # recompute buffers only occasionally to avoid accumulation of floating point errors 
             fill_all_Buffers!(prob,nThreads)
         end
     end
     return Observables
 end
-runGFMC!(prob::AbstractGFMCProblem;reconfigure=true,nThreads = 2*Threads.nthreads()) = runGFMC!(prob,eachindex(prob.Observables.TotalWeights),nThreads,reconfigure)
-runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int;reconfigure=true,nThreads = 2*Threads.nthreads()) = runGFMC!(prob,eachindex(prob.Observables.TotalWeights)[1:Nsteps],nThreads,reconfigure)
+runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int;reconfigure=true,nThreads = 2*Threads.nthreads()) = runGFMC!(prob,1:Nsteps,nThreads,reconfigure)
 
 function propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,method::DiscreteTimeMethod)
     (;Λ,nBranch,w_avg_estimate) = method
@@ -576,12 +576,20 @@ function getLocalEnergyWalkers_before(weights,Walkers::AbstractVector{<:Abstract
     return num/denom
 end
 
+function updateEnergies!(Observables::AbstractGFMCObservables,i,Walkers::AbstractVector{<:AbstractWalker},weights,method)
+    energies = get_energies(Observables)
+    TotalWeights = get_TotalWeights(Observables)
+    energies[i] = getLocalEnergyWalkers_before(weights,Walkers,method)
+    TotalWeights[i] = mean(weights)
+    return nothing
+end
+
 function saveObservables!(Observables::GFMCObservables,i,Walkers::AbstractVector{<:AbstractWalker})
     SaveConfigs = Observables.SaveConfigs
     for (α,Config) in enumerate(Walkers)
         SaveConfigs[:,:,α,i] .= get_config(Config)
     end
-
+    return nothing
 end
 
 """given a list of reconfiguration indices, minimizes the number of reconfigurations by swapping elements in the list. Each walker that survives a reconfiguration step remains unchanged while walkers that are killed get assigned to a new index."""
