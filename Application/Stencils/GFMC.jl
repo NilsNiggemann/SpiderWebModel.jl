@@ -472,7 +472,7 @@ SW.get_params(ψG) .= stochReconfRes.params
     SqsGFMC = SW.getSqsGFMC(resultsCT,1:100)
 end
 ##
-ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,50,2000,100,ψG,equilibration_steps=1000) for i in 1:80])
+ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,50,1000,100,ψG,equilibration_steps=1000) for i in 1:80])
 
 ##
 en_direct = stack([SW.normalized_En(ObsRuns) for ObsRuns in ObsRuns])
@@ -512,5 +512,81 @@ with_theme(theme_SimpleTicks()) do
         errlines!(ax,tau[range],SqMat[i,j,range],SqErr[i,j,range],linewidth=0.5)
         errlines!(ax,tau[range],SqMat2[i,j,range],SqErr2[i,j,range],linewidth=1.5,linestyle = :dash)
     end
+    fig
+end
+
+##
+
+with_theme(theme_SimpleTicks()) do 
+    SqMat = dropmean(SqsGFMC_direct,dims=4)[:,:,5]
+    SqErr = dropstd(SqsGFMC_direct,dims=4)[:,:,5]
+    fittingCoefs = optimizeCoeffs(SqMat)
+    fig = Figure(size = 120 .* (4,4),fontsize = 22)
+
+    xticks = yticks = PiTicks([0,pi])
+    axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
+
+    ax = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,ylabelvisible = false,yticklabelsvisible = false)
+
+    # ax2 = Axis(fig[2,1:2],xlabel = L"|\mathbf{q}|^2",ylabel = L"\mathcal{S}(\mathbf{q})",title = L"μ= %$μ")
+    Sq = SW.getSqCont(SqMat)
+    Sqerr = SW.getSqCont(SqErr)
+    qx = qy = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
+    Sq_q = collect(Iterators.product(qx,qy))
+    Sq_q = Sq.(Iterators.product(qx,qy))
+    heatmap!(ax,qx,qy,Sq_q)
+    
+    SqFT = [SqFieldTheory(x,y,fittingCoefs...) for x in qx, y in qy]
+
+    heatmap!(axFT,qx,qy,SqFT)
+    q_path(r,phi) = (r*cos(phi),r*sin(phi))
+    qr = LinRange(0,.35pi,100)
+    
+    colors = (:red,:blue,:magenta)
+    
+
+    colorFT = :black
+    colorGFMC = :red
+
+    kpath = ["Γ","X","X'","Γ"]
+    pointlabels,p1 = fetchKPath([KPoints[k] for k in kpath],500)
+    kpointlabels = Makie.latexstring.(kpath)
+    tRange = eachindex(p1)
+    xygrid = [(x,y) for x in qx, y in qy]
+
+    
+    axPath = Axis(fig[2,1:2],ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
+    )
+    tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
+    
+
+    p1_points = xygrid[p1_discrete]
+
+    Sqcut = [Sq(x,y) for (x,y) in p1_points]
+    Sqerrcut = [Sqerr(x,y) for (x,y) in p1_points]
+    SqFT = [SqFieldTheory(q,fittingCoefs) for q in p1_points]
+
+    # SqFT = [AsymFieldTheory(q,1,10) for q in qpoints]
+    scatter!(ax,p1_points,marker = '∘' ,color = colorGFMC,markersize = 15)
+    scatterlines!(axFT,p1_points,color = colorFT,linestyle = :dash,marker = '●',markersize = 2)
+    # tRange = SW.norm.(p1).^2
+    scatterlines!(axPath,tRange,SqFT,color = colorFT,linestyle = :dash,marker = '●',markersize = 8)
+    
+    text!(axFT,Point(0,0),text="Γ",color = :white,align = (:center,:center))
+    text!(axFT,Point(pi,0),text="X",color = :white,align = (:center,:center))
+    text!(axFT,Point(0,pi),text="X'",color = :white,align = (:center,:center))
+
+    scatter!(axPath,tRange,Sqcut,
+    marker = '∘',markersize = 18,color = colorGFMC)
+    errorbars!(axPath,tRange,Sqcut,Sqerrcut,color = colorGFMC,whiskerwidth = 6,linewidth=0.5)
+
+    rowsize!(fig.layout,1,Relative(0.5))
+    ylims!(axPath,0,1.2)
+    # text!(axFT,Point(pi,1.4pi),text=L"r = %$(strd(fittingCoefs[2]))",color = :white,align = (:center,:center))
+    # Label(fig[1,1, TopLeft()],L"a)$$",padding = (-30,0,-10,0))
+    # Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-10,0))
+    # Label(fig[2,1, TopLeft()],L"c)$$",padding = (-30,0,-10,0))
+    # Label(fig[3,1, TopLeft()],L"d)$$",padding = (-30,0,-10,0))
+
     fig
 end

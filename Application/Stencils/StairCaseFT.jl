@@ -114,23 +114,6 @@ with_theme(theme_SimpleTicks()) do
     marker = '∘',markersize = 18,color = colorGFMC)
     errorbars!(axPath,tRange,Sqcut,Sqerrcut,color = colorGFMC,whiskerwidth = 6,linewidth=0.5)
 
-    # for (phi,color) in zip([0,pi/4],colors)
-    #     qpoints_raw = q_path.(qr,phi)
-    #     qpoints = sort!(unique!(roundToTrueMomenta.(qpoints_raw,size(SqMat,1)-1)), by = SW.norm)
-
-    #     Sqcut = Sq.(qpoints)
-    #     Sqerrcut = Sqerr.(qpoints)
-        
-    #     # SqFT = [SqFieldTheory(q,1,10) for q in qpoints]
-    #     SqFT = [SqFieldTheory(q,fittingCoefs...) for q in qpoints]
-    #     scatter!(ax,qpoints,marker = '×' ,color = color)
-    #     scatterlines!(axFT,Point.(qpoints),color = color,linestyle = :dash,marker = '●',markersize = 4)
-    #     qnorms_sq = SW.norm.(qpoints).^2
-    #     scatter!(ax2,qnorms_sq,Sqcut,
-    #     marker = '×',markersize = 15,color = color)
-    #     errorbars!(ax2,qnorms_sq,Sqcut,Sqerrcut,color = color,whiskerwidth = 6,linewidth=0.5)
-    #     scatterlines!(ax2,qnorms_sq,SqFT,color = color,linestyle = :dash,marker = '●',markersize = 4)
-    # end
     rowsize!(fig.layout,1,Relative(0.5))
     ylims!(axPath,0,6)
     # text!(axFT,Point(pi,1.4pi),text=L"r = %$(strd(fittingCoefs[2]))",color = :white,align = (:center,:center))

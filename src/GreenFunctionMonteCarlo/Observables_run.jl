@@ -207,15 +207,21 @@ function set_w_avg_estimate(prob::T,w_avg_estimate)::T where {T<:SpiderwebGFMCPr
     SpiderwebGFMCProblem(newmethod,InitialState,ψG,Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,Observables)
 end
 
-function normalized_Sq(Observables::GFMCObservables_StructureFac)
+function normalized_Sq(Observables::GFMCObservables_StructureFac,expand=true)
     numerator = copy(Observables.Sq_numerator)
     denominator = Observables.obs_denominator
     for i in eachindex(denominator)
         @. numerator[:,:,i] ./= denominator[i]
     end
+    if expand 
+        return expand_Sq(numerator)
+    end
     return numerator
 end
-
+function expand_Sq(Sq::AbstractArray{T,3}) where T
+    SqCirc = CircularArrays.CircularArray(Sq)
+    return Array(SqCirc[1:end+1,1:end+1,:])
+end
 function normalized_En(Observables::GFMCObservables_StructureFac)
     numerator = copy(Observables.Energy)
     denominator = Observables.en_denominator
