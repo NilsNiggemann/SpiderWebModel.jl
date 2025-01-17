@@ -26,8 +26,8 @@ function getDensity(state::SW.SpinConfig,Lx,Ly,Offset)
 end
 
 ##
-Lx = 5
-Ly = 5
+Lx = 10
+Ly = 10
 @time a = SW.constructAllConfigs(Lx, Ly, SW.ALLGS_S12)
 ##
 @time a_rec = SW.fillEmptyStates(a, Lx, Ly, SW.ALLGS_S12)

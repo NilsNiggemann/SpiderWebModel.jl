@@ -76,6 +76,7 @@ function setup_Sq_problem(InitialState::StencilSpinConfig,method::AbstractGFMCMe
     return SpiderwebGFMCProblem(method,InitialState,ψG,Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,Observables)
 end
 
+
 function compute_Sq_Walkers!(SqBuffers::AbstractArray{T,4},Walkers,n,FFTBuffers::AbstractVector{<:AbstractObservable}) where T
     @assert axes(SqBuffers,3) == eachindex(FFTBuffers) == eachindex(Walkers)
     pMax = size(SqBuffers,4)
@@ -113,14 +114,27 @@ end
 #     return nothing
 # end
 
+function updateEnergies!(Observables::GFMCObservables_StructureFac,i,Walkers::AbstractVector{<:AbstractWalker},weights,method)
+    energies = get_energies(Observables)
+    TotalWeights = get_TotalWeights(Observables)
+    energies[i] = getLocalEnergyWalkers_before(weights,Walkers,method)
+    TotalWeights[i] = mean(weights)
+    Gnps = Observables.Buffers.Gnps
+    Energy = Observables.Energy
+    en_denominator = Observables.en_denominator
+    updateGnp!(Gnps,TotalWeights,i)
+    getEnergy_step!(Energy,en_denominator,Gnps,energies,i)
+
+    return nothing
+end
+
 function saveObservables!(Observables::GFMCObservables_StructureFac,n,Walkers::AbstractVector{<:SpiderWebWalker})
 
     (;Sq_numerator,obs_denominator,en_denominator,Energy) = Observables
     (;reconfigurationTable,energies,Gnps,TotalWeights,SqBuffers,PopulationMatrix,FFTBuffers) = Observables.Buffers
 
     compute_Sq_Walkers!(SqBuffers,Walkers,n,FFTBuffers)
-    updateGnp!(Gnps,TotalWeights,n)
-    getEnergy_step!(Energy,en_denominator,Gnps,energies,n)
+
     Nw = length(Walkers)
     
     m_max = size(Sq_numerator,3)
@@ -169,10 +183,28 @@ function getPopulationMatrix!(PopulationMatrix,reconfigurationTable::AbstractMat
     return PopulationMatrix
 end
 
-function measure_Sq_GFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,mProj,ψG; equilibration_steps = 0, pre_equilibration_steps = equilibration_steps ÷ 5, scatter_fraction = 0.8,initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),nThreads=2*Threads.nthreads(),outfile = nothing,kwargs...)
+function measure_Sq_GFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,mProj,ψG; equilibration_steps = 0, pre_equilibration_steps = equilibration_steps ÷ 5, scatter_fraction = 0.8,initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),nThreads=2*Threads.nthreads(),outfile = nothing,estimate_w_avg=true,kwargs...)
     prob = setup_Sq_problem(InitialState,method,Nwalkers,nSteps,mProj,nThreads,ψG,outfile)
-    startManyWalkerGFMC!(prob,nSteps,nThreads,equilibration_steps,initializer)
+
+    initializeGFMC!(prob,nThreads,initializer)
+    runGFMC!(prob,equilibration_steps;nThreads,reconfigure=true,save_energies = true,saveObservables = false)
+
+    if estimate_w_avg
+        w_avg = get_w_avg_estimate(prob)
+        prob = set_w_avg_estimate(prob,w_avg)
+    end
+    outfile = get_outfile(prob.Observables)
+    saveParameters(outfile,equilibration_steps,method,ψG)
+    
+    fill_all_Buffers!(prob,nThreads)
+    runGFMC!(prob,nSteps;nThreads)
+
     return prob.Observables    
+end
+function set_w_avg_estimate(prob::T,w_avg_estimate)::T where {T<:SpiderwebGFMCProblem}
+    newmethod = set_w_avg_estimate(prob.method,w_avg_estimate)
+    (;InitialState,ψG,Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,Observables) = prob
+    SpiderwebGFMCProblem(newmethod,InitialState,ψG,Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,Observables)
 end
 
 function normalized_Sq(Observables::GFMCObservables_StructureFac)
@@ -189,4 +221,28 @@ function normalized_En(Observables::GFMCObservables_StructureFac)
     denominator = Observables.en_denominator
     @. numerator ./= denominator
     return numerator
+end
+
+function ensure_numeric_w_avg!(method)
+    if !isfinite(get_w_avg_estimate(method))
+        set_w_avg_estimate!(method,0.)
+        return true
+    end
+    return false
+end
+
+function get_w_avg_estimate(prob)
+    Observables = prob.Observables
+    method = prob.method
+
+    energies = get_energies(Observables)
+    TotalWeights = get_TotalWeights(Observables)
+
+    Energy = normalized_En(Observables)[begin]
+    
+    fill!(energies,zero(eltype(energies)))
+    fill!(TotalWeights,zero(eltype(TotalWeights)))
+    
+    w_avg_estimate = -Energy
+    return w_avg_estimate
 end

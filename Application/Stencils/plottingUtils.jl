@@ -43,7 +43,7 @@ _getkwargs(::Any) = (;xlabel = L"projection order $$")
 _getkwargs(m::SW.ContinuousTimeMethod) = (;xlabel = L"\tau")
 _getscaling(m::SW.DiscreteTimeMethod) = m.nBranch
 _getscaling(i::Integer) = i
-_getscaling(m::SW.ContinuousTimeMethod) = m.nBranch*m.τ
+_getscaling(m::SW.ContinuousTimeMethod) = m.τ
 function trueMomenta(kmin,kmax,L)
     nmin = floor(Int,L*kmin/(2pi))
     nmax = ceil(Int,L*kmax/(2pi))
@@ -75,13 +75,14 @@ _iscontinuous(m::SW.ContinuousTimeMethod) = true
 function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0+2e-2,p=250,τ=nothing, nThermal=1,normalize=true,dense = _iscontinuous(method),legend = true,marker = '●',markersize = 5,label = L"GFMC$$",kwargs...)
     
     getnBra(i::Integer) = i
-    getnBra(m::SW.AbstractGFMCMethod) = m.nBranch
+    getnBra(m::SW.AbstractGFMCMethod) = 1
+    getnBra(m::SW.DiscreteTimeMethod) = m.nBranch
     nBra = getnBra(method)
 
     projSteps = p÷nBra
 
     if τ isa Real && method isa SW.ContinuousTimeMethod
-        projSteps = round(Int,τ/method.τ/method.nBranch)
+        projSteps = round(Int,τ/method.τ)
     end
 
     ens = [SW.getEnergies(res.TotalWeights,res.energies,nThermal,projSteps) for res in results]

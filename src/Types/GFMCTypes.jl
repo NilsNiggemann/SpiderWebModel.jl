@@ -32,17 +32,16 @@ struct DiscreteTimeMethod <: AbstractGFMCMethod
     nBranch::Int
     w_avg_estimate::Float64
 end
-
 DiscreteTimeMethod(;Λ=1.,nBranch,w_avg_estimate=1.) = DiscreteTimeMethod(Λ,nBranch,w_avg_estimate)
+set_w_avg_estimate(method::DiscreteTimeMethod,w_avg_estimate) = DiscreteTimeMethod(method.Λ,method.nBranch,w_avg_estimate)
 
 struct ContinuousTimeMethod{F2} <: AbstractGFMCMethod 
     τ::Float64
-    nBranch::Int
     w_avg_estimate::Float64
     Hxx::F2
 end
-ContinuousTimeMethod(τ,nBranch::Integer,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(float(τ),nBranch,float(w_avg_estimate),Hxx)
-ContinuousTimeMethod(τ;nBranch=1,w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(τ,nBranch,float(w_avg_estimate),Hxx)
+ContinuousTimeMethod(τ;w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(float(τ),w_avg_estimate,Hxx)
+set_w_avg_estimate(method::ContinuousTimeMethod,w_avg_estimate) = ContinuousTimeMethod(method.τ,w_avg_estimate,method.Hxx)
 
 abstract type AbstractGFMCProblem end
 struct SpiderwebGFMCProblem{MethodType<:AbstractGFMCMethod,T<:AbstractFloat,BufferType,C,F,W,O} <: AbstractGFMCProblem
