@@ -118,11 +118,11 @@ function post_move_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::Simp
     v = get_v_ij(ψG)
     h = Buffer.h_i
     
-    for (index,i) in enumerate(affected_sites)
+    LoopVectorization.@turbo for (index,i) in enumerate(affected_sites)
 
         s = P1_STENCIL[index]*opSign
 
-        LoopVectorization.@turbo for j in eachindex(h)
+        for j in eachindex(h)
             h[j] += v[j,i]*s
         end
     end

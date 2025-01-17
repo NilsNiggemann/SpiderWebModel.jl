@@ -1,10 +1,14 @@
-using CairoMakie, MakieHelpers,Statistics, HDF5
 import SpiderWebModel as SW
+using CairoMakie, MakieHelpers,Statistics
+using SpiderWebModel.HDF5
 include("plottingUtils.jl")
 
 ##
 function getxi(Sq,I::CartesianIndex,dI::CartesianIndex)
     L = size(Sq,1)-1
+    if Sq[I] < Sq[I+dI]
+        return 0
+    end
     xi_L = sqrt(Sq[I]/Sq[I+dI] -1 )
     return xi_L * L
 end
@@ -33,13 +37,13 @@ function getXis(Sqs)
     end
     return xis
 end
-function getXis_err(Sqs)
+function getXis_err(Sqs,I)
     xis = zeros(size(Sqs)[3:4])
     for (i,ii) in enumerate(axes(Sqs,4))
         for (j,jj) in enumerate(axes(Sqs,3))
             Sq = @views Sqs[:,:,jj,ii]
 
-            xis[j,i] = getxi(Sq./4)
+            xis[j,i] = getxi(Sq./4,I)
         end
     end
     ximean = dropmean(xis,dims=1)
@@ -112,7 +116,7 @@ function getSq_tau_mean_std(res,tau)
     dropmean(Sqtau,dims=4), dropstd(Sqtau,dims=4)
 end
 
-res = Dict(L=>getRes("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=$L/") for L in (20,24,28))
+res = Dict(L=>getRes("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=$L/") for L in (16,20,24,28))
 ##
 with_theme(theme_SimpleTicks()) do
     ind = 1
@@ -132,7 +136,7 @@ with_theme(theme_SimpleTicks()) do
 end
 ##
 with_theme(theme_SimpleTicks()) do 
-    L = 20
+    L = 28
 
     tauindices = [round(Int,8 ÷ tau) for tau in res[L].taus]
     energies_slice = zeros(size(res[L].energies,2),size(res[L].energies,3))
@@ -249,7 +253,7 @@ end
 ##
 with_theme(theme_SimpleTicks()) do
     L = 28
-    muIndex = findfirst(>=(0.5),res[L].mus)
+    muIndex = findfirst(>=(0.2),res[L].mus)
     SqsGFMC = res[L].Sqs[:,:,:,:,muIndex]./ 4
     SqMat = dropmean(SqsGFMC,dims=4)
     SqErr = dropstd(SqsGFMC,dims=4)
@@ -420,18 +424,26 @@ with_theme(theme_SimpleTicks()) do
     Linestyles = [:dash,:dot,:solid,:dashdot]
     # allmus = [musSmall,musMedium,mus]
     # allxis = [xisSmall,xisMedium,xis]
-    scatterkwargs = Dict(20 => (;marker = '▲'),24 => (;marker = '▲') ,28 => (;marker = '■')) 
+    scatterkwargs = Dict(16 => (;marker = '+'),20 => (;marker = '▲'),24 => (;marker = '●' ) ,28 => (;marker = '×',markersize =18  )) 
     for (L,linestyle) in zip((20,24,28),Linestyles)
     # for (L,linestyle) in zip(keys(res),Linestyles)
         # Sq = res[L].Sqs[:,:,5,:,:]
-        Sq = getSq_tau(res[L],5)
-        xis = getXis_err(Sq)
+        Sq = getSq_tau(res[L],10)
+        k = trueMomenta(0,2pi,size(Sq,1)-1)
+        i_k = findfirst(==(pi/2),k)
+        xis = getXis_err(Sq,CartesianIndex(i_k,i_k))
         mus = res[L].mus
-        scatterlines!(ax,mus,xis.ximean/L,label = L"L=%$L";linestyle,scatterkwargs[L]...)
-        errorbars!(ax,mus,xis.ximean/L,xis.xistd/L,whiskerwidth = 5)
+        muFilter = findall(x->x<=1,mus)
+
+        xiLs = xis.ximean[muFilter] ./ L
+        xiLserr = xis.xistd[muFilter] ./ L
+        musPlot = mus[muFilter]
+        scatterlines!(ax,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
+        errorbars!(ax,musPlot,xiLs,xiLserr,whiskerwidth = 5)
+        # scatterlines!(ax,mus,xis.ximean/L,label = L"L=%$L";linestyle,scatterkwargs[L]...)
+        # errorbars!(ax,mus,xis.ximean/L,xis.xistd/L,whiskerwidth = 5)
         # errlines!(ax,mus,xis.ximean/L,xis.xistd/L,label = L"L=%$L")
         
-        muFilter = findall(x->x>=(0.1) && x<=0.9,mus)
         # muFilter = findall(x->x>=(0.3) && x<=0.45,mus)
 
         # scatterlines!(ax2,mus[muFilter],xis.ximean[muFilter]/L,label = L"L=%$L";linestyle)
@@ -440,10 +452,118 @@ with_theme(theme_SimpleTicks()) do
     end
     # vlines!(ax,[0.41],color = :grey,linestyle = :dashdot)
     # vlines!(ax2,[0.41],color = :grey,linestyle = :dashdot)
-    vlines!(ax,[0.1,0.2],color = :grey,linestyle = :dash)
+    # vlines!(ax,[0.1,0.2],color = :grey,linestyle = :dash)
     ylims!(ax,0,5)
+    mu_c = 0.18
+    vlines!(ax,[mu_c],color = :grey,linestyle = :dash)
+    text!(ax,Point(0.22,3.5),text=L"μ_c = %$mu_c",color = :grey,align = (:left,:center))
     # ylims!(ax2,0.04,1.8)
     axislegend(ax,position = :lb)
     fig
     
+end
+
+##
+KPoints = Dict([
+    "Γ" => SVector(0,0),
+    "X" => SVector(pi,0),
+    "M" => SVector(pi,pi),
+    "X'" => SVector(0,pi)
+    ])
+
+
+
+with_theme(theme_SimpleTicks()) do 
+    L = 28
+    muIndex = findfirst(>=(0.8),res[L].mus)
+    SqsGFMC = getSq_tau(res[L],6)[:,:,:,muIndex]./ 4
+    SqMat = dropmean(SqsGFMC,dims=3)
+    SqErr = dropstd(SqsGFMC,dims=3)
+    fittingCoefs = optimizeCoeffs(SqMat)
+    
+    μ = res[L].mus[muIndex]
+    fig = Figure(size = 120 .* (4,4),fontsize = 22)
+
+    xticks = yticks = PiTicks([0,pi])
+    axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
+
+    ax = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,ylabelvisible = false,yticklabelsvisible = false)
+
+    # ax2 = Axis(fig[2,1:2],xlabel = L"|\mathbf{q}|^2",ylabel = L"\mathcal{S}(\mathbf{q})",title = L"μ= %$μ")
+    Sq = SW.getSqCont(SqMat)
+    Sqerr = SW.getSqCont(SqErr)
+    qx = qy = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
+    Sq_q = collect(Iterators.product(qx,qy))
+    Sq_q = Sq.(Iterators.product(qx,qy))
+    heatmap!(ax,qx,qy,Sq_q)
+    
+    SqFT = [SqFieldTheory(x,y,fittingCoefs...) for x in qx, y in qy]
+    heatmap!(axFT,qx,qy,SqFT)
+    q_path(r,phi) = (r*cos(phi),r*sin(phi))
+    qr = LinRange(0,.35pi,100)
+    
+    colors = (:red,:blue,:magenta)
+    
+
+    colorFT = :black
+    colorGFMC = :red
+
+    kpath = ["Γ","X","X'","Γ"]
+    pointlabels,p1 = fetchKPath([KPoints[k] for k in kpath],500)
+    kpointlabels = Makie.latexstring.(kpath)
+    tRange = eachindex(p1)
+    xygrid = [(x,y) for x in qx, y in qy]
+
+    
+    axPath = Axis(fig[2,1:2],ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
+    )
+    tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
+    
+
+    p1_points = xygrid[p1_discrete]
+
+    Sqcut = [Sq(x,y) for (x,y) in p1_points]
+    Sqerrcut = [Sqerr(x,y) for (x,y) in p1_points]
+    SqFT = [SqFieldTheory(q,fittingCoefs) for q in p1_points]
+
+    # SqFT = [SqFieldTheory(q,1,10) for q in qpoints]
+    scatter!(ax,p1_points,marker = '∘' ,color = colorGFMC,markersize = 15)
+    scatterlines!(axFT,p1_points,color = colorFT,linestyle = :dash,marker = '●',markersize = 2)
+    # tRange = SW.norm.(p1).^2
+    scatterlines!(axPath,tRange,SqFT,color = colorFT,linestyle = :dash,marker = '●',markersize = 8)
+    
+    text!(axFT,Point(0,0),text="Γ",color = :white,align = (:center,:center))
+    text!(axFT,Point(pi,0),text="X",color = :white,align = (:center,:center))
+    text!(axFT,Point(0,pi),text="X'",color = :white,align = (:center,:center))
+
+    scatter!(axPath,tRange,Sqcut,
+    marker = '∘',markersize = 18,color = colorGFMC)
+    errorbars!(axPath,tRange,Sqcut,Sqerrcut,color = colorGFMC,whiskerwidth = 6,linewidth=0.5)
+
+    # for (phi,color) in zip([0,pi/4],colors)
+    #     qpoints_raw = q_path.(qr,phi)
+    #     qpoints = sort!(unique!(roundToTrueMomenta.(qpoints_raw,size(SqMat,1)-1)), by = SW.norm)
+
+    #     Sqcut = Sq.(qpoints)
+    #     Sqerrcut = Sqerr.(qpoints)
+        
+    #     # SqFT = [SqFieldTheory(q,1,10) for q in qpoints]
+    #     SqFT = [SqFieldTheory(q,fittingCoefs...) for q in qpoints]
+    #     scatter!(ax,qpoints,marker = '×' ,color = color)
+    #     scatterlines!(axFT,Point.(qpoints),color = color,linestyle = :dash,marker = '●',markersize = 4)
+    #     qnorms_sq = SW.norm.(qpoints).^2
+    #     scatter!(ax2,qnorms_sq,Sqcut,
+    #     marker = '×',markersize = 15,color = color)
+    #     errorbars!(ax2,qnorms_sq,Sqcut,Sqerrcut,color = color,whiskerwidth = 6,linewidth=0.5)
+    #     scatterlines!(ax2,qnorms_sq,SqFT,color = color,linestyle = :dash,marker = '●',markersize = 4)
+    # end
+    rowsize!(fig.layout,1,Relative(0.5))
+    text!(axPath,Point(tRange[end-end÷8],1.2),text=L"μ = %$μ",align = (:center,:center))
+    # text!(axFT,Point(pi,1.4pi),text=L"r = %$(strd(fittingCoefs[2]))",color = :white,align = (:center,:center))
+    # Label(fig[1,1, TopLeft()],L"a)$$",padding = (-30,0,-10,0))
+    # Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-10,0))
+    # Label(fig[2,1, TopLeft()],L"c)$$",padding = (-30,0,-10,0))
+    # Label(fig[3,1, TopLeft()],L"d)$$",padding = (-30,0,-10,0))
+
+    fig
 end

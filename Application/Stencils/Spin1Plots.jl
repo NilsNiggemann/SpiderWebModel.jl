@@ -1,5 +1,6 @@
-using CairoMakie, MakieHelpers,Statistics, HDF5
+using CairoMakie, MakieHelpers,Statistics
 import SpiderWebModel as SW
+using SpiderWebModel.HDF5
 using Optim
 cd(@__DIR__)
 function trueMomenta(kmin,kmax,L)
