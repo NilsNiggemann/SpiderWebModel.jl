@@ -301,11 +301,10 @@ function readMMapArray(filename::AbstractString,datasetname::String)
     end
 end
 
-function saveParameters(filename::String,Λ,equilibration_steps,nBranch,ψG,w_avg_estimate;kwargs...)
+function saveParameters(filename::String,Λ,equilibration_steps,ψG,w_avg_estimate;kwargs...)
     h5open(filename,"cw") do file
         file["Λ"] = Λ
         file["equilibration_steps"] = equilibration_steps
-        file["nBranch"] = nBranch
         file["w_avg_estimate"] = w_avg_estimate
         for (k,v) in kwargs
             file[String(k)] = v
@@ -315,11 +314,11 @@ function saveParameters(filename::String,Λ,equilibration_steps,nBranch,ψG,w_av
 end
 function saveParameters(filename::String,equilibration_steps,method::DiscreteTimeMethod,ψG)
     (;Λ,nBranch,w_avg_estimate) = method
-    saveParameters(filename,Λ,equilibration_steps,nBranch,ψG,w_avg_estimate)
+    saveParameters(filename,Λ,equilibration_steps,ψG,w_avg_estimate;nBranch=nBranch)
 end
 function saveParameters(filename::String,equilibration_steps,method::ContinuousTimeMethod,ψG)
     w_avg_estimate = method.w_avg_estimate
-    saveParameters(filename,Inf,equilibration_steps,nBranch,ψG,w_avg_estimate;τ=method.τ)
+    saveParameters(filename,Inf,equilibration_steps,ψG,w_avg_estimate;τ=method.τ)
 end
 
 saveParameters(::Nothing,args...) = nothing

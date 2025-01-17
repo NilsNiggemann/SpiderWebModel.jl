@@ -130,8 +130,8 @@ end
 
 function saveObservables!(Observables::GFMCObservables_StructureFac,n,Walkers::AbstractVector{<:SpiderWebWalker})
 
-    (;Sq_numerator,obs_denominator,en_denominator,Energy) = Observables
-    (;reconfigurationTable,energies,Gnps,TotalWeights,SqBuffers,PopulationMatrix,FFTBuffers) = Observables.Buffers
+    (;Sq_numerator,obs_denominator) = Observables
+    (;reconfigurationTable,Gnps,SqBuffers,PopulationMatrix,FFTBuffers) = Observables.Buffers
 
     compute_Sq_Walkers!(SqBuffers,Walkers,n,FFTBuffers)
 
@@ -191,7 +191,9 @@ function measure_Sq_GFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMet
 
     if estimate_w_avg
         w_avg = get_w_avg_estimate(prob)
-        prob = set_w_avg_estimate(prob,w_avg)
+        if isfinite(w_avg)
+            prob = set_w_avg_estimate(prob,w_avg)
+        end
     end
     outfile = get_outfile(prob.Observables)
     saveParameters(outfile,equilibration_steps,method,ψG)
@@ -208,8 +210,10 @@ function set_w_avg_estimate(prob::T,w_avg_estimate)::T where {T<:SpiderwebGFMCPr
 end
 
 function normalized_Sq(Observables::GFMCObservables_StructureFac,expand=true)
-    numerator = copy(Observables.Sq_numerator)
-    denominator = Observables.obs_denominator
+    return normalized_Sq(Observables.Sq_numerator,Observables.obs_denominator,expand)
+end
+function normalized_Sq(numerator0::AbstractArray{T,3},denominator::AbstractVector,expand=true) where T
+    numerator = copy(numerator0)
     for i in eachindex(denominator)
         @. numerator[:,:,i] ./= denominator[i]
     end
@@ -223,11 +227,11 @@ function expand_Sq(Sq::AbstractArray{T,3}) where T
     return Array(SqCirc[1:end+1,1:end+1,:])
 end
 function normalized_En(Observables::GFMCObservables_StructureFac)
-    numerator = copy(Observables.Energy)
+    numerator = Observables.Energy
     denominator = Observables.en_denominator
-    @. numerator ./= denominator
-    return numerator
+    return normalized_En(numerator,denominator)
 end
+normalized_En(numerator,denominator) = numerator ./ denominator
 
 function ensure_numeric_w_avg!(method)
     if !isfinite(get_w_avg_estimate(method))
