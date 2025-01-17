@@ -239,7 +239,7 @@ function constructGroundstates(
     kwargs...,
 
 )
-    modelfactory(L,Env) = setUpSpiderWeb(L,Env; TimeLimit, OutputFlag = false, S,boundaryCondition,kwargs...)
+    modelfactory(L,Env) = setUpSpiderWeb(L,Env; TimeLimit, OutputFlag = false, S=0.5,boundaryCondition,kwargs...)
 
     constructGroundstates(L, modelfactory, NRuns, fixedFraction::Real,Bool)
 end
