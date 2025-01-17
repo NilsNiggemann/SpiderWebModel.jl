@@ -278,7 +278,19 @@ with_theme(theme_SimpleTicks()) do
     fig
 end
 ##
+rm("/tmp/test.h5",force=true)
+resObs = SW.measure_Sq_GFMC(S,DT,100,2000,10,ψG)
+with_theme(theme_PiTicks()) do 
+    Sq = resObs.Sq_numerator[:,:,4] ./4 #./10000
+    kx = ky = 2pi .* LinRange(0,1,size(Sq,1))
+    fig,ax,hm = heatmap(kx,ky,Sq,colormap = :viridis,axis=(;aspect=1,title = L"GFMC$$"),figure = (;size = (360,500)))
+    ax2 = Axis(fig[2,1],aspect=1,title = L"exact $$")
+    heatmap!(ax2,kx,ky,real(SqEx.Sq),colormap = :viridis,colorrange = extrema(Sq))
+    Colorbar(fig[1:2,2],hm,label = L"\langle \mathcal{S}^{zz}(\textbf{q})\rangle")
+    fig
+end
 
+##
 #___________Spin-1_______________________
 
 ψG = SW.PlaquetteNumberGuidingFunction(0.13)
@@ -434,25 +446,147 @@ plotEnergies(resultsDT,DT.nBranch,p=500,nThermal=100,label = L"Continuous time$$
 ##
 equilib_plots(resultsDT;scatter_fraction,averageSteps=10,Ntrack=30,p = 300)
 ##
-# U field repulsion
 
 SW.Random.seed!(1234)
-S = SW.stencilConfig(parent(SW.getStairCase(4*10)),1/2,
-boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+S = SW.stencilConfig(zeros(12,12),1,
+boundaryCondition = :periodic
 )
+S .= SW.get4x4PeriodicState(size(S,1),2)
+CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2))
+ψG = SW.SimpleJastrowFunction(S)
+ψGSymm = SW.symmetrize(ψG,SW.TranslationalSymmetry([2,2],[2,-2]),S)
+SW.rand!(ψGSymm,1e-4)
+##
+CTSR = SW.ContinuousTimeMethod(100*CT.τ,Hxx = CT.Hxx)
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,20 ,ψG,200,1e-3,SW.IterativeSRSolver();Nwalkers = 1*20,rel_tolerance=0,equilibration_steps=1000,pre_equilibration_steps=40_000,
+report_steps = 5,
+)
+# stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,20,ψGSymm,300,5e-3 ,SW.IterativeSRSolver();Nwalkers = 20,reconfigure = false,rel_tolerance=1e-8,equilibration_steps=100,pre_equilibration_steps=50_000,report_steps=10,reset=false)
+plotVarEn(stochReconfRes)
+##
+# CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2),w_avg_estimate = 1.1*(-stochReconfRes.E0[end] - stochReconfRes.ΔE[end]))
+CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2),w_avg_estimate = -1.3*stochReconfRes.E0[end])
+SW.get_params(ψG) .= stochReconfRes.params
+@time begin
+    resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,50,1000,ψG;equilibration_steps=1000) for i in 1:80])
+    SqsGFMC = SW.getSqsGFMC(resultsCT,1:100)
+end
+##
+ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,50,1000,100,ψG,equilibration_steps=1000) for i in 1:80])
 
-CT = SW.ContinuousTimeMethod(0.3,Hxx = SW.Hxx_RK(1))
-ψG = SW.RKFunction()
 ##
-scatter_fraction = 0.9
-@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,6,10000,ψG;equilibration_steps=0,pre_equilibration_steps=50_000,scatter_fraction) for i in 1:24])
+en_direct = stack([SW.normalized_En(ObsRuns) for ObsRuns in ObsRuns])
 ##
-# results = resultsCT
-plotEnergies(resultsCT,CT,nThermal=1,τ=2,normalize=true)
+plotEnergies(resultsCT,CT,nThermal=1,τ=10,normalize=false)
+errlines!((0:size(en_direct,1)-1).*CT.τ,dropmean(en_direct,dims=2),dropstd(en_direct,dims=2))
+current_figure()
 ##
-SqsGFMC = SW.getSqsGFMC(resultsCT,100,nBra=1)
-makeSqFTPlots(SqsGFMC)
+SW.Random.seed!(1234)
+SqsGFMC_direct = stack([SW.normalized_Sq(Obs) for Obs in ObsRuns])
 ##
-projection_orders = [800,300,100]
-SqsGFMC_p = [ fetch.([Threads.@spawn getSq(res,p÷nBra) for res in resultsCT]) for p in projection_orders]
-plotCut(SqsGFMC_p)
+
+with_theme(theme_SimpleTicks()) do
+    L = 20
+    # muIndex = findfirst(>=(0.5),res[L].mus)
+    # SqsGFMC = res[L].Sqs[:,:,:,:,muIndex]./ 4
+    SqMat = dropmean(SqsGFMC,dims=4)
+    SqErr = dropstd(SqsGFMC,dims=4)
+
+    SqMat2 = dropmean(SqsGFMC_direct,dims=4)
+    SqErr2 = dropstd(SqsGFMC_direct,dims=4)
+    # return SqMat2
+    fig = Figure(size = 120 .* (4,4))
+    ax = Axis(fig[1,1],xlabel = L"τ",ylabel = L"\mathcal{S}(\mathbf{q})")
+    p_Sq = 1:100
+    dTau = CT.τ
+    tau = p_Sq .*dTau
+    # return heatmap(SqMat[:,:,20])
+    Sq_examp = SqMat2[:,:,end-1]
+    inds = sort(collect(CartesianIndices(Sq_examp))[:],by = x->Sq_examp[x],rev=true)
+    # for I in ((5,5),(7,7),(10,3),(5,9))
+    for I in inds[[1,20,40]]
+        i,j = Tuple(I)
+        range = 1:30
+        # scatterlines!(ax,tau[range],SqMat[i,j,range],marker = '×')
+        # errorbars!(ax,tau[range],SqMat[i,j,range],SqErr[i,j,range],whiskerwidth = 6,linewidth=0.5)
+        errlines!(ax,tau[range],SqMat[i,j,range],SqErr[i,j,range],linewidth=0.5)
+        errlines!(ax,tau[range],SqMat2[i,j,range],SqErr2[i,j,range],linewidth=1.5,linestyle = :dash)
+    end
+    fig
+end
+
+##
+
+with_theme(theme_SimpleTicks()) do 
+    SqMat = dropmean(SqsGFMC_direct,dims=4)[:,:,5]
+    SqErr = dropstd(SqsGFMC_direct,dims=4)[:,:,5]
+    fittingCoefs = optimizeCoeffs(SqMat)
+    fig = Figure(size = 120 .* (4,4),fontsize = 22)
+
+    xticks = yticks = PiTicks([0,pi])
+    axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
+
+    ax = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,ylabelvisible = false,yticklabelsvisible = false)
+
+    # ax2 = Axis(fig[2,1:2],xlabel = L"|\mathbf{q}|^2",ylabel = L"\mathcal{S}(\mathbf{q})",title = L"μ= %$μ")
+    Sq = SW.getSqCont(SqMat)
+    Sqerr = SW.getSqCont(SqErr)
+    qx = qy = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
+    Sq_q = collect(Iterators.product(qx,qy))
+    Sq_q = Sq.(Iterators.product(qx,qy))
+    heatmap!(ax,qx,qy,Sq_q)
+    
+    SqFT = [SqFieldTheory(x,y,fittingCoefs...) for x in qx, y in qy]
+
+    heatmap!(axFT,qx,qy,SqFT)
+    q_path(r,phi) = (r*cos(phi),r*sin(phi))
+    qr = LinRange(0,.35pi,100)
+    
+    colors = (:red,:blue,:magenta)
+    
+
+    colorFT = :black
+    colorGFMC = :red
+
+    kpath = ["Γ","X","X'","Γ"]
+    pointlabels,p1 = fetchKPath([KPoints[k] for k in kpath],500)
+    kpointlabels = Makie.latexstring.(kpath)
+    tRange = eachindex(p1)
+    xygrid = [(x,y) for x in qx, y in qy]
+
+    
+    axPath = Axis(fig[2,1:2],ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
+    )
+    tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
+    
+
+    p1_points = xygrid[p1_discrete]
+
+    Sqcut = [Sq(x,y) for (x,y) in p1_points]
+    Sqerrcut = [Sqerr(x,y) for (x,y) in p1_points]
+    SqFT = [SqFieldTheory(q,fittingCoefs) for q in p1_points]
+
+    # SqFT = [AsymFieldTheory(q,1,10) for q in qpoints]
+    scatter!(ax,p1_points,marker = '∘' ,color = colorGFMC,markersize = 15)
+    scatterlines!(axFT,p1_points,color = colorFT,linestyle = :dash,marker = '●',markersize = 2)
+    # tRange = SW.norm.(p1).^2
+    scatterlines!(axPath,tRange,SqFT,color = colorFT,linestyle = :dash,marker = '●',markersize = 8)
+    
+    text!(axFT,Point(0,0),text="Γ",color = :white,align = (:center,:center))
+    text!(axFT,Point(pi,0),text="X",color = :white,align = (:center,:center))
+    text!(axFT,Point(0,pi),text="X'",color = :white,align = (:center,:center))
+
+    scatter!(axPath,tRange,Sqcut,
+    marker = '∘',markersize = 18,color = colorGFMC)
+    errorbars!(axPath,tRange,Sqcut,Sqerrcut,color = colorGFMC,whiskerwidth = 6,linewidth=0.5)
+
+    rowsize!(fig.layout,1,Relative(0.5))
+    ylims!(axPath,0,1.2)
+    # text!(axFT,Point(pi,1.4pi),text=L"r = %$(strd(fittingCoefs[2]))",color = :white,align = (:center,:center))
+    # Label(fig[1,1, TopLeft()],L"a)$$",padding = (-30,0,-10,0))
+    # Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-10,0))
+    # Label(fig[2,1, TopLeft()],L"c)$$",padding = (-30,0,-10,0))
+    # Label(fig[3,1, TopLeft()],L"d)$$",padding = (-30,0,-10,0))
+
+    fig
+end

@@ -102,6 +102,7 @@ function filterConfs(UCs,Spin)
     return aSet
     
 end
+
 function makeConf(UC,L,Spin)
     S = SW.stencilConfig(zeros(L,L),Spin;
     boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()

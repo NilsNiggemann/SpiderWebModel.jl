@@ -22,7 +22,7 @@ SW.initGurobi()
 @testset "JuMP construction" begin
 
     L = 20
-    sols = SW.floatSpinConfig.(SW.constructGroundstates(L, 200, 1 / 7), 1 / 2)
+    sols = SW.floatSpinConfig.(SW.constructGroundstates(L, 200, 1 / 7).solutions, 1 / 2)
     @test length(sols) > 0
     @test all(SW.fulFillsConstraint, sols)
 end

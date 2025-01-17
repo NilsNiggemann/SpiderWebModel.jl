@@ -113,7 +113,7 @@ function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatri
 end
 stochastic_reconfiguration_step(E_i,Ok_i,::AbstractSRSolver) = error("solver not implemented")
 
-function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,GWF::SymmetryReducedWaveFunction,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = 6,nThreads=2*Threads.nthreads(),outfile=nothing,reconfigure=true,initializer = UnguidedWalkInitializer(equilibration_steps,0.8);verbose=true,report_steps=1,reset = true)
+function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,GWF::SymmetryReducedWaveFunction,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = Threads.nthreads(),nThreads=2*Threads.nthreads(),outfile=nothing,initializer = UnguidedWalkInitializer(equilibration_steps,0.8);verbose=true,report_steps=1,reset = false)
     
     (;psi,indicesMapping,uniqueInds) = GWF
     ψG = deepcopy(psi)
@@ -125,8 +125,8 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
     # _, = getDistReduction(InitialState,ψG)
     maxNSteps = maximum(NSteps)
     prob = setup_GFMC_problem(InitialState,method,Nwalkers,maxNSteps,nThreads,ψG)
-    initializeGFMC!(prob,nThreads,equilibration_steps,initializer,reconfigure)
-
+    initializeGFMC!(prob,equilibration_steps,initializer)
+    equilibrate!(prob,equilibration_steps;nThreads,reconfigure=false)
     results = get_stoch_rec_Observables(n,ψG,outfile)
 
     ind = 0
@@ -143,10 +143,12 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
         #     get_config(w) .= InitialState
         # end
         fill_all_Buffers!(prob,nThreads)
-        reset && initializeGFMC!(prob,nThreads,equilibration_steps,initializer,reconfigure)
-
+        if reset
+            initializeGFMC!(prob,equilibration_steps,initializer)
+            equilibrate!(prob,equilibration_steps;nThreads,reconfigure=false)
+        end
         # @time res = runGFMC!(prob,range,reconfigure)
-        res = runGFMC!(prob,range,nThreads,reconfigure)
+        res = runGFMC!(prob,range,nThreads,false)
 
         resSlice = @view res.SaveConfigs[:,:,:,range]
         confs = eachslice( resSlice,dims=(3,4))
@@ -200,7 +202,6 @@ function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSte
     outfile=nothing,
     pre_equilibration_steps=5*equilibration_steps,
     scatter_fraction=0.8,
-    reconfigure=true,
     nThreads=2*Threads.nthreads(),
     initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),
     kwargs...)
@@ -209,7 +210,7 @@ function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSte
     dtVec = makeVec(dt,n)
     GWF = _default_symmetry(InitialState,ψG)
 
-    return _stochastic_reconfiguration(InitialState,method,solver,NStepsVec,GWF,n,dtVec,equilibration_steps,rel_tolerance,Nwalkers,nThreads,outfile,reconfigure,initializer;kwargs...)
+    return _stochastic_reconfiguration(InitialState,method,solver,NStepsVec,GWF,n,dtVec,equilibration_steps,rel_tolerance,Nwalkers,nThreads,outfile,initializer;kwargs...)
 end
 
 _default_symmetry(InitialState,ψG::AbstractGuidingFunction) = getDistReduction(InitialState,ψG)
