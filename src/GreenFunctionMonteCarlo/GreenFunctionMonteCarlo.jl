@@ -449,10 +449,9 @@ end
 # end
 
 
-function runGFMC!(prob::AbstractGFMCProblem,range,nThreads,reconfigure::Bool = true,save_energies::Bool = true,saveObservables::Bool = true)
+function runGFMC!(prob::AbstractGFMCProblem,range::UnitRange,nThreads,reconfigure::Bool = true,save_energies::Bool = true,saveObservables::Bool = true)
     (;Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,Observables,ψG,method) = prob
     reconfigurationTable = get_reconfigurationTable(Observables)
-    
     iter = 0
     for i in range
         iter += 1
@@ -473,6 +472,7 @@ function runGFMC!(prob::AbstractGFMCProblem,range,nThreads,reconfigure::Bool = t
     end
     return Observables
 end
+runGFMC!(prob::AbstractGFMCProblem,range::Integer,nThreads,reconfigure::Bool = true,save_energies::Bool = true,saveObservables::Bool = true) = runGFMC!(prob,1:range,nThreads,reconfigure,save_energies,saveObservables)
 runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int;nThreads = 2*Threads.nthreads(),reconfigure=true,save_energies=true,saveObservables = true) = runGFMC!(prob,1:Nsteps,nThreads,reconfigure,save_energies,saveObservables)
 
 function propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,method::DiscreteTimeMethod)
