@@ -23,17 +23,18 @@ get_energies(O::GFMCObservables_StructureFac) = O.Buffers.energies
 get_TotalWeights(O::GFMCObservables_StructureFac) = O.Buffers.TotalWeights
 get_outfile(O::GFMCObservables_StructureFac) = O.outfile
 
-function create_Sq_Buffers(InitConfig,NWalkers,m_proj)
+function create_Sq_Buffers(InitConfig,NWalkers,m_proj,NSteps)
     p_proj = 2m_proj #projection of forward walking needs to be twice the projection of the wavefunction
     Lx,Ly = size(InitConfig)
     
-    energies = CircularArrays.CircularArray(zeros(p_proj))
-    TotalWeights = CircularArrays.CircularArray(zeros(p_proj))
-    reconfigurationTable = CircularArrays.CircularArray(zeros(Int,NWalkers,p_proj))
-    PopulationMatrix = CircularArrays.CircularArray(zeros(Int,NWalkers,m_proj))
-    Gnps = CircularArrays.CircularArray(zeros(Float64,p_proj,p_proj))
-    SqBuffers = CircularArrays.CircularArray(zeros(Float32,Lx,Ly,NWalkers,m_proj))
 
+    len_energies = p_proj
+    energies = CircularArrays.CircularArray(zeros(len_energies))
+    TotalWeights = CircularArrays.CircularArray(zeros(len_energies))
+    reconfigurationTable = CircularArrays.CircularArray(zeros(Int,NWalkers,len_energies))
+    PopulationMatrix = CircularArrays.CircularArray(zeros(Int,NWalkers,m_proj))
+    Gnps = CircularArrays.CircularArray(zeros(Float64,len_energies,p_proj))
+    SqBuffers = CircularArrays.CircularArray(zeros(Float32,Lx,Ly,NWalkers,m_proj))
     en_numerator = zeros(m_proj)
     en_denominator = zeros(m_proj)
 
@@ -48,7 +49,7 @@ end
 function setup_Sq_Observables(InitConfig,NWalkers,NSteps,m_proj,outfile::Nothing)
     Lx,Ly = size(InitConfig)
 
-    Buffers = create_Sq_Buffers(InitConfig,NWalkers,m_proj)
+    Buffers = create_Sq_Buffers(InitConfig,NWalkers,m_proj,NSteps)
     StructureFactor = zeros(Lx,Ly,m_proj)
     Energy = zeros(m_proj)
     return GFMCObservables_StructureFac(Energy,StructureFactor,Buffers,outfile)
@@ -96,13 +97,20 @@ end
 
 function updateGnp!(Gnp,TotalWeights,n)
     nMax,pMax = size(Gnp)
-    for p in 1:pMax
-        if n-p < 1
+    meanweight = 1
+    Gnp[n,1] = 1 #zero projection order
+    Gnp[n,2] = TotalWeights[n]/meanweight # first projection order
+
+    for p in 3:pMax
+        if n < p
             Gnp[n,p] = 0
             continue
         end
-        
-        Gnp[n,p] = prod(@view TotalWeights[n-p:n])
+        Gnp[n,p] = Gnp[n-1,p-1]*Gnp[n,2]
+        # Gnp[n,p] = prod(@view TotalWeights[n-p+1:n])
+        # if p == 2 && n > 1000
+        #     println(TotalWeights[n-p+1:n])
+        # end
     end
     return
 end
@@ -126,8 +134,10 @@ function updateEnergies!(Observables::GFMCObservables_StructureFac,i,Walkers::Ab
     Energy = Observables.Energy
     en_numerator = Observables.Buffers.en_numerator
     en_denominator = Observables.Buffers.en_denominator
+
     updateGnp!(Gnps,TotalWeights,i)
     getEnergy_step!(en_numerator,en_denominator,Gnps,energies,i)
+
     normalized_En!(Energy,en_numerator,en_denominator)
     return nothing
 end
@@ -163,12 +173,13 @@ function saveObservables!(Observables::GFMCObservables_StructureFac,n,Walkers::A
     
 end
 
-function getEnergy_step!(Energy,en_denominator,Gnp,localEnergies,n)
-    for p in eachindex(Energy)
+function getEnergy_step!(en_numerator,en_denominator,Gnp,localEnergies,n)
+    for p in eachindex(en_numerator)
+        n > p || continue
+        en_numerator[p] += Gnp[n,p]*localEnergies[n]
         en_denominator[p] += Gnp[n,p]
-        Energy[p] += Gnp[n,p]*localEnergies[n]
     end
-    return Energy
+    return en_numerator
 end
 
 function getPopulationMatrix!(PopulationMatrix,reconfigurationTable::AbstractMatrix,n,projectionLength)
@@ -237,24 +248,36 @@ end
 function normalized_En(Observables::GFMCObservables_StructureFac)
     numerator = Observables.Buffers.en_numerator
     denominator = Observables.Buffers.en_denominator
-    return normalized_En(numerator,denominator)
+    Energy = Observables.Energy
+    return normalized_En!(copy(Energy),numerator,denominator)
 end
-normalized_En(numerator,denominator) = numerator ./ denominator
-normalized_En!(Energy,numerator,denominator) = Energy .= numerator ./ denominator
+function normalized_En!(Energy,numerator,denominator)
+    @views for p in eachindex(Energy)
+        Energy[p] = sum(numerator[p,:]) / sum(denominator[p,:])
+    end
+end
 
 function get_w_avg_estimate(prob)
     Observables = prob.Observables
-
+    Gnps = Observables.Buffers.Gnps
+    en_denominator = Observables.Buffers.en_denominator
+    en_numerator = Observables.Buffers.en_numerator
     energies = get_energies(Observables)
     TotalWeights = get_TotalWeights(Observables)
 
-    Energy = normalized_En(Observables)
+    # Energy = normalized_En(Observables)
+    Energy = Observables.Energy
     minpos = findfirst(>(0),diff(Energy))
+    minpos = isnothing(minpos) ? lastindex(Energy) : minpos
     E0 = Energy[minpos]
     
     fill!(energies,zero(eltype(energies)))
     fill!(TotalWeights,zero(eltype(TotalWeights)))
-    
+    fill!(Energy,zero(eltype(Energy)))
+    fill!(Gnps,zero(eltype(Gnps)))
+    fill!(en_denominator,zero(eltype(en_denominator)))
+    fill!(en_numerator,zero(eltype(en_numerator)))
+
     w_avg_estimate = -E0
     # w_avg_estimate = -mean(energies)
     

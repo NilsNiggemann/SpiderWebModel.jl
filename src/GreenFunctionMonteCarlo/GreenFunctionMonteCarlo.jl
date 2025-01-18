@@ -186,9 +186,10 @@ function normalizedAccWeight(weights,n,p)
     prod(weights[n-j]/meanweight for j in 1:p)
 end
 
-function precomputeNormalizedAccWeight(weights,nThermal,PMax)
+function precomputeNormalizedAccWeight(weights,nThermal,PMax;normalize=true)
     bn = @view weights[nThermal:end]
-    meanweight = mean(bn)
+    # meanweight = mean(bn)
+    meanweight = normalize ? mean(bn) : 1
     # meanweight = mean(weights)
     
     Gnp = zeros(length(bn),PMax)
@@ -401,7 +402,7 @@ function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0,initial
 end
 
 function equilibrate!(prob::AbstractGFMCProblem,equilibration_steps;nThreads=Threads.nthreads(),reconfigure=true)
-    runGFMC!(prob,equilibration_steps,nThreads,reconfigure,false,false)
+    runGFMC!(prob,equilibration_steps,nThreads,reconfigure,false,false,false)
 end
 
 function pre_estimate_energies!(Observables,weights,Walkers,method,i,equilibration_steps)
@@ -449,7 +450,7 @@ end
 # end
 
 
-function runGFMC!(prob::AbstractGFMCProblem,range::UnitRange,nThreads,reconfigure::Bool = true,save_energies::Bool = true,saveObservables::Bool = true)
+function runGFMC!(prob::AbstractGFMCProblem,range::UnitRange,nThreads,reconfigure::Bool = true,save_energies::Bool = true,saveObservables::Bool = true,track_recombination = false)
     (;Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,Observables,ψG,method) = prob
     reconfigurationTable = get_reconfigurationTable(Observables)
     iter = 0
@@ -459,7 +460,8 @@ function runGFMC!(prob::AbstractGFMCProblem,range::UnitRange,nThreads,reconfigur
         propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,method)
         save_energies && updateEnergies!(Observables,i,Walkers,weights,method)
         if reconfigure
-            reconfigurationList = @view reconfigurationTable[:,i]
+            recomb_idx = track_recombination ? i : 1
+            reconfigurationList = @view reconfigurationTable[:,recomb_idx]
             reconfiguration!(Walkers,Guiding_function_buffer,reconfigurationList,reconfiguration_buffer,weights)
             # fill_all_Buffers!(prob,nThreads)
 
@@ -472,8 +474,8 @@ function runGFMC!(prob::AbstractGFMCProblem,range::UnitRange,nThreads,reconfigur
     end
     return Observables
 end
-runGFMC!(prob::AbstractGFMCProblem,range::Integer,nThreads,reconfigure::Bool = true,save_energies::Bool = true,saveObservables::Bool = true) = runGFMC!(prob,1:range,nThreads,reconfigure,save_energies,saveObservables)
-runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int;nThreads = 2*Threads.nthreads(),reconfigure=true,save_energies=true,saveObservables = true) = runGFMC!(prob,1:Nsteps,nThreads,reconfigure,save_energies,saveObservables)
+runGFMC!(prob::AbstractGFMCProblem,range::Integer,args...) = runGFMC!(prob,1:range,args...)
+runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int;nThreads = 2*Threads.nthreads(),reconfigure=true,save_energies=true,saveObservables = true,track_recombination=true) = runGFMC!(prob,1:Nsteps,nThreads,reconfigure,save_energies,saveObservables,track_recombination)
 
 function propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,method::DiscreteTimeMethod)
     (;Λ,nBranch) = method

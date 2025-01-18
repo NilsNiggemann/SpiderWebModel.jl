@@ -85,7 +85,7 @@ function plotEnergies!(ax::Makie.Axis,results,method,E0=NaN;Emin=E0-1e-2,Emax=E0
         projSteps = round(Int,τ/method.τ)
     end
 
-    ens = [SW.getEnergies(res.TotalWeights,res.energies,nThermal,projSteps) for res in results]
+    ens = [SW.getEnergies(SW.get_TotalWeights(res),SW.get_energies(res),nThermal,projSteps) for res in results]
     en = mean(ens)
     # e0avg = minimum(en) -1e-5
     # en = log.(en .- e0avg)

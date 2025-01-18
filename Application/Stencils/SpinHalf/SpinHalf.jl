@@ -95,6 +95,7 @@ h5write("../../Data/energy_mu_S12.h5","energy4",ens4)
 
 S = getSectorConfig(16,1)
 ψGSymm = initializeGWF(S,SW.TranslationalSymmetry([-2,2],[2,2]))
+ψG = ψGSymm.psi
 CT = SW.ContinuousTimeMethod(0.1,w_avg_estimate = 0.1*length(S),Hxx = SW.Hxx_RK(0.0))
 CTSR = SW.ContinuousTimeMethod(30*CT.τ,w_avg_estimate = CT.w_avg_estimate,Hxx = CT.Hxx)
 
@@ -105,17 +106,19 @@ CTSR = SW.ContinuousTimeMethod(30*CT.τ,w_avg_estimate = CT.w_avg_estimate,Hxx =
 fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,1000,5000,150,equilibration_steps=1000,ψG.psi,estimate_w_avg=true,outfile = "../../Data/obsS12_staircase/obsS12_staircase_mu0_$i.h5") for i in 1:12])
 ##
 # ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,20*10,2000,150,ψG,equilibration_steps=1000,estimate_w_avg=true) for i in 1:12])
-results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,60,2000,ψG,equilibration_steps=2000) for _ in 1:12])
+results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,30,10000,ψG,equilibration_steps=2000) for _ in 1:20])
 ##
 SW.Random.seed!(1232)
-ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,60,1999,100,ψG,equilibration_steps=2000,estimate_w_avg=true) for i in 1:12])
+ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,30,10000,100,ψG,equilibration_steps=2000,estimate_w_avg=true) for i in 1:20])
 ##
 en_direct = stack([ObsRuns.Energy for ObsRuns in ObsRuns])
 
 plotEnergies(results,CT,nThermal=1,τ=10,normalize=false)
+# plotEnergies!(ObsRuns,CT,nThermal=1,τ=10,normalize=false,color = :red)
 errlines!((0:size(en_direct,1)-1).*CT.τ,dropmean(en_direct,dims=2),dropstd(en_direct,dims=2))
 current_figure()
 ##
+Sqs = stack([SW.expand_Sq(O.StructureFactor) for O in ObsRuns])
 with_theme(theme_PiTicks()) do
     fig = Figure(fontsize = 22,size = (400,320))
     ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1,xticks = PiTicks((0,pi)),yticks = PiTicks((0,pi)))
