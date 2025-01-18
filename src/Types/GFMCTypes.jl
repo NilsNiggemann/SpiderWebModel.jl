@@ -41,7 +41,7 @@ struct ContinuousTimeMethod{F2} <: AbstractGFMCMethod
     Hxx::F2
 end
 ContinuousTimeMethod(τ;w_avg_estimate=1.,Hxx=Hxx_zero()) = ContinuousTimeMethod(float(τ),w_avg_estimate,Hxx)
-set_w_avg_estimate(method::ContinuousTimeMethod,w_avg_estimate) = ContinuousTimeMethod(method.τ,w_avg_estimate,method.Hxx)
+set_w_avg_estimate(method::ContinuousTimeMethod,w_avg_estimate) = ContinuousTimeMethod(method.τ,Float64(w_avg_estimate),method.Hxx)
 
 abstract type AbstractGFMCProblem end
 struct SpiderwebGFMCProblem{MethodType<:AbstractGFMCMethod,T<:AbstractFloat,BufferType,C,F,W,O} <: AbstractGFMCProblem

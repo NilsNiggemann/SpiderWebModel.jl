@@ -6,13 +6,15 @@ struct SqObs_Buffers{T_high<:AbstractFloat,T_low<:AbstractFloat,FFTType<:SqFFT} 
     Gnps::CircularArrays.CircularMatrix{T_high}
     reconfigurationTable::CircularArrays.CircularMatrix{Int}
     PopulationMatrix::CircularArrays.CircularMatrix{Int}
+    Sq_numerator::Array{T_high,3}
+    Sq_denominator::Vector{T_high}
+    en_numerator::Vector{T_high}
+    en_denominator::Vector{T_high}
 end
 
 struct GFMCObservables_StructureFac{T<:AbstractFloat,BuffType<:SqObs_Buffers,T2} <: AbstractGFMCObservables
     Energy::Vector{T}
-    Sq_numerator::Array{T,3}
-    obs_denominator::Vector{T}
-    en_denominator::Vector{T}
+    StructureFactor::Array{T,3}
     Buffers::BuffType
     outfile::T2
 end
@@ -32,23 +34,24 @@ function create_Sq_Buffers(InitConfig,NWalkers,m_proj)
     Gnps = CircularArrays.CircularArray(zeros(Float64,p_proj,p_proj))
     SqBuffers = CircularArrays.CircularArray(zeros(Float32,Lx,Ly,NWalkers,m_proj))
 
+    en_numerator = zeros(m_proj)
+    en_denominator = zeros(m_proj)
+
+    Sq_numerator = zeros(Lx,Ly,m_proj)
+    Sq_denominator = zeros(m_proj)
+    
     FFTBuffers = fetch.([Threads.@spawn SqFFT((Lx,Ly)) for i in 1:NWalkers])
     
-    return SqObs_Buffers(TotalWeights,energies,FFTBuffers,SqBuffers,Gnps,reconfigurationTable,PopulationMatrix)
+    return SqObs_Buffers(energies,TotalWeights,FFTBuffers,SqBuffers,Gnps,reconfigurationTable,PopulationMatrix,Sq_numerator,Sq_denominator,en_numerator,en_denominator)
 end
 
 function setup_Sq_Observables(InitConfig,NWalkers,NSteps,m_proj,outfile::Nothing)
     Lx,Ly = size(InitConfig)
 
     Buffers = create_Sq_Buffers(InitConfig,NWalkers,m_proj)
-
-    Energy = zeros(Float64,m_proj)
-    en_denominator = zeros(Float64,m_proj)
-
-    Sq_numerator = zeros(Lx,Ly,m_proj)
-    obs_denominator = zeros(Float64,m_proj)
-
-    return GFMCObservables_StructureFac(Energy,Sq_numerator,obs_denominator,en_denominator,Buffers,outfile)
+    StructureFactor = zeros(Lx,Ly,m_proj)
+    Energy = zeros(m_proj)
+    return GFMCObservables_StructureFac(Energy,StructureFactor,Buffers,outfile)
 end
 function setup_Sq_Observables(InitConfig,NWalkers,NSteps,m_proj,filename::String)
     p_proj = 2m_proj
@@ -59,10 +62,8 @@ function setup_Sq_Observables(InitConfig,NWalkers,NSteps,m_proj,filename::String
         file["NWalkers"] = NWalkers
         file["NSteps"] = NSteps
         Energy = createMMapArray(file,"Energy",Float64,(m_proj,))
-        Sq_numerator = createMMapArray(file,"Sq_numerator",Float64,(Lx,Ly,m_proj))
-        obs_denominator = createMMapArray(file,"obs_denominator",Float64,(m_proj,))
-        en_denominator = createMMapArray(file,"en_denominator",Float64,(m_proj,))
-        return GFMCObservables_StructureFac(Energy,Sq_numerator,obs_denominator,en_denominator,Buffers,filename)
+        StructureFactor = createMMapArray(file,"StructureFactor",Float32,(Lx,Ly,m_proj))
+        return GFMCObservables_StructureFac(Energy,StructureFactor,Buffers,filename)
     end
 end
 
@@ -117,21 +118,23 @@ end
 function updateEnergies!(Observables::GFMCObservables_StructureFac,i,Walkers::AbstractVector{<:AbstractWalker},weights,method)
     energies = get_energies(Observables)
     TotalWeights = get_TotalWeights(Observables)
+
     energies[i] = getLocalEnergyWalkers_before(weights,Walkers,method)
     TotalWeights[i] = mean(weights)
+
     Gnps = Observables.Buffers.Gnps
     Energy = Observables.Energy
-    en_denominator = Observables.en_denominator
+    en_numerator = Observables.Buffers.en_numerator
+    en_denominator = Observables.Buffers.en_denominator
     updateGnp!(Gnps,TotalWeights,i)
-    getEnergy_step!(Energy,en_denominator,Gnps,energies,i)
-
+    getEnergy_step!(en_numerator,en_denominator,Gnps,energies,i)
+    normalized_En!(Energy,en_numerator,en_denominator)
     return nothing
 end
 
 function saveObservables!(Observables::GFMCObservables_StructureFac,n,Walkers::AbstractVector{<:SpiderWebWalker})
 
-    (;Sq_numerator,obs_denominator) = Observables
-    (;reconfigurationTable,Gnps,SqBuffers,PopulationMatrix,FFTBuffers) = Observables.Buffers
+    (;Sq_numerator,Sq_denominator,reconfigurationTable,Gnps,SqBuffers,PopulationMatrix,FFTBuffers) = Observables.Buffers
 
     compute_Sq_Walkers!(SqBuffers,Walkers,n,FFTBuffers)
 
@@ -146,8 +149,8 @@ function saveObservables!(Observables::GFMCObservables_StructureFac,n,Walkers::A
     Threads.@threads for m_index in eachindex(m_values)
         m = m_values[m_index]
         Gnp = Gnps[n,1+2m]
-        obs_denominator[m_index] += Gnp
-        # obs_denominator[m_index] += Gnp*Nw
+        Sq_denominator[m_index] += Gnp
+        # Sq_denominator[m_index] += Gnp*Nw
         @views for α in 1:Nw
             mult = PopulationMatrix[α,m_index]
             mult == 0 && continue
@@ -156,7 +159,8 @@ function saveObservables!(Observables::GFMCObservables_StructureFac,n,Walkers::A
             @. Sq_numerator[:,:,m_index] += O*Gnp*mult
         end
     end
-
+    normalized_Sq!(Observables.StructureFactor,Sq_numerator,Sq_denominator)
+    
 end
 
 function getEnergy_step!(Energy,en_denominator,Gnp,localEnergies,n)
@@ -210,49 +214,49 @@ function set_w_avg_estimate(prob::T,w_avg_estimate)::T where {T<:SpiderwebGFMCPr
 end
 
 function normalized_Sq(Observables::GFMCObservables_StructureFac,expand=true)
-    return normalized_Sq(Observables.Sq_numerator,Observables.obs_denominator,expand)
+    return normalized_Sq(Observables.Buffers.Sq_numerator,Observables.Buffers.Sq_denominator,expand)
 end
-function normalized_Sq(numerator0::AbstractArray{T,3},denominator::AbstractVector,expand=true) where T
-    numerator = copy(numerator0)
-    for i in eachindex(denominator)
-        @. numerator[:,:,i] ./= denominator[i]
-    end
+function normalized_Sq(Sq_numerator::AbstractArray{T,3},Sq_denominator::AbstractVector,expand=true) where T
+    Sq = copy(Sq_numerator)
+    normalize_Sq!(Sq,Sq_numerator,Sq_denominator)
     if expand 
-        return expand_Sq(numerator)
+        return expand_Sq(Sq)
     end
-    return numerator
+    return Sq
+end
+function normalized_Sq!(Sq,Sq_numerator,Sq_denominator) 
+    for i in eachindex(Sq_denominator)
+        @. Sq[:,:,i] = Sq_numerator[:,:,i] / Sq_denominator[i]
+    end
+    return Sq
 end
 function expand_Sq(Sq::AbstractArray{T,3}) where T
     SqCirc = CircularArrays.CircularArray(Sq)
     return Array(SqCirc[1:end+1,1:end+1,:])
 end
 function normalized_En(Observables::GFMCObservables_StructureFac)
-    numerator = Observables.Energy
-    denominator = Observables.en_denominator
+    numerator = Observables.Buffers.en_numerator
+    denominator = Observables.Buffers.en_denominator
     return normalized_En(numerator,denominator)
 end
 normalized_En(numerator,denominator) = numerator ./ denominator
-
-function ensure_numeric_w_avg!(method)
-    if !isfinite(get_w_avg_estimate(method))
-        set_w_avg_estimate!(method,0.)
-        return true
-    end
-    return false
-end
+normalized_En!(Energy,numerator,denominator) = Energy .= numerator ./ denominator
 
 function get_w_avg_estimate(prob)
     Observables = prob.Observables
-    method = prob.method
 
     energies = get_energies(Observables)
     TotalWeights = get_TotalWeights(Observables)
 
-    Energy = normalized_En(Observables)[begin]
+    Energy = normalized_En(Observables)
+    minpos = findfirst(>(0),diff(Energy))
+    E0 = Energy[minpos]
     
     fill!(energies,zero(eltype(energies)))
     fill!(TotalWeights,zero(eltype(TotalWeights)))
     
-    w_avg_estimate = -Energy
+    w_avg_estimate = -E0
+    # w_avg_estimate = -mean(energies)
+    
     return w_avg_estimate
 end

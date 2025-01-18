@@ -85,7 +85,7 @@ function premove_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::Simple
     return Buffer
 end
 
-function compute_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::SimpleJastrowFunction,Walker::SpiderWebWalker)
+Base.@propagate_inbounds function compute_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::SimpleJastrowFunction,Walker::SpiderWebWalker)
 
     x = Buffer.x_i
 
@@ -94,6 +94,8 @@ function compute_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::SimpleJastrow
     v = get_v_ij(ψG)
     h = Buffer.h_i
     # fill!(h,0.0)
+    @boundscheck checkbounds(x,axes(v,1))
+    @boundscheck checkbounds(h,axes(v,1))
 
     LoopVectorization.@turbo for i in axes(v,1)
         hi = 0.

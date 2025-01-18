@@ -468,11 +468,11 @@ plotVarEn(stochReconfRes)
 CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2),w_avg_estimate = -1.3*stochReconfRes.E0[end])
 SW.get_params(ψG) .= stochReconfRes.params
 @time begin
-    resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,50,1000,ψG;equilibration_steps=1000) for i in 1:80])
+    resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,50,1000,ψG;equilibration_steps=1000) for i in 1:12])
     SqsGFMC = SW.getSqsGFMC(resultsCT,1:100)
 end
 ##
-ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,50,1000,100,ψG,equilibration_steps=1000) for i in 1:80])
+ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,50,1000,100,ψG,equilibration_steps=1000) for i in 1:12])
 
 ##
 en_direct = stack([SW.normalized_En(ObsRuns) for ObsRuns in ObsRuns])
