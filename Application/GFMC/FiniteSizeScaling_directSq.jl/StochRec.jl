@@ -50,6 +50,7 @@ jobs_array = [(;L,μ) for L in Ls for μ in μs]
 (;L,μ) = jobs_array[i_arg]
 if μ==1.0
     @info "skipping μ=1.0 for stoch rec"
+    exit()
 end
 τ = 0.10+ 0.1μ
 ##
@@ -203,11 +204,7 @@ if !isfile(outfileSR)
     @info "starting run" L τ NStepsEnd NWalkers_stochRec outfileSR
     stochReconfRes = SW.stochastic_reconfiguration(parentState,CT_stochRec,NStepsEnd,ψGSymm,NBins,stoch_rec_learning_rate,SW.IterativeSRSolver();Nwalkers = NWalkers_stochRec,rel_tolerance=0.,equilibration_steps=equilibration_steps_stochRec,pre_equilibration_steps=100_000,scatter_fraction,outfile=outfileSR,reset = false,report_steps = report_steps_SR)
 
-    SW.get_params(ψG) .= stochReconfRes.params
     # ψG = SW.PlaquetteNumberGuidingFunction(only(unique(optim_params[1])))
-else
-    idx = findNonZeroEn(outfileSR)
-    SW.get_params(ψG) .= findNonZeroParams(outfileSR,idx)
 end
 
 println("stochastic reconf done")

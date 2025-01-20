@@ -1,17 +1,19 @@
 using StaticArrays
 using Optim
 using MakieHelpers
+using CairoMakie
+import SpiderWebModel as SW
 ##
 dropmean(A; dims=:) = dropdims(mean(A; dims=dims); dims=dims)
 dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
 
-function errlines!(ax::Makie.AbstractAxis,x,y,err;bandkwargs = (;),kwargs...)
+function errlines!(ax::MakieHelpers.Makie.AbstractAxis,x,y,err;bandkwargs = (;),kwargs...)
     l = lines!(ax,x,y;kwargs...)
     band!(ax,x,y .- err,y .+ err;color = (l.color[],0.3),bandkwargs...)
 end
 errlines!(x,y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),x,y,err;bandkwargs,kwargs...)
 errlines!(y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),eachindex(y),y,err;bandkwargs,kwargs...)
-errlines!(ax::Makie.AbstractAxis,y,err;bandkwargs = (;),kwargs...) = errlines!(ax,eachindex(y),y,err;bandkwargs,kwargs...)
+errlines!(ax::MakieHelpers.Makie.AbstractAxis,y,err;bandkwargs = (;),kwargs...) = errlines!(ax,eachindex(y),y,err;bandkwargs,kwargs...)
 function errlines(args...;axis = (;),kwargs...)
     fig = Figure()
     ax = Axis(fig[1,1];axis...)
@@ -20,7 +22,7 @@ function errlines(args...;axis = (;),kwargs...)
     fig
 end
 
-function numberheatmap!(ax::Makie.AbstractAxis,x,y,z;plotheatmap=true,kwargs...)
+function numberheatmap!(ax::MakieHelpers.Makie.AbstractAxis,x,y,z;plotheatmap=true,kwargs...)
     if plotheatmap
         heatmap!(ax,x,y,z;kwargs...)
     end
