@@ -154,9 +154,10 @@ function updateEnergies!(Observables::GFMCObservables_StructureFac,i,Walkers::Ab
     en_denominator = Observables.Buffers.en_denominator
 
     updateGnp!(Gnps,TotalWeights,i)
-    getEnergy_step!(en_numerator,en_denominator,Gnps,energies,i)
+    NSites = length(get_config(Walkers[begin]))
+    getEnergy_step!(en_numerator,en_denominator,Gnps,energies,i,NSites)
 
-    normalized_En!(Energy,en_numerator,en_denominator)
+    normalized_En!(Energy,en_numerator,en_denominator,NSites)
     return nothing
 end
 
@@ -191,10 +192,11 @@ function saveObservables!(Observables::GFMCObservables_StructureFac,n,Walkers::A
     
 end
 
-function getEnergy_step!(en_numerator,en_denominator,Gnp,localEnergies,n)
+function getEnergy_step!(en_numerator,en_denominator,Gnp,localEnergies,n,NSites)
+    Nsites⁻¹ = 1/NSites
     for p in eachindex(en_numerator)
         n > p || continue
-        en_numerator[p] += Gnp[n,p]*localEnergies[n]
+        en_numerator[p] += Gnp[n,p]*localEnergies[n]*Nsites⁻¹
         en_denominator[p] += Gnp[n,p]
     end
     return en_numerator
@@ -276,28 +278,20 @@ function expand_Sq(Sq::AbstractArray{T,3}) where T
     SqCirc = CircularArrays.CircularArray(Sq)
     return Array(SqCirc[1:end+1,1:end+1,:])
 end
-function normalized_En(Observables::GFMCObservables_StructureFac)
+function normalized_En(Observables::GFMCObservables_StructureFac,NSites)
     numerator = Observables.Buffers.en_numerator
     denominator = Observables.Buffers.en_denominator
     Energy = Observables.Energy
-    return normalized_En!(copy(Energy),numerator,denominator)
+    return normalized_En!(copy(Energy),numerator,denominator,NSites)
 end
-function normalized_En!(Energy,numerator,denominator)
+function normalized_En!(Energy,numerator,denominator,NSites)
     @views for p in eachindex(Energy)
-        Energy[p] = sum(numerator[p,:]) / sum(denominator[p,:])
+        Energy[p] = NSites*sum(numerator[p,:]) / sum(denominator[p,:])
     end
 end
 
 function get_w_avg_estimate(prob)
-    Observables = prob.Observables
-    Gnps = Observables.Buffers.Gnps
-    en_denominator = Observables.Buffers.en_denominator
-    en_numerator = Observables.Buffers.en_numerator
-    energies = get_energies(Observables)
-    TotalWeights = get_TotalWeights(Observables)
-
-    # Energy = normalized_En(Observables)
-    Energy = Observables.Energy
+    Energy = prob.Observables.Energy
     
     minpos = findfirst(>(0),diff(Energy))
     minpos = isnothing(minpos) ? firstindex(Energy) : minpos
