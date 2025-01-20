@@ -448,41 +448,41 @@ equilib_plots(resultsDT;scatter_fraction,averageSteps=10,Ntrack=30,p = 300)
 ##
 
 SW.Random.seed!(1234)
-S = SW.stencilConfig(zeros(12,12),1,
+S = SW.stencilConfig(zeros(28,28),1,
 boundaryCondition = :periodic
 )
 S .= SW.get4x4PeriodicState(size(S,1),2)
-CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2))
+CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.0))
 ψG = SW.SimpleJastrowFunction(S)
 ψGSymm = SW.symmetrize(ψG,SW.TranslationalSymmetry([2,2],[2,-2]),S)
 SW.rand!(ψGSymm,1e-4)
 ##
 CTSR = SW.ContinuousTimeMethod(100*CT.τ,Hxx = CT.Hxx)
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,20 ,ψG,200,1e-3,SW.IterativeSRSolver();Nwalkers = 1*20,rel_tolerance=0,equilibration_steps=1000,pre_equilibration_steps=40_000,
-report_steps = 5,
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,200 ,ψGSymm,2000,2e-3,SW.IterativeSRSolver();Nwalkers = 1*20,rel_tolerance=0,equilibration_steps=1000,pre_equilibration_steps=40_000,
+report_steps = 1,
 )
 # stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,20,ψGSymm,300,5e-3 ,SW.IterativeSRSolver();Nwalkers = 20,reconfigure = false,rel_tolerance=1e-8,equilibration_steps=100,pre_equilibration_steps=50_000,report_steps=10,reset=false)
 plotVarEn(stochReconfRes)
 ##
 # CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2),w_avg_estimate = 1.1*(-stochReconfRes.E0[end] - stochReconfRes.ΔE[end]))
-CT = SW.ContinuousTimeMethod(0.1,Hxx = SW.Hxx_RK(0.2),w_avg_estimate = -1.3*stochReconfRes.E0[end])
+CT = SW.ContinuousTimeMethod(0.1,Hxx = CT.Hxx,w_avg_estimate = -1.3*stochReconfRes.E0[end])
 SW.get_params(ψG) .= stochReconfRes.params
-@time begin
-    resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,50,1000,ψG;equilibration_steps=1000) for i in 1:12])
-    SqsGFMC = SW.getSqsGFMC(resultsCT,1:100)
-end
+# @time begin
+#     resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,50,1000,ψG;equilibration_steps=1000) for i in 1:12])
+#     SqsGFMC = SW.getSqsGFMC(resultsCT,1:100)
+# end
 ##
-ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,50,1000,100,ψG,equilibration_steps=1000) for i in 1:12])
+mkdir("temp_S1_cond_3")
+ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,1000,5000,100,ψG,equilibration_steps=4000,outfile = "temp_S1_cond_3/S1_conden_L$(size(S,1))_$i.h5") for i in 1:12])
 
 ##
-en_direct = stack([SW.normalized_En(ObsRuns) for ObsRuns in ObsRuns])
-##
-plotEnergies(resultsCT,CT,nThermal=1,τ=10,normalize=false)
-errlines!((0:size(en_direct,1)-1).*CT.τ,dropmean(en_direct,dims=2),dropstd(en_direct,dims=2))
+en_direct = stack([ObsRuns.Energy for ObsRuns in ObsRuns])
+
+# plotEnergies(resultsCT,CT,nThermal=1,τ=10,normalize=false)
+errlines((0:size(en_direct,1)-1).*CT.τ,dropmean(en_direct,dims=2),dropstd(en_direct,dims=2))
 current_figure()
 ##
-SW.Random.seed!(1234)
-SqsGFMC_direct = stack([SW.normalized_Sq(Obs) for Obs in ObsRuns])
+SqsGFMC_direct = stack([Obs.StructureFactor for Obs in ObsRuns])
 ##
 
 with_theme(theme_SimpleTicks()) do
@@ -518,8 +518,8 @@ end
 ##
 
 with_theme(theme_SimpleTicks()) do 
-    SqMat = dropmean(SqsGFMC_direct,dims=4)[:,:,5]
-    SqErr = dropstd(SqsGFMC_direct,dims=4)[:,:,5]
+    SqMat = SW.expand_Sq(dropmean(SqsGFMC_direct,dims=4))[:,:,end]
+    SqErr = SW.expand_Sq(dropstd(SqsGFMC_direct,dims=4))[:,:,end]
     fittingCoefs = optimizeCoeffs(SqMat)
     fig = Figure(size = 120 .* (4,4),fontsize = 22)
 
@@ -556,6 +556,7 @@ with_theme(theme_SimpleTicks()) do
 
     
     axPath = Axis(fig[2,1:2],ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
+    # yscale = log10
     )
     tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
     
@@ -576,12 +577,13 @@ with_theme(theme_SimpleTicks()) do
     text!(axFT,Point(pi,0),text="X",color = :white,align = (:center,:center))
     text!(axFT,Point(0,pi),text="X'",color = :white,align = (:center,:center))
 
-    scatter!(axPath,tRange,Sqcut,
+    scatter!(axPath,tRange,Sqcut.+1e-30,
     marker = '∘',markersize = 18,color = colorGFMC)
-    errorbars!(axPath,tRange,Sqcut,Sqerrcut,color = colorGFMC,whiskerwidth = 6,linewidth=0.5)
+    errorbars!(axPath,tRange,Sqcut.+1e-30,Sqerrcut,color = colorGFMC,whiskerwidth = 6,linewidth=0.5)
 
     rowsize!(fig.layout,1,Relative(0.5))
-    ylims!(axPath,0,1.2)
+    # ylims!(axPath,0.01,nothing)
+    # ylims!(axPath,0,1.2)
     # text!(axFT,Point(pi,1.4pi),text=L"r = %$(strd(fittingCoefs[2]))",color = :white,align = (:center,:center))
     # Label(fig[1,1, TopLeft()],L"a)$$",padding = (-30,0,-10,0))
     # Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-10,0))

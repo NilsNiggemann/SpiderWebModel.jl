@@ -475,7 +475,8 @@ function runGFMC!(prob::AbstractGFMCProblem,range::UnitRange,nThreads,reconfigur
     return Observables
 end
 runGFMC!(prob::AbstractGFMCProblem,range::Integer,args...) = runGFMC!(prob,1:range,args...)
-runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int;nThreads = 2*Threads.nthreads(),reconfigure=true,save_energies=true,saveObservables = true,track_recombination=true) = runGFMC!(prob,1:Nsteps,nThreads,reconfigure,save_energies,saveObservables,track_recombination)
+runGFMC!(prob::AbstractGFMCProblem,range::UnitRange;nThreads = 2*Threads.nthreads(),reconfigure=true,save_energies=true,saveObservables = true,track_recombination=true) = runGFMC!(prob,range,nThreads,reconfigure,save_energies,saveObservables,track_recombination)
+runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int;kwargs...) = runGFMC!(prob,1:Nsteps;kwargs...)
 
 function propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,method::DiscreteTimeMethod)
     (;Λ,nBranch) = method

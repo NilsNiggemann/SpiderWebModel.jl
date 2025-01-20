@@ -371,6 +371,19 @@ function getLastSlice(arr::AbstractArray{T,N}) where {T,N}
     return view(arr,slicedims...,:)
 end
 
+function SqLargeN(qx,qy)
+    cx = cos(qx)
+    cy = cos(qy)
+    sx = sin(qx)
+    sy = sin(qy)
+    c2x = cos(2*qx)
+    c2y = cos(2*qy)
+
+    num = 2*(cx -cy +2sx*sy)^2
+    denom = 4 - 4*cx*cy - c2x*(1-2c2y) - c2y
+    return num/denom
+end
+
 function SqFieldTheory_full(qx::Real, qy::Real, K::Real, W::Real, U::Real)
     cx = cos(qx)
     cy = cos(qy)
