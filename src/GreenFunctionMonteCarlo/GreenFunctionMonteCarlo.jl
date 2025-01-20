@@ -301,11 +301,10 @@ function readMMapArray(filename::AbstractString,datasetname::String)
     end
 end
 
-function saveParameters(filename::String,Λ,equilibration_steps,nBranch,ψG,w_avg_estimate;kwargs...)
+function saveParameters(filename::String,Λ,equilibration_steps,ψG,w_avg_estimate;kwargs...)
     h5open(filename,"cw") do file
         file["Λ"] = Λ
         file["equilibration_steps"] = equilibration_steps
-        file["nBranch"] = nBranch
         file["w_avg_estimate"] = w_avg_estimate
         for (k,v) in kwargs
             file[String(k)] = v
@@ -315,11 +314,11 @@ function saveParameters(filename::String,Λ,equilibration_steps,nBranch,ψG,w_av
 end
 function saveParameters(filename::String,equilibration_steps,method::DiscreteTimeMethod,ψG)
     (;Λ,nBranch,w_avg_estimate) = method
-    saveParameters(filename,Λ,equilibration_steps,nBranch,ψG,w_avg_estimate)
+    saveParameters(filename,Λ,equilibration_steps,ψG,w_avg_estimate;nBranch=nBranch)
 end
 function saveParameters(filename::String,equilibration_steps,method::ContinuousTimeMethod,ψG)
     w_avg_estimate = method.w_avg_estimate
-    saveParameters(filename,Inf,equilibration_steps,nBranch,ψG,w_avg_estimate;τ=method.τ)
+    saveParameters(filename,Inf,equilibration_steps,ψG,w_avg_estimate;τ=method.τ)
 end
 
 saveParameters(::Nothing,args...) = nothing
@@ -450,10 +449,9 @@ end
 # end
 
 
-function runGFMC!(prob::AbstractGFMCProblem,range,nThreads,reconfigure::Bool = true,save_energies::Bool = true,saveObservables::Bool = true)
+function runGFMC!(prob::AbstractGFMCProblem,range::UnitRange,nThreads,reconfigure::Bool = true,save_energies::Bool = true,saveObservables::Bool = true)
     (;Walkers,weights,Guiding_function_buffer,reconfiguration_buffer,Observables,ψG,method) = prob
     reconfigurationTable = get_reconfigurationTable(Observables)
-    
     iter = 0
     for i in range
         iter += 1
@@ -474,6 +472,7 @@ function runGFMC!(prob::AbstractGFMCProblem,range,nThreads,reconfigure::Bool = t
     end
     return Observables
 end
+runGFMC!(prob::AbstractGFMCProblem,range::Integer,nThreads,reconfigure::Bool = true,save_energies::Bool = true,saveObservables::Bool = true) = runGFMC!(prob,1:range,nThreads,reconfigure,save_energies,saveObservables)
 runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int;nThreads = 2*Threads.nthreads(),reconfigure=true,save_energies=true,saveObservables = true) = runGFMC!(prob,1:Nsteps,nThreads,reconfigure,save_energies,saveObservables)
 
 function propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,method::DiscreteTimeMethod)
