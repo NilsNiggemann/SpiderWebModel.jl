@@ -11,12 +11,30 @@ struct SqObs_Buffers{T_high<:AbstractFloat,T_low<:AbstractFloat,FFTType<:SqFFT} 
     en_numerator::Vector{T_high}
     en_denominator::Vector{T_high}
 end
-
+set_zero!(A::AbstractArray{T,N}) where {T,N} = fill!(A,zero(T))
+function set_zero!(S::SqObs_Buffers)
+    set_zero!(S.TotalWeights)
+    set_zero!(S.energies)
+    set_zero!(S.Gnps)
+    set_zero!(S.reconfigurationTable)
+    set_zero!(S.PopulationMatrix)
+    set_zero!(S.Sq_numerator)
+    set_zero!(S.Sq_denominator)
+    set_zero!(S.en_numerator)
+    set_zero!(S.en_denominator)
+    return S
+end
 struct GFMCObservables_StructureFac{T<:AbstractFloat,BuffType<:SqObs_Buffers,T2} <: AbstractGFMCObservables
     Energy::Vector{T}
     StructureFactor::Array{T,3}
     Buffers::BuffType
     outfile::T2
+end
+function set_zero!(O::GFMCObservables_StructureFac)
+    set_zero!(O.Energy)
+    set_zero!(O.StructureFactor)
+    set_zero!(O.Buffers)
+    return O
 end
 get_reconfigurationTable(O::GFMCObservables_StructureFac) = O.Buffers.reconfigurationTable
 get_energies(O::GFMCObservables_StructureFac) = O.Buffers.energies
@@ -57,13 +75,13 @@ end
 function setup_Sq_Observables(InitConfig,NWalkers,NSteps,m_proj,filename::String)
     p_proj = 2m_proj
     Lx,Ly = size(InitConfig)
-    Buffers = create_Sq_Buffers(InitConfig,NWalkers,m_proj)
+    Buffers = create_Sq_Buffers(InitConfig,NWalkers,m_proj,NSteps)
 
     h5open(filename,"cw") do file
         file["NWalkers"] = NWalkers
         file["NSteps"] = NSteps
         Energy = createMMapArray(file,"Energy",Float64,(m_proj,))
-        StructureFactor = createMMapArray(file,"StructureFactor",Float32,(Lx,Ly,m_proj))
+        StructureFactor = createMMapArray(file,"StructureFactor",Float64,(Lx,Ly,m_proj))
         return GFMCObservables_StructureFac(Energy,StructureFactor,Buffers,filename)
     end
 end
@@ -202,14 +220,27 @@ function measure_Sq_GFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMet
     prob = setup_Sq_problem(InitialState,method,Nwalkers,nSteps,mProj,nThreads,ψG,outfile)
 
     initializeGFMC!(prob,nThreads,initializer)
-    runGFMC!(prob,equilibration_steps;nThreads,reconfigure=true,save_energies = true,saveObservables = false)
 
-    if estimate_w_avg
-        w_avg = get_w_avg_estimate(prob)
-        if isfinite(w_avg)
-            prob = set_w_avg_estimate(prob,w_avg)
+    first_chunk = 1:equilibration_steps÷4
+    # second_chunk = equilibration_steps÷8+1:equilibration_steps÷4
+    last_chunk = equilibration_steps÷4+1:equilibration_steps
+
+    runGFMC!(prob,first_chunk;nThreads,reconfigure=true,save_energies = true,saveObservables = false)
+    set_zero!(prob.Observables)
+
+    for steps in (last_chunk,)
+        runGFMC!(prob,steps;nThreads,reconfigure=true,save_energies = true,saveObservables = false)
+
+        if estimate_w_avg
+            w_avg = get_w_avg_estimate(prob)
+            if isfinite(w_avg)
+                prob = set_w_avg_estimate(prob,w_avg)
+            end
         end
+        
     end
+    # return prob.Observables
+    set_zero!(prob.Observables)
     outfile = get_outfile(prob.Observables)
     saveParameters(outfile,equilibration_steps,method,ψG)
     
@@ -235,9 +266,9 @@ function normalized_Sq(Sq_numerator::AbstractArray{T,3},Sq_denominator::Abstract
     end
     return Sq
 end
-function normalized_Sq!(Sq,Sq_numerator,Sq_denominator) 
+function normalized_Sq!(Sq,Sq_numerator,Sq_denominator)
     for i in eachindex(Sq_denominator)
-        @. Sq[:,:,i] = Sq_numerator[:,:,i] / Sq_denominator[i]
+        @. Sq[:,:,i] = Sq_numerator[:,:,i] / (Sq_denominator[i])
     end
     return Sq
 end
@@ -267,18 +298,14 @@ function get_w_avg_estimate(prob)
 
     # Energy = normalized_En(Observables)
     Energy = Observables.Energy
-    minpos = findfirst(>(0),diff(Energy))
-    minpos = isnothing(minpos) ? lastindex(Energy) : minpos
-    E0 = Energy[minpos]
     
-    fill!(energies,zero(eltype(energies)))
-    fill!(TotalWeights,zero(eltype(TotalWeights)))
-    fill!(Energy,zero(eltype(Energy)))
-    fill!(Gnps,zero(eltype(Gnps)))
-    fill!(en_denominator,zero(eltype(en_denominator)))
-    fill!(en_numerator,zero(eltype(en_numerator)))
-
+    minpos = findfirst(>(0),diff(Energy))
+    minpos = isnothing(minpos) ? firstindex(Energy) : minpos
+    E0 = Energy[minpos]
+    isnan(E0) && return firstindex(!isnan,Energy)
+    
     w_avg_estimate = -E0
+    println("w_avg_estimate = $w_avg_estimate")
     # w_avg_estimate = -mean(energies)
     
     return w_avg_estimate

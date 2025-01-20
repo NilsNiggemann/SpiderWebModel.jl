@@ -45,7 +45,7 @@ function getEnergies(S,mus,Symmetry;Nwalkers = 20 * 3,NSteps = 2000,nThermal = 1
 
         nopt = i == 1 ? nopt1 : nopt2
         @time optimizeWF!(ψG,S,CTSR,nThermal;NSteps = nopt,NConfs,dt)
-        @time results_en = fetch.([Threads.@spawn SW.normalized_En(SW.measure_Sq_GFMC(S,CT,Nwalkers,NSteps,50,ψG.psi,estimate_w_avg=false)) for _ in 1:NRuns])
+        @time results_en = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,Nwalkers,NSteps,50,ψG.psi,estimate_w_avg=false).Energy for _ in 1:NRuns])
         # @time results_en = SW.measure_Sq_GFMC(S,CT,Nwalkers,NSteps,50,ψG.psi,equilibration_steps=NSteps÷5, estimate_w_avg=true)
         # return results_en
         # display(plotEnergies(results,CT))
@@ -83,6 +83,7 @@ ens3 = getEnergies( getSectorConfig(Ls[3],3),muRange,Symms[3],NConfs=20,dt = 2e-
 ens4 = getEnergies( getSectorConfig(Ls[4],4),muRange,Symms[4],NConfs=20,dt = 2e-4)
 # ens2 = mainRun([20,20,20,20],muRange)
 ##
+h5write("../../Data/energy_mu_S12.h5","muRange", Array(muRange))
 h5write("../../Data/energy_mu_S12.h5","Sector1", Array(getSectorConfig(Ls[1],1)))
 h5write("../../Data/energy_mu_S12.h5","energy1",ens1)
 h5write("../../Data/energy_mu_S12.h5","Sector2", Array(getSectorConfig(Ls[2],2)))
@@ -93,23 +94,27 @@ h5write("../../Data/energy_mu_S12.h5","Sector4", Array(getSectorConfig(Ls[4],4))
 h5write("../../Data/energy_mu_S12.h5","energy4",ens4)
 ##
 
-S = getSectorConfig(16,1)
+S = getSectorConfig(32,1)
 ψGSymm = initializeGWF(S,SW.TranslationalSymmetry([-2,2],[2,2]))
 ψG = ψGSymm.psi
 CT = SW.ContinuousTimeMethod(0.1,w_avg_estimate = 0.1*length(S),Hxx = SW.Hxx_RK(0.0))
 CTSR = SW.ContinuousTimeMethod(30*CT.τ,w_avg_estimate = CT.w_avg_estimate,Hxx = CT.Hxx)
 
 # @time optimizeWF!(ψG,S,CTSR,1000;NSteps = 1000,NConfs=200,dt=1e-3,showplot=true,report_steps = 4)
-@time optimizeWF!(ψGSymm,S,CTSR,100;NSteps = 100,NConfs=200,dt=1e-3,showplot=true,report_steps = 4)
+# @time optimizeWF!(ψGSymm,S,CTSR,100;NSteps = 100,NConfs=200,dt=1e-3,showplot=true,report_steps = 4)
 
-##
-fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,1000,5000,150,equilibration_steps=1000,ψG.psi,estimate_w_avg=true,outfile = "../../Data/obsS12_staircase/obsS12_staircase_mu0_$i.h5") for i in 1:12])
-##
-# ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,20*10,2000,150,ψG,equilibration_steps=1000,estimate_w_avg=true) for i in 1:12])
-results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,30,10000,ψG,equilibration_steps=2000) for _ in 1:20])
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,300,ψGSymm,700,1e-3,SW.IterativeSRSolver();Nwalkers = 20,rel_tolerance=1e-8,equilibration_steps=1000,pre_equilibration_steps=40_000,report_steps=10,outfile = "../../Data/Stoch_reconf_S12_Stair.h5")
+SW.get_params(ψG) .= stochReconfRes.params
+plotVarEn(stochReconfRes)
 ##
 SW.Random.seed!(1232)
-ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,30,10000,100,ψG,equilibration_steps=2000,estimate_w_avg=true) for i in 1:20])
+ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,300,5000,150,equilibration_steps=2000,ψG,estimate_w_avg=true,outfile = "../../Data/obsS12_staircase/obsS12_staircase_mu0_$i.h5") for i in 1:12])
+##
+# ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,20*10,2000,150,ψG,equilibration_steps=1000,estimate_w_avg=true) for i in 1:12])
+results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,200,1000,ψG,equilibration_steps=2000) for _ in 1:20])
+##
+SW.Random.seed!(1232)
+ObsRuns = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,300,500,150,equilibration_steps=2000,ψG,estimate_w_avg=true,) for i in 1:12])
 ##
 en_direct = stack([ObsRuns.Energy for ObsRuns in ObsRuns])
 
@@ -127,7 +132,7 @@ with_theme(theme_PiTicks()) do
     SqError = dropstd(Sqs,dims=4)[:,:,end]
 
     # fittingCoefs = optimizeCoeffs(SqMat)
-    Sq = SW.getSqCont(SqMat)
+    Sq = SW.getSqCont(SqError)
     qx = qy = trueMomenta(-0.5pi,1.5pi,size(S,1))
     qs = Iterators.product(qx,qy)
     hm = heatmap!(ax,qx,qy, Sq.(qs))

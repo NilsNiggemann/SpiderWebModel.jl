@@ -38,7 +38,7 @@ function (FFTSq::SqFFT)(out,Conf::Matrix{ComplexF32})
     mul!(out, FFTSq.plan, Conf)
     Nsites = length(Conf)
     Nsites⁻¹ = 1/Nsites
-    Si_fac² = 0.5^2 # converts from config (Int8 -> 2S to S)
+    Si_fac² = 0.25 # converts from config (M = 2S -> <S_iS_j> = 0.5^2<M_iM_j>))
     prefac = Nsites⁻¹*Si_fac²
     @inbounds for i in eachindex(out)
         out[i] = abs2(out[i])*prefac
