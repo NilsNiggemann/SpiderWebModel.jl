@@ -168,7 +168,7 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     exemplaryConfig = SW.SpinConfig(ClassicalConfigs[1][10:22,10:22],0.5)
     stairCase_state = SW.SpinConfig(SW.getStairCase(12),0.5)
 
-    axkwargs = (;xminorticksvisible=true,yminorticksvisible=true,xtickwidth = 1.4,ytickwidth = 1.4,xminortickwidth = 1.2,yminortickwidth = 1.2,xticksize=5,yticksize=5,xminorticksize=3,yminorticksize=3,xminortickalign =1,yminortickalign =1,xtickalign =1,xticksmirrored =true,yticksmirrored=true,ytickalign=1,
+    axkwargs = (;xminorticksvisible=true,yminorticksvisible=true,xtickwidth = 2,ytickwidth = 2,xminortickwidth = 1.8,yminortickwidth = 1.8,xticksize=9,yticksize=9,xminorticksize=6,yminorticksize=6,xminortickalign =1,yminortickalign =1,xtickalign =1,xticksmirrored =true,yticksmirrored=true,ytickalign=1,
     xlabelpadding = -5,
     xtickcolor = :white,
     xminortickcolor = :white,
@@ -188,7 +188,16 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
 
     SW.plotApplPlaquettes!(ax_staircase_conf,stairCase_state,markersize = 8)
     SW.plotPlaquetteHighlight!(ax_staircase_conf,Point(6,5),color = (:red,0.4))
-    SW.plotPlaquetteHighlight!(ax_staircase_conf,Point(4,3),color = (:lime,0.4))
+
+    let p_lime = Point(4,3)
+
+        SW.plotPlaquetteHighlight!(ax_staircase_conf,Point(4,3),color = (:lime,0.4))
+
+        point_env = [Point(-2,-2),Point(2,-2),Point(2,2),Point(-2,2),Point(-2,-2)]
+
+        lines!([p_lime + p for p in point_env],color = :lime,linewidth = 2,linestyle = :dash)
+    end
+
     StrucFac_Top[1, 1] = ax = Axis(fig, aspect = 1,xticks = ticks,yticks = ticks,xminorticksvisible = true ,xlabel = L"q_x",ylabel = L"q_y",yminorticksvisible = true,
     xlabelvisible=false,xticklabelsvisible=false;
     axkwargs...
@@ -201,24 +210,24 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     axkwargs...
     )
 
-
     SqFunc = SW.getSqCont(real(Sq_Classical.Sq))
 
-    kx = collect(trueMomenta(-0.5pi,1.5pi,size(Sq_Classical.Sq,1)-1))
+    kx_mu0 = collect(trueMomenta(-0.5pi,1.5pi,size(Sq_Classical.Sq,1)-1))
     # kx = kx
-    ky = kx
+    ky_mu0 = kx_mu0
     # kxSpin1 = collect(trueMomenta(-0.5pi,1.5pi,size(SqSpin1,1)-1))
     kxSpin1 = collect(trueMomenta(-0.5pi,1.5pi,size(Sq_Classical.Sq,1)-1))
     # kxSpin1 = 2pi .* (0.5:1)
     kySpin1 = kxSpin1
 
     SqLN = [SqLargeN(kx,ky)/4 for kx in kxSpin1 , ky in kySpin1]
-    SqPlot = [SqFunc(kx,ky) for kx in kx , ky in kx]
+    SqPlot = [SqFunc(kx,ky) for kx in kx_mu0 , ky in ky_mu0]
     @info "" sumRuleCheck(SqPlot) sumRuleCheck(SqLN)
     # cRange = extrema(SqPlot)
     cRange = (0,maximum(SqPlot))
-    hm = heatmap!(ax,kx,ky,SqLN,colorrange = cRange)
-    hm2 = heatmap!(ax2,kx,ky,SqPlot,colorrange = cRange)
+    hm = heatmap!(ax,kx_mu0,ky_mu0,SqLN,colorrange = cRange)
+    hm2 = heatmap!(ax2,kx_mu0,ky_mu0,SqPlot,colorrange = cRange)
+
     # hm = halfhalfheatmap!(ax,kx,ky,SqFunc,SqLargeN,x->-x+3pi,normalize = true)
     EN_Plot[1,1] = ax_sector_energies = with_theme(theme_SimpleTicks()) do 
         Axis(fig[1,2],xlabel = L"\mu",ylabel = L"E/L^2")
@@ -232,25 +241,28 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     # xtickcolor = :white,ytickcolor = :white,xminortickcolor = :white,yminortickcolor = :white
     )
 
-    kx = ky = trueMomenta(-0.5pi,1.5pi,size(Sq_mu0,1)-1)
+    kx_mu0 = ky_mu0 = trueMomenta(-0.5pi,1.5pi,size(Sq_mu0,1)-1)
 
     SqFunc = SW.getSqCont(Sq_mu0 ./ L40RescalingFactor)
-    SqMat = [real(SqFunc(x,y)) for x in kx, y in ky] 
+    SqMat = [real(SqFunc(x,y)) for x in kx_mu0, y in ky_mu0] 
 
     # SqRKFunc = SW.getSqCont(SqRK)
     # SqRKMat = [real(SqRKFunc(x,y)) for x in kx, y in ky]
     # colorrange = extrema(SqRKMat)
 
     
-    kxGFMC = kyGFMC = trueMomenta(-0.5pi,1.5pi,size(Sq_RK,1)-1)
+    kxRK = kyRK = trueMomenta(-0.5pi,1.5pi,size(Sq_RK,1)-1)
     
     Sq_RKFunc = SW.getSqCont(mean(eachslice(Sq_RK,dims=3)) ) 
-    Sq_RK_Mat = [real(Sq_RKFunc(x,y)) for x in kxGFMC, y in kyGFMC]
+
+    Sq_RK_Mat = [real(Sq_RKFunc(x,y)) for x in kxRK, y in kyRK]
 
     colorrange = (0,maximum(maximum.((Sq_RK_Mat,SqMat))))
+
     
-    hm_RK = heatmap!(axRK, kx, ky, Sq_RK_Mat;colorrange,colormap = :turbo)
-    hm_mu0 = heatmap!(axmu0, kx, ky, SqMat;colorrange,colormap = :turbo )
+    hm_RK = heatmap!(axRK, kxRK, kxRK, Sq_RK_Mat;colorrange,colormap = :turbo)
+
+    hm_mu0 = heatmap!(axmu0, kx_mu0, ky_mu0, SqMat;colorrange,colormap = :turbo )
 
 
 
@@ -262,7 +274,6 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
 
     textpos = Point(-pi/2,3pi/2)
 
-
     Colorbar(StrucFac_Top[2,1:2], hm2,height = Relative(0.8),width = Relative(0.99),ticks = SimpleTicks([0,0.2,0.4,0.6]),
     vertical=false,
     # label = L"\mathcal{S}(q)"
@@ -272,14 +283,8 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     # label = L"\mathcal{S}(q)"
     )
 
-    # Colorbar(StrucFac_Top[1,3], hm2,height = Relative(0.8),width = Relative(0.99),ticks = SimpleTicks([0,0.2,0.4,0.6]),
-    # # label = L"\mathcal{S}(q)"
-    # )
-    # Colorbar(StrucFac_Bot[1,3], hm_RK,height = Relative(0.8),width = Relative(0.99),ticks = SimpleTicks(),
-    # # label = L"\mathcal{S}(q)"
-    # )
-
     
+    Label(StrucFac_Top[2,1, Left()],L"\mathcal{S}(q)",padding = (-10,0,-10,0))
     # Label(StrucFac_Top[2,1:2, Top()],L"\textrm{Classical }\mathcal{S}(q)",padding = (0,0,20,0))
     # Label(StrucFac_Bot[0,1:2, Top()],L"\textrm{Quantum }\mathcal{S}(q)",padding = (0,0,-80,0))
 
@@ -320,8 +325,9 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     if L40RescalingFactor != 1
         text!(axmu0, Point(pi,3pi/2) ,text = L"\times \frac{1}{%$(L40RescalingFactor)}",color = :white,align = (:left,:top),fontsize = sub_fig_labelsize)
     end
+    save("../../figs/SpinHalfOverview.pdf", fig)
 
-    # save("../../figs/Sq_comparison_2.png", fig,px_per_unit=4)
+    # save("../../figs/SpinHalfOverview.png", fig,px_per_unit=4)
     # Colorbar(fig[1, 2], hm)
     fig
 end
