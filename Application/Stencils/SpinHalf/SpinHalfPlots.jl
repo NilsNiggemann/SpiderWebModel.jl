@@ -185,8 +185,10 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
 
     SpinConf_Fig[1, 2] = ax_staircase_conf = Axis(fig; SW.getConfigAxis(stairCase_state)...,xticklabelsvisible = false,yticklabelsvisible = false,spinecolors(:blue)...,spinewidth = 5
     )
-    SW.plotApplPlaquettes!(ax_staircase_conf,stairCase_state,markersize = 8)
 
+    SW.plotApplPlaquettes!(ax_staircase_conf,stairCase_state,markersize = 8)
+    SW.plotPlaquetteHighlight!(ax_staircase_conf,Point(6,5),color = (:red,0.4))
+    SW.plotPlaquetteHighlight!(ax_staircase_conf,Point(4,3),color = (:lime,0.4))
     StrucFac_Top[1, 1] = ax = Axis(fig, aspect = 1,xticks = ticks,yticks = ticks,xminorticksvisible = true ,xlabel = L"q_x",ylabel = L"q_y",yminorticksvisible = true,
     xlabelvisible=false,xticklabelsvisible=false;
     axkwargs...
