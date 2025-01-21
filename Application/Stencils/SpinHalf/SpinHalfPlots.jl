@@ -24,25 +24,25 @@ function getSectorConfig(L,i)
 end
 
 
-function plotSectorEnergies!(fig,ax)
+function plotSectorEnergies!(fig,ax,ens,configs;inset_scale = 1)
     axkwargs = SW.getConfigAxis(getSectorConfig(8,1))
     colors = [:blue,:green,:red,:purple]
-    spincolors(color) = (topspinecolor = color,bottomspinecolor = color,leftspinecolor = color,rightspinecolor = color)
+    spinecolors(color) = (topspinecolor = color,bottomspinecolor = color,leftspinecolor = color,rightspinecolor = color)
 
     inax = [
-        insetAtPoint(fig,ax,(0.05 +0.18(i-1),-0.01),(36,36);
-        spincolors(colors[i])...,
+        insetAtPoint(fig,ax,(0.05 +0.18(idx-1),-0.01),inset_scale.*(36,36);
+        spinecolors(colors[i])...,
         spinewidth = 4,
         xticklabelsvisible = false,
         xticksvisible = false,
         yticksvisible = false,
         yticklabelsvisible = false,
         axkwargs...
-        ) for i in eachindex(ens)
+        ) for (idx,i) in enumerate(configs)
     ]
 
-    inaxTriv = insetAtPoint(fig,ax,(0.9,-0.09),(50,50);
-        spincolors(:grey)...,
+    inaxTriv = insetAtPoint(fig,ax,(0.9,-0.09),inset_scale.*(50,50);
+        spinecolors(:grey)...,
         spinewidth = 4,
         xticklabelsvisible = false,
         xticksvisible = false,
@@ -59,9 +59,12 @@ function plotSectorEnergies!(fig,ax)
     lines!(ax,muRange,etriv,color = :grey,linewidth = 3)
     # ylims!(ax,-0.12,0.03)
     Ls = [20,24,20,18]
+    for (idx,i) in enumerate(configs)
+        SW.plotApplPlaquettes!(inax[idx],getSectorConfig(Ls[i],i),markersize = 8)
+    end
+
     for (i,en) in enumerate(ens)
         L = Ls[i]
-        SW.plotApplPlaquettes!(inax[i],getSectorConfig(Ls[i],i),markersize = 8)
         color = colors[i]
         e = dropmean(en,dims=2) ./ L^2 # ./ (1 .-muRange)
         e_err = dropstd(en,dims=2) ./ L^2 # ./ (1 .-muRange)
@@ -77,7 +80,7 @@ with_theme(theme_SimpleTicks()) do
     ax = Axis(fig[1,1],xlabel = L"\mu",ylabel = L"E/L^2")
 
 
-    plotSectorEnergies!(fig,ax)
+    plotSectorEnergies!(fig,ax,ens,[1,2,3,4])
 end
 ##
 Sqs_mu0 = stack([h5read(file,"StructureFactor") for file in readdir("../../Data/obsS12_staircase",join=true)])
@@ -133,15 +136,32 @@ end
 SqClassical = SW.getEqualWeightStructureFac(ClassicalConfigs)
 Sq_RK = h5read("../../Data/StaircaseS12_L40_RK.h5","Sqs") ./4
 ##
+function sumRuleCheck(SqMat)
+    finiteEls = filter!(isfinite,SqMat[1:end-1,1:end-1][:])
+    return sum(finiteEls)/length(finiteEls)
+end
+##
 function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
         
-    fig = Figure(size = 0.9 .*(420,340))
+
+
+    fig = Figure(size = 1.8 .*(520,300))
     ticks = PiTicks([0,pi])
 
     L40RescalingFactor = 3
 
-    subgl_top = GridLayout()
-    subgl_bot = GridLayout()
+    SpinConf_Fig = GridLayout()
+    StrucFac_Top = GridLayout()
+    StrucFac_Bot = GridLayout()
+    EN_Plot = GridLayout()
+
+    fig.layout[1, 2] = SpinConf_Fig
+    fig.layout[1, 1] = StrucFac_Top
+    fig.layout[2, 1] = StrucFac_Bot
+    fig.layout[2, 2] = EN_Plot
+
+    exemplaryConfig = SW.SpinConfig(ClassicalConfigs[1][10:22,10:22],0.5)
+    stairCase_state = SW.SpinConfig(SW.getStairCase(12),0.5)
 
     axkwargs = (;xminorticksvisible=true,yminorticksvisible=true,xtickwidth = 1.4,ytickwidth = 1.4,xminortickwidth = 1.2,yminortickwidth = 1.2,xticksize=5,yticksize=5,xminorticksize=3,yminorticksize=3,xminortickalign =1,yminortickalign =1,xtickalign =1,xticksmirrored =true,yticksmirrored=true,ytickalign=1,
     xlabelpadding = -5,
@@ -152,11 +172,22 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     
     )
 
-    subgl_top[1, 1] = ax = Axis(fig, aspect = 1,xticks = ticks,yticks = ticks,xminorticksvisible = true ,xlabel = L"q_x",ylabel = L"q_y",yminorticksvisible = true,
+
+    SpinConf_Fig[1, 1] = ax_generic_conf = Axis(fig; SW.getConfigAxis(exemplaryConfig)...,xticklabelsvisible = false,yticklabelsvisible = false
+    )
+
+    SW.plotApplPlaquettes!(ax_generic_conf,exemplaryConfig,markersize = 8)
+
+    SpinConf_Fig[1, 2] = ax_staircase_conf = Axis(fig; SW.getConfigAxis(stairCase_state)...,xticklabelsvisible = false,yticklabelsvisible = false
+    )
+    SW.plotApplPlaquettes!(ax_staircase_conf,stairCase_state,markersize = 8)
+
+    StrucFac_Top[1, 1] = ax = Axis(fig, aspect = 1,xticks = ticks,yticks = ticks,xminorticksvisible = true ,xlabel = L"q_x",ylabel = L"q_y",yminorticksvisible = true,
     xlabelvisible=false,xticklabelsvisible=false;
     axkwargs...
     )
-    subgl_top[1, 2] = ax2 = Axis(fig, aspect = 1,yticklabelsvisible=false,xminorticksvisible = true ,xlabel = L"q_x",yminorticksvisible = true,
+
+    StrucFac_Top[1, 2] = ax2 = Axis(fig, aspect = 1,yticklabelsvisible=false,xminorticksvisible = true ,xlabel = L"q_x",yminorticksvisible = true,
     xlabelvisible=false,xticklabelsvisible=false,xticks = ticks,yticks = ticks,
     # title = L"class. spin-$1/2$"
     ;
@@ -176,18 +207,20 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
 
     SqLN = [SqLargeN(kx,ky)/4 for kx in kxSpin1 , ky in kySpin1]
     SqPlot = [SqFunc(kx,ky) for kx in kx , ky in kx]
-    @info "" sum(SqLN)/length(SqLN) sum(SqPlot)/length(SqPlot)
+    @info "" sumRuleCheck(SqPlot) sumRuleCheck(SqLN)
     # cRange = extrema(SqPlot)
     cRange = (0,maximum(SqPlot))
     hm = heatmap!(ax,kx,ky,SqLN,colorrange = cRange)
     hm2 = heatmap!(ax2,kx,ky,SqPlot,colorrange = cRange)
     # hm = halfhalfheatmap!(ax,kx,ky,SqFunc,SqLargeN,x->-x+3pi,normalize = true)
-
-    subgl_bot[1, 1] = axmu0 = Axis(fig, xlabel = L"q_x", ylabel = L"q_y", aspect = 1,xminorticksvisible = true, yminorticksvisible = true,xticks = ticks, yticks = ticks;
+    EN_Plot[1,1] = ax_sector_energies = with_theme(theme_SimpleTicks()) do 
+        Axis(fig[1,2],xlabel = L"\mu",ylabel = L"E/L^2")
+    end
+    StrucFac_Bot[1, 1] = axmu0 = Axis(fig, xlabel = L"q_x", ylabel = L"q_y", aspect = 1,xminorticksvisible = true, yminorticksvisible = true,xticks = ticks, yticks = ticks;
     axkwargs...,
     # xtickcolor = :white,ytickcolor = :white,xminortickcolor = :white,yminortickcolor = :white
     )
-    subgl_bot[1, 2] = axRK = Axis(fig, xlabel = L"q_x", ylabel = L"q_y", aspect = 1,ylabelvisible = false,yticklabelsvisible = false,xminorticksvisible = true, yminorticksvisible = true,xticks = ticks, yticks = ticks;
+    StrucFac_Bot[1, 2] = axRK = Axis(fig, xlabel = L"q_x", ylabel = L"q_y", aspect = 1,ylabelvisible = false,yticklabelsvisible = false,xminorticksvisible = true, yminorticksvisible = true,xticks = ticks, yticks = ticks;
     axkwargs...,
     # xtickcolor = :white,ytickcolor = :white,xminortickcolor = :white,yminortickcolor = :white
     )
@@ -212,8 +245,8 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     hmED2 = heatmap!(axRK, kx, ky, Sq_RK_Mat;colorrange)
     hmED1 = heatmap!(axmu0, kx, ky, SqMat;colorrange )
 
-    fig.layout[1, 1] = subgl_top
-    fig.layout[2, 1] = subgl_bot
+
+
     # Label(fig[1,1, TopLeft()],L"a)$$",padding = (-30,0,-20,0))
     # Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-20,0))
     # Label(fig[1,3, TopLeft()],L"c)$$",padding = (-30,0,-20,0))
@@ -223,9 +256,19 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     textpos = Point(-pi/2,3pi/2)
 
 
-    Colorbar(subgl_top[1,3], hm2,height = Relative(0.95),width = Relative(0.8),label = L"\mathcal{S}(q)",ticks = SimpleTicks([0,0.2,0.4,0.6]))
-    Colorbar(subgl_bot[1,3], hmED2,height = Relative(0.95),width = Relative(0.8),label = L"\mathcal{S}(q)",ticks = SimpleTicks())
+    Colorbar(StrucFac_Top[1,3], hm2,height = Relative(0.8),width = Relative(0.99),ticks = SimpleTicks([0,0.2,0.4,0.6]),
+    # label = L"\mathcal{S}(q)"
+    )
+    Colorbar(StrucFac_Bot[1,3], hmED2,height = Relative(0.8),width = Relative(0.99),ticks = SimpleTicks(),
+    # label = L"\mathcal{S}(q)"
+    )
 
+        Colorbar(StrucFac_Top[1,3], hm2,height = Relative(0.8),width = Relative(0.99),ticks = SimpleTicks([0,0.2,0.4,0.6]),
+    # label = L"\mathcal{S}(q)"
+    )
+    Colorbar(StrucFac_Bot[1,3], hmED2,height = Relative(0.8),width = Relative(0.99),ticks = SimpleTicks(),
+    # label = L"\mathcal{S}(q)"
+    )
 
     text!(ax, textpos ,text = L"a)",color = :black,align = (:left,:top),fontsize = 18)
     text!(ax2, textpos ,text = L"b)",color = :black,align = (:left,:top),fontsize = 18)
@@ -234,16 +277,23 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     text!(axRK, textpos ,text = L"d)",color = :white,align = (:left,:top),fontsize = 18)
     text!(axmu0, Point(pi,3pi/2) ,text = L"\times \frac{1}{%$(L40RescalingFactor)}",color = :white,align = (:left,:top),fontsize = 14)
     
-    colsize!(subgl_top,3,Relative(0.05))
-    colsize!(subgl_bot,3,Relative(0.05))
-    rowgap!(fig.layout,1,3)
-    colgap!(subgl_top,1,3)
-    colgap!(subgl_top,2,3)
-    colgap!(subgl_bot,1,3)
-    colgap!(subgl_bot,2,3)
+    Label(StrucFac_Top[1,1:2, Top()],L"\textrm{Classical }\mathcal{S}(q)",padding = (0,0,-30,0))
+    Label(StrucFac_Bot[1,1:2, Top()],L"\textrm{Quantum }\mathcal{S}(q)",padding = (0,0,-30,0))
+    colsize!(StrucFac_Top,3,Relative(0.02))
+    colsize!(StrucFac_Bot,3,Relative(0.02))
+    colsize!(fig.layout,1,Relative(0.45))
+    colgap!(fig.layout,1,0.1)
 
-    # ax_sector_energies = fig[1,4]
-    # plotSectorEnergies!(fig,ax_sector_energies)
+    rowgap!(fig.layout,1,3)
+
+    colgap!(StrucFac_Top,1,3)
+    colgap!(StrucFac_Top,2,3)
+    colgap!(StrucFac_Bot,1,3)
+    colgap!(StrucFac_Bot,2,3)
+    
+    plotSectorEnergies!(fig,ax_sector_energies,ens,[2,3,4],inset_scale = 0.8)
+    
+
     # save("../../figs/Sq_comparison_2.png", fig,px_per_unit=4)
     # Colorbar(fig[1, 2], hm)
     fig
