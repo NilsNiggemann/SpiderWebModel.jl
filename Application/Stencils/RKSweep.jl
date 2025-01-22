@@ -541,8 +541,112 @@ end
 crossings = detect_crossings(xis_intPol)
 ##
 with_theme(theme_SimpleTicks()) do 
-    fig = Figure(fontsize = 22,size = 400 .*(1.4,1.))
-    ax = Axis(fig[1,1],xlabel = L"μ",ylabel = L"\xi/L")
+
+    fig = Figure(fontsize = 22,size = 400 .*(1.6,2))
+    
+    FSS_Plot = GridLayout()
+    Sq_Heatmaps = GridLayout()
+    SqCuts = GridLayout()
+    SqRandomCuts = GridLayout()
+    BCorrPlot = GridLayout()
+
+    fig.layout[1,1:3] = FSS_Plot
+    fig.layout[2,1:3] = Sq_Heatmaps
+    fig.layout[3,1:3] = SqCuts
+    fig.layout[4,1:2] = SqRandomCuts
+    fig.layout[4,3] = BCorrPlot
+    
+    PiTicksArgs = (;xticks = PiTicks([0,pi]), yticks = PiTicks([0,pi]))
+
+    
+    L_Plot = 36
+    qx = qy = trueMomenta(-0.5pi,1.5pi,L_Plot)
+    FSS_Plot[1,1] = ax_scal = Axis(fig,xlabel = L"μ",ylabel = L"\xi/L")
+
+    mu_show = (0.,0.3,0.8)
+
+    SqsGFMC = [SW.expand_Sq.(getSq(res_36,tau=15,mu=mu,L=L_Plot)) for mu in mu_show]
+
+    SqMat = mean.(SqsGFMC)
+    SqErr = std.(SqsGFMC)
+    
+
+    with_theme(theme_PiTicks()) do 
+        Sq_Heatmaps[1,1] = ax_mu1 = Axis(fig;xlabel = L"q_x",ylabel = L"q_y",aspect=1,PiTicksArgs...)
+        Sq_Heatmaps[1,3] = ax_mu2 = Axis(fig;xlabel = L"q_x",aspect=1,yticklabelsvisible = false,PiTicksArgs...)
+        Sq_Heatmaps[1,5] = ax_mu3 = Axis(fig;xlabel = L"q_x",aspect=1,yticklabelsvisible = false,PiTicksArgs...)
+
+    
+        linkyaxes!(ax_mu1,ax_mu2,ax_mu3)
+
+
+        colorrange = extrema(stack(SqMat))
+
+        for (i,ax) in enumerate((ax_mu1,ax_mu2,ax_mu3))
+            SqCont = SW.getSqCont(SqMat[i])
+            hm = heatmap!(ax,qx,qy,SqCont.(Iterators.product(qx,qy)),colormap = :viridis;
+            # colorrange
+            )
+            Colorbar(Sq_Heatmaps[1,2i],hm,ticks = SimpleTicks(),width = Relative(0.05),height = Relative(0.8))
+        end
+
+        # rowsize!(Sq_Heatmaps,1,Relative(0.01))
+        # rowsize!(Sq_Heatmaps,2,Relative(0.9999))
+
+    end
+    kpath = ["Γ","X","X'","Γ"]
+    pointlabels,p1 = fetchKPath([KPoints[k] for k in kpath],500)
+    kpointlabels = Makie.latexstring.(kpath)
+    tRange = eachindex(p1)
+
+    xygrid = [(x,y) for x in qx, y in qy]
+
+    
+    
+    with_theme(theme_SimpleTicks()) do 
+        SqCuts[1,1] = axPath1 = Axis(fig,ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
+        )
+        SqCuts[1,2] = axPath2 = Axis(fig,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
+        )
+        SqCuts[1,3] = axPath3 = Axis(fig,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
+        )
+        # linkyaxes!(axPath1,axPath2,axPath3)
+
+        tRange_new,p1_discrete = rasterCurve(p1,xygrid,tRange)
+        for (i,ax,SqMat,SqErr) in zip(eachindex(SqsGFMC), (axPath1, axPath2, axPath3), SqMat, SqErr)
+            SqFunc = SW.getSqCont(SqMat)
+            SqErrFunc = SW.getSqCont(SqErr)
+            Sqcut = [SqFunc(x,y) for (x,y) in xygrid[p1_discrete]]
+            Sqerrcut = [SqErrFunc(x,y) for (x,y) in xygrid[p1_discrete]]
+            scatter!(ax, tRange_new, Sqcut, marker = '∘', markersize = 10, color = :black)
+            errorbars!(ax, tRange_new, Sqcut, Sqerrcut, whiskerwidth = 6, linewidth = 0.5, color = :black)
+            
+            # Add lines corresponding to the best field theory fit
+            fittingCoefs = optimizeCoeffs(SqMat)
+            SqFT = [SqFieldTheory(q, fittingCoefs) for q in xygrid[p1_discrete]]
+            lines!(ax, tRange_new, SqFT, color = :red, linestyle = :dash)
+        end
+        SqRandomCuts[1,1] = axPath_Random = Axis(fig,ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),yticks = SimpleTicks()
+        )
+
+
+        text!(axPath_Random,Point(100,1),text="TODO!",color = :black,align = (:center,:center),fontsize = 40)
+
+    end
+
+    with_theme(theme_PiTicks()) do 
+        BCorrPlot[1,1] = ax_BCorr = Axis(fig;xlabel = L"q_x",ylabel = L"q_y",aspect=1,PiTicksArgs...)
+
+        Bq = [cos(qx-qy)^2 + cos(qx+qy)^2 for qx in qx, qy in qy]
+        hm_B = heatmap!(ax_BCorr,qx,qy,Bq,colormap = Makie.cgrad(:thermal,rev=false))
+
+        text!(ax_BCorr,Point(pi/2,pi/2),text="TODO!",color = :black,align = (:center,:center),fontsize = 40)
+    end
+
+    tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
+        
+
+    # return fig
     # ax2 = insetAtPoint(fig,ax,(0.6,3.2),(110,60))
     # ax2 = Axis(fig[2,1],xlabel = L"μ",ylabel = L"\xi/L")
     # linkaxes!(ax,ax2)
@@ -561,8 +665,8 @@ with_theme(theme_SimpleTicks()) do
         xiLserr = xi_res.xis_err[L][muFilter]
         musPlot = mus[muFilter]
         
-        scatterlines!(ax,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
-        errorbars!(ax,musPlot,xiLs,xiLserr,whiskerwidth = 5)
+        scatterlines!(ax_scal,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
+        errorbars!(ax_scal,musPlot,xiLs,xiLserr,whiskerwidth = 5)
     end
 
     let L=36,linestyle = :dashdot
@@ -570,19 +674,28 @@ with_theme(theme_SimpleTicks()) do
         xiLs = xi_res.xis[L]
         xiLserr = xi_res.xis_err[L]
 
-        scatterlines!(ax,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
-        errorbars!(ax,musPlot,xiLs,xiLserr,whiskerwidth = 5)
+        scatterlines!(ax_scal,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
+        errorbars!(ax_scal,musPlot,xiLs,xiLserr,whiskerwidth = 5)
 
     end
 
-    inset = insetAtPoint(fig,ax,(0.8,3.8),0.8 .*(110,60),xlabel = L"L",ylabel = L"μ_c")
+    inset = insetAtPoint(fig,ax_scal,(0.8,3.8),0.8 .*(110,60),xlabel = L"L",ylabel = L"μ_c")
     scatterlines!(inset,crossings.L,crossings.crossings)
 
-    ylims!(ax,0,5)
-    vlines!(ax,[mu_c],color = :grey,linestyle = :dash)
-    text!(ax,Point(0.22,3.5),text=L"μ_c = %$mu_c",color = :grey,align = (:left,:center))
+    ylims!(ax_scal,0,5)
+    # vlines!(ax_scal,[mu_c],color = :grey,linestyle = :dash)
+    # text!(ax_scal,Point(0.22,3.5),text=L"μ_c = %$mu_c",color = :grey,align = (:left,:center))
     # ylims!(ax2,0.04,1.8)
-    axislegend(ax,position = :lb)
+    axislegend(ax_scal,position = :lb)
+
+    rowsize!(fig.layout,1,Relative(0.4))
+    rowsize!(fig.layout,2,Relative(0.25))
+    colgap!(Sq_Heatmaps,1,-40)
+    colgap!(Sq_Heatmaps,2,-40)
+    colgap!(Sq_Heatmaps,3,-40)
+    colgap!(Sq_Heatmaps,4,-40)
+    colgap!(Sq_Heatmaps,5,-40)
+
     fig
     
 end
