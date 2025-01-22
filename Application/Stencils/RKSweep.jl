@@ -1,6 +1,7 @@
 import SpiderWebModel as SW
 using CairoMakie, MakieHelpers,Statistics
 using SpiderWebModel.HDF5
+using DataFrames
 include("plottingUtils.jl")
 
 ##
@@ -51,6 +52,13 @@ function getXis_err(Sqs,I)
     return (;ximean,xistd)
 end
 
+function getXis(Sqs::AbstractVector{<:AbstractMatrix},I)
+    xis = zeros(length(Sqs))
+    for (i,Sq) in enumerate(Sqs)
+        xis[i] = getxi(Sq./4,I)
+    end
+    return xis
+end
 
 ##
 function getFiles(L)
@@ -72,21 +80,26 @@ end
 # entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equiv_open/",0.30)
 # entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/L=32/",0.65)
 ##
-function is_valid_file(filename)
-    allkeys = ["energies","mu","tau","SqsGFMC","p_Sq"]
+function file_format(filename)
+    allkeys_1 = ["energies","mu","tau","SqsGFMC","p_Sq"]
+    allkeys_2 = ["Energy","mu","τ","StructureFactor"]
     h5open(filename,"r") do file
-        return all(k->haskey(file,k),allkeys)
+        all(k->haskey(file,k),allkeys_1) && return 1
+        all(k->haskey(file,k),allkeys_2) && return 2
+        return 0
     end
 end
+
 function getRes(folder)
     files = let
         filesunsrt = [joinpath(root,file) for (root,_,files) in walkdir(folder) for file in files]
-        validfiles = is_valid_file.(filesunsrt)
-        if !all(validfiles)
+        fileformats = file_format.(filesunsrt)
+        invalid_files = findall(iszero,fileformats)
+        if !isempty(invalid_files)
             println("invalid files:")
-            println(filesunsrt[.!validfiles])
+            println(filesunsrt[invalid_files])
         end
-        filter!(is_valid_file,filesunsrt)
+        filesunsrt = [f for (f,i) in zip(filesunsrt,fileformats) if i == 1]
         mus = [h5read(file,"mu") for file in filesunsrt]
         filesunsrt[sortperm(mus)]
     end
@@ -102,6 +115,7 @@ function getRes(folder)
     p_Sq = stack([h5read(file,"p_Sq") for file in files])
     return (;energies,mus,Sqs,taus,files,p_Sq)
 end
+
 function getSq_tau(res,tau)
     p_Sq = res.p_Sq
     Dtaus = reshape(res.taus,1,size(p_Sq,2))
@@ -111,12 +125,64 @@ function getSq_tau(res,tau)
     return stack(res.Sqs[:,:,ti,:,i] for (i,ti) in enumerate(tauInds))
 end
 
+function getSq_tau(res::DataFrame,tau)
+    Dtaus = res.tau
+
+    taus = [axes(Sqs,3) .* t for (Sqs,t) in zip(res.Sq,Dtaus)]
+    tauInds = [findfirst(>=(tau),t) for t in taus]
+
+    # return tauInds
+    return [res.Sq[i][:,:,ti] for (i,ti) in enumerate(tauInds)]
+end
+function getSq_tau(res::DataFrame,::Nothing)
+    return res.Sq
+end
+
+function getSq(res::DataFrame;tau,mu,L)
+    res_new = filter(row -> row.mu == mu && row.L == L,res)
+    return getSq_tau(res_new,tau)
+end
+
+
 function getSq_tau_mean_std(res,tau)
     Sqtau = getSq_tau(res,tau)
     dropmean(Sqtau,dims=4), dropstd(Sqtau,dims=4)
 end
 
+function getSq_tau_mean_std(res::DataFrame,tau)
+    Sqtau = getSq_tau(res,tau)
+    mean(Sqtau), std(Sqtau)
+end
+
 res = Dict(L=>getRes("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=$L/") for L in (16,20,24,28))
+
+##
+
+function getRes_2(folder)
+    files = let
+        filesunsrt = [joinpath(root,file) for (root,_,files) in walkdir(folder) for file in files]
+        fileformats = file_format.(filesunsrt)
+        invalid_files = findall(iszero,fileformats)
+        if !isempty(invalid_files)
+            println("invalid files:")
+            println(filesunsrt[invalid_files])
+        end
+        filesunsrt = [f for (f,i) in zip(filesunsrt,fileformats) if i == 2]
+        mus = [h5read(file,"mu") for file in filesunsrt]
+        filesunsrt[sortperm(mus)]
+    end
+
+    L = [h5read(file,"L") for file in files]
+    mu = [h5read(file,"mu") for file in files]
+    Energy = [h5read(file,"Energy") for file in files]
+    Sq = [h5read(file,"StructureFactor") for file in files]
+    tau = [h5read(file,"τ") for file in files]
+
+    res= DataFrame(;L,mu,Energy,Sq,tau,files)
+    sort!(res,[:mu,:L])
+end
+##
+res_36 = getRes_2("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=36/")
 ##
 with_theme(theme_SimpleTicks()) do
     ind = 1
@@ -421,10 +487,10 @@ with_theme(theme_SimpleTicks()) do
     # ax2 = Axis(fig[2,1],xlabel = L"μ",ylabel = L"\xi/L")
     # linkaxes!(ax,ax2)
 
-    Linestyles = [:dash,:dot,:solid,:dashdot]
+    Linestyles = [:dash,:dot,:solid]
     # allmus = [musSmall,musMedium,mus]
     # allxis = [xisSmall,xisMedium,xis]
-    scatterkwargs = Dict(16 => (;marker = '+'),20 => (;marker = '▲'),24 => (;marker = '●' ) ,28 => (;marker = '×',markersize =18  )) 
+    scatterkwargs = Dict(16 => (;marker = '+'),20 => (;marker = '▲'),24 => (;marker = '●' ) ,28 => (;marker = '×',markersize =18),36 => (;marker = '■',markersize =10))
     for (L,linestyle) in zip((20,24,28),Linestyles)
     # for (L,linestyle) in zip(keys(res),Linestyles)
         # Sq = res[L].Sqs[:,:,5,:,:]
@@ -440,19 +506,26 @@ with_theme(theme_SimpleTicks()) do
         musPlot = mus[muFilter]
         scatterlines!(ax,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
         errorbars!(ax,musPlot,xiLs,xiLserr,whiskerwidth = 5)
-        # scatterlines!(ax,mus,xis.ximean/L,label = L"L=%$L";linestyle,scatterkwargs[L]...)
-        # errorbars!(ax,mus,xis.ximean/L,xis.xistd/L,whiskerwidth = 5)
-        # errlines!(ax,mus,xis.ximean/L,xis.xistd/L,label = L"L=%$L")
-        
-        # muFilter = findall(x->x>=(0.3) && x<=0.45,mus)
-
-        # scatterlines!(ax2,mus[muFilter],xis.ximean[muFilter]/L,label = L"L=%$L";linestyle)
-        # errorbars!(ax2,mus[muFilter],xis.ximean[muFilter]/L,xis.xistd[muFilter]/L,whiskerwidth = 5)
-        # errlines!(ax2,mus[muFilter],xis.ximean[muFilter]/L,xis.xistd[muFilter]/L,label = L"L=%$L")
     end
-    # vlines!(ax,[0.41],color = :grey,linestyle = :dashdot)
-    # vlines!(ax2,[0.41],color = :grey,linestyle = :dashdot)
-    # vlines!(ax,[0.1,0.2],color = :grey,linestyle = :dash)
+    let L=36,linestyle = :dashdot
+        unique_mus = unique(res_36.mu)
+        k = trueMomenta(0,2pi,L)
+        i_k = findfirst(==(pi/2),k)
+
+        Sq = [getSq(res_36,mu = mu,L = L,tau=10) for mu in unique_mus]
+
+        xis = [getXis(Sq,CartesianIndex(i_k,i_k)) for Sq in Sq]
+
+        xiLs = [mean(xi) for xi in xis] ./ L
+        xiLserr = [std(xi) for xi in xis] ./ L
+
+        musPlot = unique_mus
+        scatterlines!(ax,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
+        errorbars!(ax,musPlot,xiLs,xiLserr,whiskerwidth = 5)
+
+    end
+
+
     ylims!(ax,0,5)
     mu_c = 0.18
     vlines!(ax,[mu_c],color = :grey,linestyle = :dash)
@@ -462,7 +535,12 @@ with_theme(theme_SimpleTicks()) do
     fig
     
 end
-
+##
+a = let L=36
+    unique_mus = unique(res_36.mu)
+    # xis = [getxi(mean(filter(x->x.mu == mu,res_36).Sq)) for mu in unique_mus]
+    Sqs = [getSq(res_36,mu = mu,L = L,tau=10) for mu in unique_mus]
+end
 ##
 KPoints = Dict([
     "Γ" => SVector(0,0),
@@ -474,14 +552,16 @@ KPoints = Dict([
 
 
 with_theme(theme_SimpleTicks()) do 
-    L = 28
-    muIndex = findfirst(>=(0.8),res[L].mus)
-    SqsGFMC = getSq_tau(res[L],6)[:,:,:,muIndex]./ 4
-    SqMat = dropmean(SqsGFMC,dims=3)
-    SqErr = dropstd(SqsGFMC,dims=3)
+    L = 36
+    muIndex = findfirst(>=(0.8),res_36.mu)
+
+    μ = res_36.mu[muIndex]
+
+    SqsGFMC = SW.expand_Sq.(getSq(res_36,tau=26,mu=μ,L=L))
+    SqMat = mean(SqsGFMC)
+    SqErr = std(SqsGFMC)
     fittingCoefs = optimizeCoeffs(SqMat)
     
-    μ = res[L].mus[muIndex]
     fig = Figure(size = 120 .* (4,4),fontsize = 22)
 
     xticks = yticks = PiTicks([0,pi])

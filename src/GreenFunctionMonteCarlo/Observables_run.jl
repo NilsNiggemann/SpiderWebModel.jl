@@ -278,6 +278,10 @@ function expand_Sq(Sq::AbstractArray{T,3}) where T
     SqCirc = CircularArrays.CircularArray(Sq)
     return Array(SqCirc[1:end+1,1:end+1,:])
 end
+function expand_Sq(Sq::AbstractMatrix{T}) where T
+    SqCirc = CircularArrays.CircularArray(Sq)
+    return Array(SqCirc[1:end+1,1:end+1])
+end
 function normalized_En(Observables::GFMCObservables_StructureFac,NSites)
     numerator = Observables.Buffers.en_numerator
     denominator = Observables.Buffers.en_denominator
