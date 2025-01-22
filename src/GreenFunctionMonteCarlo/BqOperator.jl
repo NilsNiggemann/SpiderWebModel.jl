@@ -4,7 +4,7 @@ struct BqOperator <: AbstractOperator
     phase::Float64
 end
 BqOperator() = BqOperator(0.)
-
+BqSinOperator() = BqOperator(π/2)
 operatorname(X::BqOperator) = "BqOperator"
 
 struct BQ_WaveFunctionBuffer
@@ -25,7 +25,7 @@ function apply_operator_buffer!(Walker::SpiderWebWalker,O::BqOperator,Guiding_fu
     wsum = 0.
     LoopVectorization.@turbo for i in eachindex(psiRatios,weights,Ri_x,Ri_y)
         qr_i = qx* Ri_x[i] + qy*Ri_y[i]
-        weights[i] = 2*psiRatios[i]*cos(qr_i*0.5+O.phase)^2
+        weights[i] = 2*psiRatios[i]*cos((qr_i+O.phase)*0.5)^2
         wsum += weights[i]
     end
     if iszero(wsum)

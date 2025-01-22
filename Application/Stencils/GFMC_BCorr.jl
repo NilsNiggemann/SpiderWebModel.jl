@@ -45,7 +45,7 @@ nThermal = 1000
 nBra = 3
 ψG = SW.SimpleJastrowFunction(S)
 SW.rand!(SW.getNonSymmetric(ψG),1e-3)
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,20,ψG,100,3e-3,SW.IterativeSRSolver();Nwalkers = 20,reconfigure = false,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,report_steps=10)
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,20,ψG,100,3e-3,SW.IterativeSRSolver();Nwalkers = 20,rel_tolerance=1e-8,equilibration_steps=nThermal,pre_equilibration_steps=40_000,report_steps=10)
 SW.get_params(ψG) .= stochReconfRes.params
 plotVarEn(stochReconfRes)
 ##
@@ -245,27 +245,41 @@ BQOp = SW.BqOperator()
 BQ = stack(fetch.([Threads.@spawn SW.measureObservables(S,BQOp,qvals,1,20*1,1000,CT,ψG;equilibration_steps = 5000,pre_equilibration_steps=20_000) for _ in 1:6]))
 
 ##
-BQSin = stack(fetch.([Threads.@spawn SW.measureObservables(S,BQOp,qvals,1,20*1,1000,CT,ψG;equilibration_steps = 5000,pre_equilibration_steps=20_000) for _ in 1:6]))
+BQOp_sin = SW.BqSinOperator()
+BQSin = stack(fetch.([Threads.@spawn SW.measureObservables(S,BQOp_sin,qvals,1,20*1,1000,CT,ψG;equilibration_steps = 5000,pre_equilibration_steps=20_000) for _ in 1:6]))
 ##
 with_theme(theme_PiTicks()) do 
-    fig = Figure(size = (400,600))
-    ax1 = Axis(fig[1,1];aspect = 1,title = "exact Bq")
+    fig = Figure(size = (600,600))
+    axBqEx = Axis(fig[1,1];aspect = 1,title = L"\langle Bq\rangle_\textrm{exact}")
+    axBqSin = Axis(fig[1,3];aspect = 1,title = L"\langle Bq_{π/4}\rangle_\textrm{exact}")
 
-    ax2 = Axis(fig[2,1];aspect = 1,title = "GFMC Bq op")
+    axBqMC = Axis(fig[2,1];aspect = 1,title = L"\langle Bq\rangle_\textrm{GFMC}")
+    axBqSinMC = Axis(fig[2,3];aspect = 1,title = L"\langle Bq_{π/4}\rangle_\textrm{GFMC}")
+
     kx = trueMomenta(0,2pi,size(S,1))
     ky = trueMomenta(0,2pi,size(S,2))
 
-    FTex = PlaqSumFT(S,exactB,SW.getCentralPlaquette(S),allPlaqs)
-    hm = heatmap!(ax1,kx,ky,FTex,colormap = :viridis)
+    FTex = PlaqSumFT(S,exactB,SW.getCentralPlaquette(S),allPlaqs,0)
+    hm = heatmap!(axBqEx,kx,ky,FTex,colormap = :viridis)
     Colorbar(fig[1,2],hm)
-    fig
+
+    FTex = PlaqSumFT(S,exactB,SW.getCentralPlaquette(S),allPlaqs,pi/2)
+    hm = heatmap!(axBqSin,kx,ky,FTex,colormap = :viridis)
+    Colorbar(fig[1,4],hm)
 
     FTmean = dropmean(BQ,dims=3)[end,:] #./ length(allPlaqs)
     FT = zeros(length(kx),length(ky))
     FT[:] .= FTmean
     FT .-= FT[1,1]*0.5
-    hm = heatmap!(ax2,kx,ky,FT,colormap = :viridis)
+    hm = heatmap!(axBqMC,kx,ky,FT,colormap = :viridis)
     Colorbar(fig[2,2],hm)
+    
+    FTmean = dropmean(BQSin,dims=3)[end,:] #./ length(allPlaqs)
+    FT = zeros(length(kx),length(ky))
+    FT[:] .= FTmean
+    FT .-= FT[1,1]*0.5
+    hm = heatmap!(axBqSinMC,kx,ky,FT,colormap = :viridis)
+    Colorbar(fig[2,4],hm)
     fig
 end
 ## _________together_______________________
@@ -281,9 +295,9 @@ with_theme(theme_PiTicks()) do
     kx = trueMomenta(0,2pi,size(S,1))
     ky = trueMomenta(0,2pi,size(S,2))
 
-    FTex = PlaqSumFTPairs(S,exactBB_pairs .- BiBj ,allPlaqs)
+    # FTex = PlaqSumFTPairs(S,exactBB_pairs .- BiBj ,allPlaqs)
+    FTex = PlaqSumFTPairs(S,exactBB_pairs,allPlaqs)
     # FTex = PlaqSumFTPairs(S,exactBB_pairs ,allPlaqs) .-( PlaqSumFT(S,exactB,SW.getCentralPlaquette(S),allPlaqs)./length(allPlaqs)).^2
-
 
     hm = heatmap!(ax1,kx,ky,FTex,colormap = :viridis)
     Colorbar(fig[1,2],hm)
@@ -307,7 +321,7 @@ CTSR = SW.ContinuousTimeMethod(10*CT.τ,Hxx = CT.Hxx)
 ψG = SW.SimpleJastrowFunction(S)
 # ψG = SW.RKFunction()
 ##
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,10,ψG,300,1e-3,SW.IterativeSRSolver();Nwalkers = 2*20,reconfigure = false,rel_tolerance=1e-8,equilibration_steps=1000,pre_equilibration_steps=10_000)
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,10,ψG,300,1e-3,SW.IterativeSRSolver();Nwalkers = 2*20,rel_tolerance=1e-8,equilibration_steps=1000,pre_equilibration_steps=10_000)
 SW.get_params(ψG) .= stochReconfRes.params
 plotVarEn(stochReconfRes,movavg = 30)
 ##
@@ -457,7 +471,7 @@ CTSR = SW.ContinuousTimeMethod(10*CT.τ,Hxx = CT.Hxx)
 ψG = SW.SimpleJastrowFunction(S)
 # ψG = SW.RKFunction()
 ##
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,10,ψG,300,1e-3,SW.IterativeSRSolver();Nwalkers = 1*28,reconfigure = false,rel_tolerance=1e-8,equilibration_steps=1000,pre_equilibration_steps=10_000)
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,10,ψG,300,1e-3,SW.IterativeSRSolver();Nwalkers = 1*28,rel_tolerance=1e-8,equilibration_steps=1000,pre_equilibration_steps=10_000)
 SW.get_params(ψG) .= stochReconfRes.params
 plotVarEn(stochReconfRes,movavg = 30)
 ##
@@ -530,7 +544,7 @@ function processBBQ2(S,qvals,BBQ,Bq,BBq_0,p=lastindex(Bi))
     
     FTrec .-= Bq_sq
 
-    return (;kx,ky,BBq = Bq_sq)
+    # return (;kx,ky,BBq = Bq_sq)
     return (;kx,ky,BBq = FTrec)
 end
 
@@ -543,7 +557,7 @@ with_theme(theme_PiTicks()) do
     # resBq = processBBQ.(Ref(S),Ref(qvals),BBQ,BVals,BBQ_0,10)
     kx,ky = resBq[1].kx,resBq[1].ky
     BBq = [BBq.BBq for BBq in resBq]
-    return BBq
+    # return BBq
     # println(maximum(mean(BBq)))
     hm = heatmap!(ax,kx,ky,mean(BBq),colormap = :viridis)
     # hm = heatmap!(ax,mean(Bq),colormap = :viridis)
@@ -551,7 +565,6 @@ with_theme(theme_PiTicks()) do
     Colorbar(fig[1,2],hm)
     fig
 end
-##
 ##
 function ω_photon(kx,ky)
     sx,cx = sincos(kx)
