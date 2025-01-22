@@ -552,14 +552,16 @@ KPoints = Dict([
 
 
 with_theme(theme_SimpleTicks()) do 
-    L = 28
-    muIndex = findfirst(>=(0.8),res[L].mus)
-    SqsGFMC = getSq_tau(res[L],6)[:,:,:,muIndex]./ 4
-    SqMat = dropmean(SqsGFMC,dims=3)
-    SqErr = dropstd(SqsGFMC,dims=3)
+    L = 36
+    muIndex = findfirst(>=(0.8),res_36.mu)
+
+    μ = res_36.mu[muIndex]
+
+    SqsGFMC = SW.expand_Sq.(getSq(res_36,tau=26,mu=μ,L=L))
+    SqMat = mean(SqsGFMC)
+    SqErr = std(SqsGFMC)
     fittingCoefs = optimizeCoeffs(SqMat)
     
-    μ = res[L].mus[muIndex]
     fig = Figure(size = 120 .* (4,4),fontsize = 22)
 
     xticks = yticks = PiTicks([0,pi])
