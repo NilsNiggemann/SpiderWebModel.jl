@@ -96,7 +96,7 @@ function get_S_condensate!(S)
 end
 
 function get_S_stair!(S)
-    S .= 2SW.getStaircase(size(S,1))
+    S .= 4SW.getStairCase(size(S,1))
     return S
 end
 
