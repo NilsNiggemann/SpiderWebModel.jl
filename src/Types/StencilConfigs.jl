@@ -139,23 +139,17 @@ Base.@propagate_inbounds function applyPlaquette!(Mat::Stencils.AbstractStencilA
     # sites = Stencils.indices(Stencils.stencil(Mat), CartesianIndex(i, j))
     sgntype = convert(eltype(Mat), sgn)
     sites = safe_parent_indices(Mat, (i, j))
-    parentArr = parent(Mat)
-    for (ij,s) in zip(sites,P1_STENCIL)
-        i,j = ij
-        parentArr[i,j] += sgntype *s
+    # sites = Stencils.indices(Mat, (i, j))
+    # for (ij,s) in zip(sites,P1_STENCIL)
+    for idx in safe_iterate_sites(Mat, (i, j))
+        i,j = sites[idx]
+        s = P1_STENCIL[idx]
+        Mat[i,j] += sgntype *s
     end
     return Mat
 end
-
-getStencilRadii(::Stencils.AbstractStencilArray{<:Any,R,<:Any,N}) where {R,N} = CartesianIndex(ntuple(_ -> -R, N))
-
-
-@inline function safe_parent_indices(A::Stencils.AbstractStencilArray,I)
-    return safe_parent_indices(A, Stencils.boundary(A), Stencils.padding(A), CartesianIndex(I))
-end
-
 @inline function safe_parent_indices_linear(A::Stencils.AbstractStencilArray,I)
-    inds = safe_parent_indices(A, Stencils.boundary(A), Stencils.padding(A), CartesianIndex(I))
+    inds = safe_parent_indices(A, CartesianIndex(I))
 
     LI = LinearIndices(A)
     linear_inds = map(inds) do (i, j)
@@ -164,27 +158,25 @@ end
 
     return linear_inds
 end
+@inline safe_parent_indices_linear(A::StencilSpinConfig,I) = safe_parent_indices_linear(parent(A), I)
 
-@inline function safe_parent_indices(A::Stencils.AbstractStencilArray, ::Stencils.Wrap, ::Stencils.Conditional,I ::CartesianIndex
-)
-    inds = Stencils.indices(Stencils.stencil(A), I)
-    radii = getStencilRadii(A)
-    if checkbounds(Bool, A, I + radii) && checkbounds(Bool, A, I - radii)
-        return inds
-    else
-        return get_wrappend_inds.(Ref(A), inds)
-    end
-end
-@inline function safe_parent_indices(A::Stencils.AbstractStencilArray,::Stencils.Remove,::Stencils.Conditional,I::CartesianIndex)
-    inds = Stencils.indices(Stencils.stencil(A), I)
-end
-@inline function safe_parent_indices(A::Stencils.AbstractStencilArray,::Stencils.Remove,::Stencils.Halo,I::CartesianIndex)
-    radii = getStencilRadii(A)
-    inds = Stencils.indices(Stencils.stencil(A), I .- radii) 
-end
+getStencilRadii(::Stencils.AbstractStencilArray{<:Any,R,<:Any,N}) where {R,N} = CartesianIndex(ntuple(_ -> -R, N))
 
-@inline function safe_parent_indices(A::Stencils.AbstractStencilArray,::Any,::Any,I::CartesianIndex)
-    error("setindex for generic Stencil not implemented yet")
+@inline safe_parent_indices(S::StencilSpinConfig,I) = safe_parent_indices(parent(S), I)
+@inline safe_parent_indices(A::Stencils.AbstractStencilArray,I) = Stencils.indices(A, I)
+
+@inline safe_iterate_sites(S::StencilSpinConfig,I) = safe_iterate_sites(parent(S), I)
+@inline function safe_iterate_sites(A::Stencils.AbstractStencilArray,I)
+    return safe_iterate_sites(A, Stencils.boundary(A), Stencils.padding(A), CartesianIndex(I))
+end
+@inline function safe_iterate_sites(A::Stencils.AbstractStencilArray,::Any,::Stencils.Conditional,I)
+    inds = eachindex(Stencils.stencil(A))
+end
+@inline function safe_iterate_sites(A::Stencils.AbstractStencilArray,::Any,::Stencils.Halo,I)
+    site_inds = Stencils.indices(A, I)
+    
+    # inds = Iterators.filter(i->checkbounds(Bool,A,CartesianIndex(site_inds[i])),eachindex(site_inds))
+    inds = SmallCollections.SmallVector{8,Int}(i for (i,I) in enumerate(site_inds) if checkbounds(Bool,A,CartesianIndex(I)))
 end
 
 # `Conditional` needs handling for specific boundary conditions.

@@ -93,7 +93,7 @@ function guidingfuncRatio_log(ψG::OrderGuidingFunction,Walker::SpiderWebWalker,
     exp_m = zero(exp_α)
     exp_M = zero(exp_α)
     
-    @inbounds @simd for idx in eachindex(sites)
+    @inbounds @simd for idx in safe_iterate_sites(Config,(i,j))
         i,j = sites[idx]
         s = P1_STENCIL[idx]*opSign *SpinNormalization
         I = LI[i,j]

@@ -77,12 +77,11 @@ function _precompute_jastrow_weight(vij,move,Conf::StencilSpinConfig)
     sites = safe_parent_indices(parent(Conf), (i,j))
 
     exponent = zero(eltype(vij))
-
-    for k in eachindex(P1_STENCIL)
+    for k in safe_iterate_sites(Conf,(i,j))
         F_k = P1_STENCIL[k]#*opSign
         a_k = LI[CartesianIndex(sites[k])]
 
-        for k´ in eachindex(P1_STENCIL)
+        for k´ in safe_iterate_sites(Conf,(i,j))
             F_k´  = P1_STENCIL[k´]#*opSign (will cancel out)
             a_k´ =  LI[CartesianIndex(sites[k´])]
             exponent += 0.5*vij[a_k,a_k´]*F_k*F_k´
@@ -170,13 +169,13 @@ function guidingfuncRatio_log(ψG::JastrowFunction,Walker::SpiderWebWalker,move:
     n = Walker.n_x
     n´ = Walker.n_x´
 
-    LoopVectorization.@turbo for ind in eachindex(affectedPlaquettes)
+    LoopVectorization.@turbo for ind in safe_iterate_sites(x,(i,j))
         i = affectedPlaquettes[ind]
         Δn = n´[i] - n[i]
         exp_α += α[i] * Δn
     end
 
-    @inbounds @simd for idx in eachindex(sites)
+    @inbounds @simd for idx in safe_iterate_sites(x,(i,j))
         i,j = sites[idx]
         s = P1_STENCIL[idx]*opSign
         I = LI[i,j]
