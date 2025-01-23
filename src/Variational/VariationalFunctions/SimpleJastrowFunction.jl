@@ -42,7 +42,6 @@ struct SimpleJastrow_GWF_Buffer{T<:Number}
     x_i::Vector{T}
     h_i::Vector{T}
     prefac_moves::Matrix{T}
-    safe_parent_indices::Matrix{SVector{8,Int}}
 end
 
 function GWFBuffer_set_to!(A::SimpleJastrow_GWF_Buffer,B::SimpleJastrow_GWF_Buffer)
@@ -59,10 +58,8 @@ function allocate_GWF_buffer(ψG::SimpleJastrowFunction{T},S::AbstractMatrix) wh
     h_i = zeros(T,length(S))
     
     prefac_moves = _precompute_prefac_moves(ψG,S)
-    safe_parent_indices = _precompute_neighbor_indices(S)
-    return SimpleJastrow_GWF_Buffer(x_i,h_i,prefac_moves,safe_parent_indices)
+    return SimpleJastrow_GWF_Buffer(x_i,h_i,prefac_moves)
 end
-
 
 function _precompute_prefac_moves(ψG::SimpleJastrowFunction,Conf::StencilSpinConfig)
     AllPlaqs = collect(plaquetteIterator(Conf))
@@ -74,13 +71,6 @@ function _precompute_prefac_moves(ψG::SimpleJastrowFunction,Conf::StencilSpinCo
     return AllWeights
 end
 
-function _precompute_neighbor_indices(S::StencilSpinConfig)
-    safeInds = zeros(SVector{8,Int},size(S))
-    # for I in CartesianIndices(S)
-    #     safeInds[I] = safe_parent_indices_linear(parent(S),I)
-    # end
-    return safeInds
-end
 function premove_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::SimpleJastrowFunction,Walker::SpiderWebWalker) 
     return Buffer
 end
@@ -114,8 +104,6 @@ function post_move_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::Simp
 
     i,j,opSign = move
 
-    # affected_sites = Buffer.safe_parent_indices[i, j]
-    # affected_sites = safe_parent_indices_linear(Config, (i, j))
     affected_sites = safe_parent_indices(Config, (i, j))
     safe_iterator = safe_iterate_sites(Config,(i,j))
 
