@@ -148,7 +148,7 @@ Base.@propagate_inbounds function applyPlaquette!(Mat::Stencils.AbstractStencilA
     end
     return Mat
 end
-@inline function safe_parent_indices_linear(A::Stencils.AbstractStencilArray,I)
+@inline function safe_parent_indices_linear(A::Stencils.AbstractStencilArray,I,::Stencils.Conditional)
     inds = safe_parent_indices(A, CartesianIndex(I))
 
     LI = LinearIndices(A)
@@ -158,6 +158,18 @@ end
 
     return linear_inds
 end
+
+@inline function safe_parent_indices_linear(A::Stencils.AbstractStencilArray,I,::Stencils.Halo)
+    inds = safe_parent_indices(A, CartesianIndex(I))
+
+    LI = LinearIndices(A)
+    linear_inds = map(inds) do (i, j)
+        checkbounds(Bool,LI,i,j) ? LI[i, j] : 0
+    end
+
+    return linear_inds
+end
+@inline safe_parent_indices_linear(A::Stencils.AbstractStencilArray,I) = safe_parent_indices_linear(A, I, Stencils.padding(A))
 @inline safe_parent_indices_linear(A::StencilSpinConfig,I) = safe_parent_indices_linear(parent(A), I)
 
 getStencilRadii(::Stencils.AbstractStencilArray{<:Any,R,<:Any,N}) where {R,N} = CartesianIndex(ntuple(_ -> -R, N))

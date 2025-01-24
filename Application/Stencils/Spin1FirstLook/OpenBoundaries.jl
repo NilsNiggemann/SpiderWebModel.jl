@@ -10,32 +10,92 @@ using SpiderWebModel.HDF5
 include("../plottingUtils.jl")
 ##
 
-S = SW.stencilConfig(zeros(22,22),1,boundaryCondition = :periodic)
-CT = SW.ContinuousTimeMethod(0.1,w_avg_estimate = 0.1*length(S),Hxx = SW.Hxx_RK(0.0))
-ψG = SW.SimpleJastrowFunction(S)
-
-SW.rand!(SW.get_params(ψG)) .*= 1e-6
-ψG.v_ij .= SW.Symmetric(ψG.v_ij)
-##
 #___________Open Boundaries_______________________
 
-S = SW.stencilConfig(zeros(22,22),1,boundaryCondition = :open_soft)
-ψG = SW.SimpleJastrowFunction(S)
+S = SW.stencilConfig(zeros(20,20),1,boundaryCondition = :open_soft)
 
-SW.rand!(SW.get_params(ψG)) .*= 1e-6
-ψG.v_ij .= SW.Symmetric(ψG.v_ij)
+GFMCfiles = readdir("../../Data/open_L20/",join=true)
 
-CT = SW.ContinuousTimeMethod(0.1,w_avg_estimate = 0.1*length(S),Hxx = SW.Hxx_RK(0.0))
-CTSR = SW.ContinuousTimeMethod(30*CT.τ,w_avg_estimate = CT.w_avg_estimate,Hxx = CT.Hxx)
+SqsGFMC_direct = stack([h5read(file,"StructureFactor") for file in GFMCfiles])
 
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,10,ψG,100,1e-5,SW.IterativeSRSolver();Nwalkers = 20,rel_tolerance=1e-8,equilibration_steps=1000,pre_equilibration_steps=1_000,report_steps=1,)
-plotVarEn(stochReconfRes)
+with_theme(theme_SimpleTicks()) do 
+    SqMat = SW.expand_Sq(dropmean(SqsGFMC_direct,dims=4))[:,:,50]
+    SqErr = SW.expand_Sq(dropstd(SqsGFMC_direct,dims=4))[:,:,50]
+    fittingCoefs = optimizeCoeffs(SqMat)
+    fig = Figure(size = 120 .* (4,4),fontsize = 22)
+
+    xticks = yticks = PiTicks([0,pi])
+    axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
+
+    ax = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,ylabelvisible = false,yticklabelsvisible = false)
+
+    # ax2 = Axis(fig[2,1:2],xlabel = L"|\mathbf{q}|^2",ylabel = L"\mathcal{S}(\mathbf{q})",title = L"μ= %$μ")
+    Sq = SW.getSqCont(SqMat)
+    Sqerr = SW.getSqCont(SqErr)
+    qx = qy = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
+    Sq_q = collect(Iterators.product(qx,qy))
+    Sq_q = Sq.(Iterators.product(qx,qy))
+    heatmap!(ax,qx,qy,Sq_q)
+    
+    SqFT = [SqFieldTheory(x,y,fittingCoefs...) for x in qx, y in qy]
+
+    heatmap!(axFT,qx,qy,SqFT)
+    q_path(r,phi) = (r*cos(phi),r*sin(phi))
+    qr = LinRange(0,.35pi,100)
+    
+    colors = (:red,:blue,:magenta)
+    
+
+    colorFT = :black
+    colorGFMC = :red
+
+    kpath = ["Γ","X","X'","Γ"]
+    pointlabels,p1 = fetchKPath([KPoints[k] for k in kpath],500)
+    kpointlabels = Makie.latexstring.(kpath)
+    tRange = eachindex(p1)
+    xygrid = [(x,y) for x in qx, y in qy]
+
+    
+    axPath = Axis(fig[2,1:2],ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
+    # yscale = log10
+    )
+    tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
+    
+
+    p1_points = xygrid[p1_discrete]
+
+    Sqcut = [Sq(x,y) for (x,y) in p1_points]
+    Sqerrcut = [Sqerr(x,y) for (x,y) in p1_points]
+    SqFT = [SqFieldTheory(q,fittingCoefs) for q in p1_points]
+
+    # SqFT = [AsymFieldTheory(q,1,10) for q in qpoints]
+    scatter!(ax,p1_points,marker = '∘' ,color = colorGFMC,markersize = 15)
+    scatterlines!(axFT,p1_points,color = colorFT,linestyle = :dash,marker = '●',markersize = 2)
+    # tRange = SW.norm.(p1).^2
+    scatterlines!(axPath,tRange,SqFT,color = colorFT,linestyle = :dash,marker = '●',markersize = 8)
+    
+    text!(axFT,Point(0,0),text="Γ",color = :white,align = (:center,:center))
+    text!(axFT,Point(pi,0),text="X",color = :white,align = (:center,:center))
+    text!(axFT,Point(0,pi),text="X'",color = :white,align = (:center,:center))
+
+    scatter!(axPath,tRange,Sqcut.+1e-30,
+    marker = '∘',markersize = 18,color = colorGFMC)
+    errorbars!(axPath,tRange,Sqcut.+1e-30,Sqerrcut,color = colorGFMC,whiskerwidth = 6,linewidth=0.5)
+
+    rowsize!(fig.layout,1,Relative(0.5))
+    # ylims!(axPath,0.01,nothing)
+    # ylims!(axPath,0,1.2)
+    # text!(axFT,Point(pi,1.4pi),text=L"r = %$(strd(fittingCoefs[2]))",color = :white,align = (:center,:center))
+    # Label(fig[1,1, TopLeft()],L"a)$$",padding = (-30,0,-10,0))
+    # Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-10,0))
+    # Label(fig[2,1, TopLeft()],L"c)$$",padding = (-30,0,-10,0))
+    # Label(fig[3,1, TopLeft()],L"d)$$",padding = (-30,0,-10,0))
+
+    fig
+end
+
 
 ##
-#___________Periodic Boundaries_______________________
-
-
-
 function initializeGWF(S,Symmetry) 
     ψG = SW.SimpleJastrowFunction(S)
     ψGSymm = SW.symmetrize(ψG,Symmetry,S)

@@ -135,7 +135,6 @@ function guidingfuncRatio_log(ψG::SimpleJastrowFunction,Walker::SpiderWebWalker
     i,j,opSign = move
     prefac = prefac_moves[i,j]
 
-    # sites = Buffer.safe_parent_indices[i, j]
     sites = safe_parent_indices_linear(Config, (i, j))
 
     exp_h = zero(eltype(get_params(ψG)))
