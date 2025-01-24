@@ -542,7 +542,7 @@ crossings = detect_crossings(xis_intPol)
 ##
 with_theme(theme_SimpleTicks()) do 
 
-    fig = Figure(fontsize = 22,size = 400 .*(1.6,2))
+    fig = Figure(fontsize = 22,size = 400 .*(3,2))
     
     FSS_Plot = GridLayout()
     Sq_Heatmaps = GridLayout()
@@ -550,11 +550,11 @@ with_theme(theme_SimpleTicks()) do
     SqRandomCuts = GridLayout()
     BCorrPlot = GridLayout()
 
-    fig.layout[1,1:3] = FSS_Plot
-    fig.layout[2,1:3] = Sq_Heatmaps
-    fig.layout[3,1:3] = SqCuts
-    fig.layout[4,1:2] = SqRandomCuts
-    fig.layout[4,3] = BCorrPlot
+    fig.layout[1:2,1:3] = FSS_Plot
+    fig.layout[1,4:7] = Sq_Heatmaps
+    fig.layout[2,4:7] = SqCuts
+    fig.layout[3,1:7-1] = SqRandomCuts
+    fig.layout[3,7] = BCorrPlot
     
     PiTicksArgs = (;xticks = PiTicks([0,pi]), yticks = PiTicks([0,pi]))
 
@@ -679,7 +679,7 @@ with_theme(theme_SimpleTicks()) do
 
     end
 
-    inset = insetAtPoint(fig,ax_scal,(0.8,3.8),0.8 .*(110,60),xlabel = L"L",ylabel = L"μ_c")
+    inset = insetAtPoint(fig,ax_scal,(0.7,3.8),0.8 .*(110,60),xlabel = L"L",ylabel = L"μ_c")
     scatterlines!(inset,crossings.L,crossings.crossings)
 
     ylims!(ax_scal,0,5)
@@ -688,8 +688,8 @@ with_theme(theme_SimpleTicks()) do
     # ylims!(ax2,0.04,1.8)
     axislegend(ax_scal,position = :lb)
 
-    rowsize!(fig.layout,1,Relative(0.4))
-    rowsize!(fig.layout,2,Relative(0.25))
+    rowsize!(fig.layout,1,Relative(0.3))
+    rowsize!(fig.layout,2,Relative(0.3))
     colgap!(Sq_Heatmaps,1,-40)
     colgap!(Sq_Heatmaps,2,-40)
     colgap!(Sq_Heatmaps,3,-40)

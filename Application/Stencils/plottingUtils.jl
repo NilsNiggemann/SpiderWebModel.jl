@@ -3,7 +3,7 @@ using Optim
 using MakieHelpers
 using CairoMakie
 import SpiderWebModel as SW
-##
+using SpiderWebModel.HDF5
 dropmean(A; dims=:) = dropdims(mean(A; dims=dims); dims=dims)
 dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
 
