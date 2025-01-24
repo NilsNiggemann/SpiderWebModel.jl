@@ -37,7 +37,7 @@ function parseBoundaryCondition(boundaryCondition)
         padding = Stencils.Conditional()
     elseif boundaryCondition == :open_soft
         boundary = Stencils.Remove(Int8(0))
-        padding = Stencils.Halo(:in)
+        padding = Stencils.Halo(:out)
     elseif boundaryCondition == :periodic
         boundary = Stencils.Wrap()
         padding = Stencils.Conditional()

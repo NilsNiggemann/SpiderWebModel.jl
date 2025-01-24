@@ -13,14 +13,14 @@ include("../plottingUtils.jl")
 #___________Open Boundaries_______________________
 
 S = SW.stencilConfig(zeros(20,20),1,boundaryCondition = :open_soft)
-
+##
 GFMCfiles = readdir("../../Data/open_L20/",join=true)
 
 SqsGFMC_direct = stack([h5read(file,"StructureFactor") for file in GFMCfiles])
 
 with_theme(theme_SimpleTicks()) do 
-    SqMat = SW.expand_Sq(dropmean(SqsGFMC_direct,dims=4))[:,:,50]
-    SqErr = SW.expand_Sq(dropstd(SqsGFMC_direct,dims=4))[:,:,50]
+    SqMat = SW.expand_Sq(dropmean(SqsGFMC_direct,dims=4))[:,:,end]
+    SqErr = SW.expand_Sq(dropstd(SqsGFMC_direct,dims=4))[:,:,end]
     fittingCoefs = optimizeCoeffs(SqMat)
     fig = Figure(size = 120 .* (4,4),fontsize = 22)
 
