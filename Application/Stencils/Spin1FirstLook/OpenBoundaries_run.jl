@@ -23,9 +23,7 @@ CT = SW.ContinuousTimeMethod(0.1,w_avg_estimate = 0.1*length(S),Hxx = SW.Hxx_RK(
 CTSR = SW.ContinuousTimeMethod(50*CT.τ,w_avg_estimate = CT.w_avg_estimate,Hxx = CT.Hxx)
 
 if !isfile(SRoutfile)
-    stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,200,ψG,1000,3e-3,SW.IterativeSRSolver();Nwalkers = 40,rel_tolerance=1e-8,equilibration_steps=1000,pre_equilibration_steps=1_000,report_steps=1,outfile = SRoutfile)
-    plotVarEn(stochReconfRes)
-
+    stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,150,ψG,1000,3e-3,SW.IterativeSRSolver();Nwalkers = 40,rel_tolerance=1e-8,equilibration_steps=1000,pre_equilibration_steps=1_000,report_steps=10,outfile = SRoutfile)
     # h5write(SRoutfile,"E0",stochReconfRes.E0)
     # h5write(SRoutfile,"ΔE",stochReconfRes.ΔE)
     # h5write(SRoutfile,"params",stochReconfRes.params)
