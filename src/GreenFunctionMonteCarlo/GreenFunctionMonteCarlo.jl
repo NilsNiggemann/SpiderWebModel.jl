@@ -506,8 +506,8 @@ function propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,
     (;Hxx,τ,w_avg_estimate) = method
     batches = ChunkSplitters.chunks(eachindex(Walkers), n = nThreads)
 
-    Threads.@threads for (i_chunk,αinds) in enumerate(batches)
-        for α in αinds
+    @sync for (i_chunk,αinds) in enumerate(batches)
+        Threads.@spawn for α in αinds
             Walker = Walkers[α]
             # compute_GWF_buffer!(GWFBuffer,ψG,Walker)
             GWFBuffer = Guiding_function_buffer[α]
@@ -540,6 +540,7 @@ function propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,
             weights[α] = w
         end
     end
+    
 end
 
 """Performs an efficient reconfiguration of walkers. This reconfiguration will not remove walkers if they all have the same weight, which increases the efficiency as more walkers can contribute to the average.
