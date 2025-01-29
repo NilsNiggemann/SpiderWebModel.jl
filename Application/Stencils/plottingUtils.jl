@@ -511,3 +511,20 @@ KPoints = Dict([
     "M" => SVector(pi,pi),
     "X'" => SVector(0,pi)
     ])
+
+
+    
+function expand_kSpace(SqMat,k_range=(-0.5pi,1.5pi))
+    SqFunc = SW.getSqCont(SqMat,cutoffEnd=0)
+    L = size(SqMat,1)
+    kx = ky = trueMomenta(k_range...,L)
+    Sq = [SqFunc(x,y) for x in kx, y in ky]
+end
+
+function heatmapSq!(ax::Makie.Axis,SqMat;k_range=(-0.5pi,1.5pi),kwargs...)
+    L = size(SqMat,1)
+    kx = ky = trueMomenta(k_range...,L)
+    SqShift = expand_kSpace(SqMat,k_range)
+    heatmap!(ax,kx,ky,SqShift;kwargs...)
+
+end
