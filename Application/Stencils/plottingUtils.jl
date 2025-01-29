@@ -8,7 +8,7 @@ dropmean(A; dims=:) = dropdims(mean(A; dims=dims); dims=dims)
 dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
 
 function errlines!(ax::MakieHelpers.Makie.AbstractAxis,x,y,err;bandkwargs = (;),kwargs...)
-    l = lines!(ax,x,y;kwargs...)
+    l = scatterlines!(ax,x,y;markersize=0,kwargs...)
     band!(ax,x,y .- err,y .+ err;color = (l.color[],0.3),bandkwargs...)
 end
 errlines!(x,y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),x,y,err;bandkwargs,kwargs...)
@@ -18,7 +18,6 @@ function errlines(args...;axis = (;),kwargs...)
     fig = Figure()
     ax = Axis(fig[1,1];axis...)
     errlines!(ax,args...;kwargs...)
-
     fig
 end
 

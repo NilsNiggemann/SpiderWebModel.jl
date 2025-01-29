@@ -430,7 +430,7 @@ SW.rand!(ψGSymm,1e-5)
 # ψG = SW.RKFunction()
 ##
 
-stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,100,ψGSymm,700,6e-3,SW.IterativeSRSolver();Nwalkers = 1*20,rel_tolerance=1e-8,equilibration_steps=1000,pre_equilibration_steps=10_000,report_steps=5)
+stochReconfRes = SW.stochastic_reconfiguration(S,CTSR,100,ψGSymm,1000,8e-3,SW.IterativeSRSolver();Nwalkers = 1*20,rel_tolerance=1e-8,equilibration_steps=1000,pre_equilibration_steps=10_000,report_steps=5)
 SW.get_params(ψG) .= stochReconfRes.params
 plotVarEn(stochReconfRes,movavg = 30)
 ##
@@ -450,7 +450,7 @@ end
 ##
 BBQOp = SW.BBqOperator()
 
-BBQ = fetch.([Threads.@spawn SW.measureObservables(S,BBQOp,qvals,5,20*5,2000,CT,ψG;equilibration_steps = 5000,pre_equilibration_steps=20_000) for _ in 1:10])
+BBQ = fetch.([Threads.@spawn SW.measureObservables(S,BBQOp,qvals,5,20*2,1000,CT,ψG;equilibration_steps = 5000,pre_equilibration_steps=20_000) for _ in 1:10])
 
 ##
 Bq_Cos2 = fetch.([Threads.@spawn SW.measureObservables(S,SW.BqOperator(),qvals,5,20*5,2000,CT,ψG;equilibration_steps = 5000,pre_equilibration_steps=20_000) for _ in 1:10])
