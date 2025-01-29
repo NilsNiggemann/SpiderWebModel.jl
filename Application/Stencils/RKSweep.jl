@@ -2,6 +2,9 @@ import SpiderWebModel as SW
 using CairoMakie, MakieHelpers,Statistics
 using SpiderWebModel.HDF5
 using DataFrames
+using Interpolations
+using Optim
+
 include("plottingUtils.jl")
 
 ##
@@ -138,8 +141,10 @@ function getSq_tau(res::DataFrame,::Nothing)
     return res.Sq
 end
 
-function getSq(res::DataFrame;tau,mu,L)
-    res_new = filter(row -> row.mu == mu && row.L == L,res)
+function getSq(res::DataFrame;tau,mu=nothing,L=nothing)
+    mu_func = isnothing(mu) ? x->true : x->x.mu == mu
+    L_func = isnothing(L) ? x->true : x->x.L == L
+    res_new = filter(row -> mu_func(row) && L_func(row),res)
     return getSq_tau(res_new,tau)
 end
 
@@ -479,10 +484,169 @@ with_theme(theme_PiTicks()) do
 end
 
 ##
+function getXiLs(res,res_36)
+    
+    xis = Dict{Int,Vector{Float64}}()
+    xis_err = Dict{Int,Vector{Float64}}()
+    mus = Dict{Int,Vector{Float64}}()
 
+    let L=36
+        unique_mus = unique(res_36.mu)
+        k = trueMomenta(0,2pi,L)
+        i_k = findfirst(==(pi/2),k)
+
+        Sq = [getSq(res_36,mu = mu,L = L,tau=10) for mu in unique_mus]
+        xi_L = [getXis(Sq,CartesianIndex(i_k,i_k)) for Sq in Sq]
+        xis[L] = mean.(xi_L) ./ L
+        xis_err[L] = std.(xi_L) ./ L
+        mus[L] = unique_mus
+    end
+
+    for L in (20,24,28)
+        Sqs = eachslice(getSq_tau(res[L],10),dims=(3,4))
+        k = trueMomenta(0,2pi,L)
+        i_k = findfirst(==(pi/2),k)
+        xi_L = [getXis(Sq,CartesianIndex(i_k,i_k)) for Sq in eachslice(Sqs,dims=1)]
+        xis[L] = mean(xi_L) ./ L
+        xis_err[L] = std(xi_L) ./ L
+        mus[L] = res[L].mus
+    end
+
+    return (;xis,xis_err,mus)
+end
+xi_res = getXiLs(res,res_36)
+
+
+function detect_crossings(xis_intPol)
+    Ls = sort(collect(keys(xis_intPol)))
+    crossings = zeros(length(Ls)-1)
+
+    for i in eachindex(Ls)[1:end-1]
+        L1 = Ls[i]
+        L2 = Ls[i+1]
+        xi_L1 = xis_intPol[L1]
+        xi_L2 = xis_intPol[L2]
+
+        mu_c = Optim.optimize(mu -> abs(xi_L1(mu) - xi_L2(mu)),0.0,1.0).minimizer
+        crossings[i] = mu_c
+
+    end
+
+    return (;L = Ls[2:end],crossings)
+end
+xis_intPol = let
+
+    Dict(L=> interpolate((xi_res.mus[L],), xi_res.xis[L], Gridded(Linear())) for L in keys(xi_res.xis))
+end
+crossings = detect_crossings(xis_intPol)
+##
 with_theme(theme_SimpleTicks()) do 
-    fig = Figure(fontsize = 22,size = 400 .*(1.4,1.))
-    ax = Axis(fig[1,1],xlabel = L"μ",ylabel = L"\xi/L")
+
+    fig = Figure(fontsize = 22,size = 400 .*(3,2))
+    
+    FSS_Plot = GridLayout()
+    Sq_Heatmaps = GridLayout()
+    SqCuts = GridLayout()
+    SqRandomCuts = GridLayout()
+    BCorrPlot = GridLayout()
+
+    fig.layout[1:2,1:3] = FSS_Plot
+    fig.layout[1,4:7] = Sq_Heatmaps
+    fig.layout[2,4:7] = SqCuts
+    fig.layout[3,1:7-1] = SqRandomCuts
+    fig.layout[3,7] = BCorrPlot
+    
+    PiTicksArgs = (;xticks = PiTicks([0,pi]), yticks = PiTicks([0,pi]))
+
+    
+    L_Plot = 36
+    qx = qy = trueMomenta(-0.5pi,1.5pi,L_Plot)
+    FSS_Plot[1,1] = ax_scal = Axis(fig,xlabel = L"μ",ylabel = L"\xi/L")
+
+    mu_show = (0.,0.3,0.8)
+
+    SqsGFMC = [SW.expand_Sq.(getSq(res_36,tau=15,mu=mu,L=L_Plot)) for mu in mu_show]
+
+    SqMat = mean.(SqsGFMC)
+    SqErr = std.(SqsGFMC)
+    
+
+    with_theme(theme_PiTicks()) do 
+        Sq_Heatmaps[1,1] = ax_mu1 = Axis(fig;xlabel = L"q_x",ylabel = L"q_y",aspect=1,PiTicksArgs...)
+        Sq_Heatmaps[1,3] = ax_mu2 = Axis(fig;xlabel = L"q_x",aspect=1,yticklabelsvisible = false,PiTicksArgs...)
+        Sq_Heatmaps[1,5] = ax_mu3 = Axis(fig;xlabel = L"q_x",aspect=1,yticklabelsvisible = false,PiTicksArgs...)
+
+    
+        linkyaxes!(ax_mu1,ax_mu2,ax_mu3)
+
+
+        colorrange = extrema(stack(SqMat))
+
+        for (i,ax) in enumerate((ax_mu1,ax_mu2,ax_mu3))
+            SqCont = SW.getSqCont(SqMat[i])
+            hm = heatmap!(ax,qx,qy,SqCont.(Iterators.product(qx,qy)),colormap = :viridis;
+            # colorrange
+            )
+            Colorbar(Sq_Heatmaps[1,2i],hm,ticks = SimpleTicks(),width = Relative(0.05),height = Relative(0.8))
+        end
+
+        # rowsize!(Sq_Heatmaps,1,Relative(0.01))
+        # rowsize!(Sq_Heatmaps,2,Relative(0.9999))
+
+    end
+    kpath = ["Γ","X","X'","Γ"]
+    pointlabels,p1 = fetchKPath([KPoints[k] for k in kpath],500)
+    kpointlabels = Makie.latexstring.(kpath)
+    tRange = eachindex(p1)
+
+    xygrid = [(x,y) for x in qx, y in qy]
+
+    
+    
+    with_theme(theme_SimpleTicks()) do 
+        SqCuts[1,1] = axPath1 = Axis(fig,ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
+        )
+        SqCuts[1,2] = axPath2 = Axis(fig,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
+        )
+        SqCuts[1,3] = axPath3 = Axis(fig,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
+        )
+        # linkyaxes!(axPath1,axPath2,axPath3)
+
+        tRange_new,p1_discrete = rasterCurve(p1,xygrid,tRange)
+        for (i,ax,SqMat,SqErr) in zip(eachindex(SqsGFMC), (axPath1, axPath2, axPath3), SqMat, SqErr)
+            SqFunc = SW.getSqCont(SqMat)
+            SqErrFunc = SW.getSqCont(SqErr)
+            Sqcut = [SqFunc(x,y) for (x,y) in xygrid[p1_discrete]]
+            Sqerrcut = [SqErrFunc(x,y) for (x,y) in xygrid[p1_discrete]]
+            scatter!(ax, tRange_new, Sqcut, marker = '∘', markersize = 10, color = :black)
+            errorbars!(ax, tRange_new, Sqcut, Sqerrcut, whiskerwidth = 6, linewidth = 0.5, color = :black)
+            
+            # Add lines corresponding to the best field theory fit
+            fittingCoefs = optimizeCoeffs(SqMat)
+            SqFT = [SqFieldTheory(q, fittingCoefs) for q in xygrid[p1_discrete]]
+            lines!(ax, tRange_new, SqFT, color = :red, linestyle = :dash)
+        end
+        SqRandomCuts[1,1] = axPath_Random = Axis(fig,ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),yticks = SimpleTicks()
+        )
+
+
+        text!(axPath_Random,Point(100,1),text="TODO!",color = :black,align = (:center,:center),fontsize = 40)
+
+    end
+
+    with_theme(theme_PiTicks()) do 
+        BCorrPlot[1,1] = ax_BCorr = Axis(fig;xlabel = L"q_x",ylabel = L"q_y",aspect=1,PiTicksArgs...)
+
+        Bq = [cos(qx-qy)^2 + cos(qx+qy)^2 for qx in qx, qy in qy]
+        hm_B = heatmap!(ax_BCorr,qx,qy,Bq,colormap = Makie.cgrad(:thermal,rev=false))
+
+        text!(ax_BCorr,Point(pi/2,pi/2),text="TODO!",color = :black,align = (:center,:center),fontsize = 40)
+    end
+
+    tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
+        
+
+    # return fig
     # ax2 = insetAtPoint(fig,ax,(0.6,3.2),(110,60))
     # ax2 = Axis(fig[2,1],xlabel = L"μ",ylabel = L"\xi/L")
     # linkaxes!(ax,ax2)
@@ -494,62 +658,49 @@ with_theme(theme_SimpleTicks()) do
     for (L,linestyle) in zip((20,24,28),Linestyles)
     # for (L,linestyle) in zip(keys(res),Linestyles)
         # Sq = res[L].Sqs[:,:,5,:,:]
-        Sq = getSq_tau(res[L],10)
-        k = trueMomenta(0,2pi,size(Sq,1)-1)
-        i_k = findfirst(==(pi/2),k)
-        xis = getXis_err(Sq,CartesianIndex(i_k,i_k))
-        mus = res[L].mus
+        mus = xi_res.mus[L]
         muFilter = findall(x->x<=1,mus)
 
-        xiLs = xis.ximean[muFilter] ./ L
-        xiLserr = xis.xistd[muFilter] ./ L
+        xiLs = xi_res.xis[L][muFilter]
+        xiLserr = xi_res.xis_err[L][muFilter]
         musPlot = mus[muFilter]
-        scatterlines!(ax,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
-        errorbars!(ax,musPlot,xiLs,xiLserr,whiskerwidth = 5)
+        
+        scatterlines!(ax_scal,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
+        errorbars!(ax_scal,musPlot,xiLs,xiLserr,whiskerwidth = 5)
     end
+
     let L=36,linestyle = :dashdot
-        unique_mus = unique(res_36.mu)
-        k = trueMomenta(0,2pi,L)
-        i_k = findfirst(==(pi/2),k)
+        musPlot = xi_res.mus[L]
+        xiLs = xi_res.xis[L]
+        xiLserr = xi_res.xis_err[L]
 
-        Sq = [getSq(res_36,mu = mu,L = L,tau=10) for mu in unique_mus]
-
-        xis = [getXis(Sq,CartesianIndex(i_k,i_k)) for Sq in Sq]
-
-        xiLs = [mean(xi) for xi in xis] ./ L
-        xiLserr = [std(xi) for xi in xis] ./ L
-
-        musPlot = unique_mus
-        scatterlines!(ax,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
-        errorbars!(ax,musPlot,xiLs,xiLserr,whiskerwidth = 5)
+        scatterlines!(ax_scal,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
+        errorbars!(ax_scal,musPlot,xiLs,xiLserr,whiskerwidth = 5)
 
     end
 
+    inset = insetAtPoint(fig,ax_scal,(0.7,3.8),0.8 .*(110,60),xlabel = L"L",ylabel = L"μ_c")
+    scatterlines!(inset,crossings.L,crossings.crossings)
 
-    ylims!(ax,0,5)
-    mu_c = 0.18
-    vlines!(ax,[mu_c],color = :grey,linestyle = :dash)
-    text!(ax,Point(0.22,3.5),text=L"μ_c = %$mu_c",color = :grey,align = (:left,:center))
+    ylims!(ax_scal,0,5)
+    # vlines!(ax_scal,[mu_c],color = :grey,linestyle = :dash)
+    # text!(ax_scal,Point(0.22,3.5),text=L"μ_c = %$mu_c",color = :grey,align = (:left,:center))
     # ylims!(ax2,0.04,1.8)
-    axislegend(ax,position = :lb)
+    axislegend(ax_scal,position = :lb)
+
+    rowsize!(fig.layout,1,Relative(0.3))
+    rowsize!(fig.layout,2,Relative(0.3))
+    colgap!(Sq_Heatmaps,1,-40)
+    colgap!(Sq_Heatmaps,2,-40)
+    colgap!(Sq_Heatmaps,3,-40)
+    colgap!(Sq_Heatmaps,4,-40)
+    colgap!(Sq_Heatmaps,5,-40)
+
     fig
     
 end
-##
-a = let L=36
-    unique_mus = unique(res_36.mu)
-    # xis = [getxi(mean(filter(x->x.mu == mu,res_36).Sq)) for mu in unique_mus]
-    Sqs = [getSq(res_36,mu = mu,L = L,tau=10) for mu in unique_mus]
-end
-##
-KPoints = Dict([
-    "Γ" => SVector(0,0),
-    "X" => SVector(pi,0),
-    "M" => SVector(pi,pi),
-    "X'" => SVector(0,pi)
-    ])
 
-
+##
 
 with_theme(theme_SimpleTicks()) do 
     L = 36
