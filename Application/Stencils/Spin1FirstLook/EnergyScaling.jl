@@ -139,7 +139,7 @@ for idx in eachindex(sector_nums,Symms)
     Nwalkers = 1000
     nThermal = 2000
 
-    if i == 1
+    if sector == 1
         Nwalkers = 4000
         nThermal = 4000
     end
