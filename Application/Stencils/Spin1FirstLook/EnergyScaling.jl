@@ -136,7 +136,14 @@ for idx in eachindex(sector_nums,Symms)
 
     SW.Random.seed!(1232)
     
-    e_i = getEnergies(S,muRange,Symm,Nwalkers = 1000,NSteps = 3000,nThermal = 2000,NRuns=30,dt = 4e-4,NConfs = 20,nopt1 = 400,nopt2 = 700)
+    Nwalkers = 1000
+    nThermal = 2000
+
+    if i == 1
+        Nwalkers = 4000
+        nThermal = 4000
+    end
+    e_i = getEnergies(S,muRange,Symm;Nwalkers,NSteps = 3000,nThermal,NRuns=12,dt = 2e-3,NConfs = 80,nopt1 = 700,nopt2 = 200)
     
     h5write(outfile_EnergyScaling,"$sector/energy",e_i)
     println("Sector $sector done")
@@ -158,18 +165,17 @@ function plot_energies(outfile)
         for sector in keys(f)
             sector == "muRange" && continue
             "energy" in keys(f[sector]) || continue
+            Nsites = length(f[sector*"/conf"])
             energies = read(f["$sector/energy"])
-            mean_energies = dropmean(energies, dims=2) ./ L^2 ./ (1 .-muRange)
-            std_energies = dropstd(energies, dims=2) ./ L^2 ./ (1 .-muRange)
+            mean_energies = dropmean(energies, dims=2) ./Nsites ./ (1 .-muRange)
+            std_energies = dropstd(energies, dims=2) ./Nsites ./ (1 .-muRange)
 
-            # errorbars!(ax, muRange, mean_energies, yerr=std_energies)
-            errlines!(ax, muRange, mean_energies, std_energies,label = L"%$sector",markersize = 5)
+            errlines!(ax, muRange, mean_energies, std_energies, label=L"%$sector")
         end
     end
-    axislegend(ax, position = :lt)
+    axislegend(ax)
     fig
 end
-# outfile_EnergyScaling = "../../Data/energy_mu_S1_2.h5"
-
+outfile_EnergyScaling = "../../Data/energy_mu_S1.h5"
 
 plot_energies(outfile_EnergyScaling)
