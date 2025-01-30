@@ -142,11 +142,11 @@ function guidingfuncRatio_log(ψG::PlaquetteRBM,Walker::SpiderWebWalker,move,Buf
     exp_a = zero(eltype(Θ))
     exp_A = zero(eltype(Θ))
 
-    # @boundscheck checkbounds(n,eachindex(affectedPlaquettes))
-    # @boundscheck checkbounds(w,eachindex(affectedPlaquettes),eachindex(Θ))
+    # @boundscheck checkbounds(n,safe_iterate_sites(Config,(i,j)))
+    # @boundscheck checkbounds(w,safe_iterate_sites(Config,(i,j)),eachindex(Θ))
     # @boundscheck checkbounds(w,i for i in affectedPlaquettes,eachindex(Θ))
 
-    @inbounds @simd for ind in eachindex(affectedPlaquettes)
+    @inbounds @simd for ind in safe_iterate_sites(Config,(i,j))
         i = affectedPlaquettes[ind]
         Δn = n´[i] - n[i]
         Δn² = n´[i]^2 - n[i]^2
@@ -159,7 +159,7 @@ function guidingfuncRatio_log(ψG::PlaquetteRBM,Walker::SpiderWebWalker,move,Buf
     # for j in eachindex(Θ)
         ΔΘj = zero(eltype(Θ))
         # for idx in eachindex(sites)
-        for ind in eachindex(affectedPlaquettes)
+        for ind in safe_iterate_sites(Config,(i,j))
             i = affectedPlaquettes[ind]
             Δn = n´[i] - n[i]
             Δn² = n´[i]^2 - n[i]^2

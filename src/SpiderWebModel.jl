@@ -10,6 +10,7 @@ import KrylovKit
 import ChunkSplitters
 import DataStructures
 import CircularArrays
+import SmallCollections
 import JuMP
 import Gurobi
 import ProgressMeter
