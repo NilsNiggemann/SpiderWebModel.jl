@@ -121,3 +121,9 @@ function get4x4PeriodicState(L,i)
     UC = SELECTED_4x4_CONFS[:,:,i]
     getPeriodicState(UC, L, L, 0)
 end
+function get4x4PeriodicSpinConf(L,i;kwargs...)
+    S0 = get4x4PeriodicState(L,i)
+    S = stencilConfig(zeros(L,L),1,boundaryCondition= :periodic,kwargs...)
+    S .= S0
+    return S
+end

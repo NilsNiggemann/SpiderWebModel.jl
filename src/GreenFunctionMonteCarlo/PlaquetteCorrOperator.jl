@@ -107,8 +107,7 @@ function getWeight2Moves!(Walker::SpiderWebWalker,ψG::AbstractGuidingFunction,m
     j_x, j_y, move_J = move2
 
     qr_ij = q ⋅ SA[i_x-j_x, i_y-j_y]
-
-    OperatorWeight = 2*(cos(qr_ij*0.5)^2)#/length(Walker.Plaquette_positions)
+    OperatorWeight = (cos(qr_ij*0.5)^2)/length(Walker.Plaquette_positions)
 
     post_move_update_GWF_buffer!(Guiding_function_buffer,ψG,Walker,inverse_move(move1)) # undo the first move
     applyPlaquette!(Config,inverse_move(move1))

@@ -3,12 +3,12 @@ using Optim
 using MakieHelpers
 using CairoMakie
 import SpiderWebModel as SW
-##
+using SpiderWebModel.HDF5
 dropmean(A; dims=:) = dropdims(mean(A; dims=dims); dims=dims)
 dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
 
 function errlines!(ax::MakieHelpers.Makie.AbstractAxis,x,y,err;bandkwargs = (;),kwargs...)
-    l = lines!(ax,x,y;kwargs...)
+    l = scatterlines!(ax,x,y;markersize=0,kwargs...)
     band!(ax,x,y .- err,y .+ err;color = (l.color[],0.3),bandkwargs...)
 end
 errlines!(x,y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),x,y,err;bandkwargs,kwargs...)
@@ -18,7 +18,6 @@ function errlines(args...;axis = (;),kwargs...)
     fig = Figure()
     ax = Axis(fig[1,1];axis...)
     errlines!(ax,args...;kwargs...)
-
     fig
 end
 
@@ -511,3 +510,20 @@ KPoints = Dict([
     "M" => SVector(pi,pi),
     "X'" => SVector(0,pi)
     ])
+
+
+    
+function expand_kSpace(SqMat,k_range=(-0.5pi,1.5pi))
+    SqFunc = SW.getSqCont(SqMat,cutoffEnd=0)
+    L = size(SqMat,1)
+    kx = ky = trueMomenta(k_range...,L)
+    Sq = [SqFunc(x,y) for x in kx, y in ky]
+end
+
+function heatmapSq!(ax::Makie.Axis,SqMat;k_range=(-0.5pi,1.5pi),kwargs...)
+    L = size(SqMat,1)
+    kx = ky = trueMomenta(k_range...,L)
+    SqShift = expand_kSpace(SqMat,k_range)
+    heatmap!(ax,kx,ky,SqShift;kwargs...)
+
+end
