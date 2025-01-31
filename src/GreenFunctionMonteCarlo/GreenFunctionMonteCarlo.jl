@@ -436,8 +436,8 @@ end
 function fill_all_Buffers!(prob::AbstractGFMCProblem,nThreads)
     (;Walkers,Guiding_function_buffer,ψG) = prob
     batches = ChunkSplitters.chunks(eachindex(Walkers,Guiding_function_buffer), n = nThreads)
-    Threads.@threads for (i_chunk,αinds) in enumerate(batches)
-        for α in αinds
+    @sync for α in eachindex(Walkers)
+        Threads.@spawn begin
             GWFBuffer = Guiding_function_buffer[α]
             Walker = Walkers[α]
             compute_GWF_buffer!(GWFBuffer,ψG,Walker)
@@ -564,10 +564,12 @@ function reconfiguration!(Walkers::AbstractVector{<:AbstractWalker},Guiding_func
         empty!(Walkers[α].moves)
     end
     minimizeReconfiguration!(reconfigurationList)
-    for (α,α´) in enumerate(reconfigurationList)
+    @sync for (α,α´) in enumerate(reconfigurationList)
         if α´ != α
-            get_config(Walkers[α]) .= get_config(Walkers[α´])
-            Guiding_function_buffer[α] = GWFBuffer_set_to!(Guiding_function_buffer[α],Guiding_function_buffer[α´])
+            Threads.@spawn begin
+                get_config(Walkers[α]) .= get_config(Walkers[α´])
+                Guiding_function_buffer[α] = GWFBuffer_set_to!(Guiding_function_buffer[α],Guiding_function_buffer[α´])
+            end
         end
     end
 end
@@ -603,12 +605,22 @@ end
 
 """given a list of reconfiguration indices, minimizes the number of reconfigurations by swapping elements in the list. Each walker that survives a reconfiguration step remains unchanged while walkers that are killed get assigned to a new index."""
 function minimizeReconfiguration!(list)
-    for (α,α´) in enumerate(list)
-        if α´ != α
-            otherIndex = findfirst(isequal(α),list)
-            isnothing(otherIndex) && continue
-            swapIndices!(list,α,otherIndex)
-        end
+    N = length(list)
+    index_map = Dict(α′ => α for (α, α′) in enumerate(list))
+
+    for α in 1:N
+        α′ = list[α]
+        α′ == α && continue
+
+        otherIndex = get(index_map, α, 0)
+        iszero(otherIndex) && continue
+
+        # Swap elements
+        list[α], list[otherIndex] = list[otherIndex], list[α]
+
+        # Update index_map
+        index_map[list[otherIndex]] = otherIndex
+        index_map[list[α]] = α
     end
     return list
 end
