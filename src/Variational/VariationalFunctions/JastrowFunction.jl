@@ -169,7 +169,7 @@ function guidingfuncRatio_log(ψG::JastrowFunction,Walker::SpiderWebWalker,move:
     n = Walker.n_x
     n´ = Walker.n_x´
 
-    LoopVectorization.@turbo for ind in safe_iterate_sites(x,(i,j))
+    LoopVectorization.@turbo for ind in eachindex(affectedPlaquettes)
         i = affectedPlaquettes[ind]
         Δn = n´[i] - n[i]
         exp_α += α[i] * Δn

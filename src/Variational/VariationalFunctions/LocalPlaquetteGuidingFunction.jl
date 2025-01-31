@@ -58,9 +58,7 @@ function guidingfuncRatio_log(ψG::LocalPlaquetteGuidingFunction,Walker::SpiderW
 
     exponent = zero(eltype(n))
 
-    @boundscheck checkbounds(n,safe_iterate_sites(Config,(i,j)))
-
-    @inbounds @simd for ind in safe_iterate_sites(Config,(i,j))
+    @inbounds @simd for ind in eachindex(affectedPlaquettes)
         i = affectedPlaquettes[ind]
         Δn = n´[i] - n[i]
         exponent += α[i]*Δn
