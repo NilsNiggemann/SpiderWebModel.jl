@@ -49,7 +49,7 @@ function _compute_Weight_Sum_RBM1(wij,Wij,move,Conf::StencilSpinConfig)
 
     LI = LinearIndices(Conf)
     for j in axes(Wij,2)
-        for idx in safe_iterate_sites(S,(i,j))
+        for idx in safe_iterate_sites(Conf,(i,j))
             I_x,I_y = sites[idx]
             i = LI[I_x,I_y]
             s = P1_STENCIL[idx]*opSign
@@ -215,7 +215,7 @@ function guidingfuncRatio_log(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,
     # exp_a = 0.
     # exp_A = 0.
 
-    @inbounds @simd for idx in safe_iterate_sites(S,(i,j))
+    @inbounds @simd for idx in safe_iterate_sites(Conf,(i,j))
         i,j = sites[idx]
         s = P1_STENCIL[idx]*opSign
         I = LI[i,j]
@@ -228,7 +228,7 @@ function guidingfuncRatio_log(ψG::RBMSpin1,Walker::SpiderWebWalker,move::Tuple,
     
     # fill!(ΔΘ,zero(eltype(ΔΘ)))
 
-    for idx in safe_iterate_sites(S,(i,j))
+    for idx in safe_iterate_sites(Conf,(i,j))
         I_x,I_y = sites[idx]
         i = LI[I_x,I_y]
         s = P1_STENCIL[idx]*opSign
