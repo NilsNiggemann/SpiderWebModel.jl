@@ -428,7 +428,7 @@ function startManyWalkerGFMC!(prob::AbstractGFMCProblem,NStepsRange,nThreads::In
     fill_all_Buffers!(prob,nThreads)
     runGFMC!(prob,NStepsRange;nThreads)
 end
-function startManyWalkerGFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,ψG; equilibration_steps = 0, pre_equilibration_steps = equilibration_steps ÷ 5, scatter_fraction = 0.8,initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),nThreads=2*Threads.nthreads(),kwargs...)
+function startManyWalkerGFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,ψG; equilibration_steps = 0, pre_equilibration_steps = equilibration_steps ÷ 5, scatter_fraction = 0.8,initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),nThreads=n_threads_default(Nwalkers),kwargs...)
     prob = setup_GFMC_problem(InitialState,method,Nwalkers,nSteps,nThreads,ψG;kwargs...)
     startManyWalkerGFMC!(prob,nSteps,nThreads,equilibration_steps,initializer)
 end
@@ -474,8 +474,10 @@ function runGFMC!(prob::AbstractGFMCProblem,range::UnitRange,nThreads,reconfigur
     end
     return Observables
 end
+n_threads_default(Nwalkers) = Nwalkers
+
 runGFMC!(prob::AbstractGFMCProblem,range::Integer,args...) = runGFMC!(prob,1:range,args...)
-runGFMC!(prob::AbstractGFMCProblem,range::UnitRange;nThreads = 2*Threads.nthreads(),reconfigure=true,save_energies=true,saveObservables = true,track_recombination=true) = runGFMC!(prob,range,nThreads,reconfigure,save_energies,saveObservables,track_recombination)
+runGFMC!(prob::AbstractGFMCProblem,range::UnitRange;nThreads = n_threads_default(prob.length(Walkers)),reconfigure=true,save_energies=true,saveObservables = true,track_recombination=true) = runGFMC!(prob,range,nThreads,reconfigure,save_energies,saveObservables,track_recombination)
 runGFMC!(prob::AbstractGFMCProblem,Nsteps::Int;kwargs...) = runGFMC!(prob,1:Nsteps;kwargs...)
 
 function propagateWalkers!(Walkers,weights,Guiding_function_buffer,nThreads,ψG,method::DiscreteTimeMethod)

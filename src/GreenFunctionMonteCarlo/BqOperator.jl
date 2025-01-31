@@ -65,7 +65,7 @@ function buffer_BQ_WFWeights(Walkers::Vector{<:SpiderWebWalker},ψG::AbstractGui
 end
 buffer_WFWeights(O::BqOperator,Walkers,ψG,Guiding_function_buffer) = buffer_BQ_WFWeights(Walkers,ψG,Guiding_function_buffer)
 
-measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::BqOperator,ψG::AbstractGuidingFunction,Allqs,nThreads = 2*Threads.nthreads()) = measure_operator_buffer(InitialState,method,outfile,SaveConfigs,mProj,O,ψG,Allqs,nThreads)
+measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::BqOperator,ψG::AbstractGuidingFunction,Allqs,nThreads = n_threads_default(size(SaveConfigs,3))) = measure_operator_buffer(InitialState,method,outfile,SaveConfigs,mProj,O,ψG,Allqs,nThreads)
 
 """Given the measurement ∑ᵢ cos²(qrᵢ/2) ⟨Bᵢ⟩, use that 2cos²(x/2)-1 = cos(x) to recover ∑ᵢ cos(qrᵢ) ⟨Bᵢ⟩."""
 function recover_Bq_real(Bq_cos²::AbstractArray,Bq_cos²0::Real)

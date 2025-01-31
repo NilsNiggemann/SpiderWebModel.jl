@@ -190,7 +190,7 @@ end
 
 setup_operatorObservables(mProj,NumObs,NSteps,Op::AbstractOperator,outfile::Nothing) = zeros(mProj,NumObs,NSteps)
 
-function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::AbstractOperator,ψG::T,AllPlaqs = collect(plaquetteIterator(InitialState)),nThreads = 2*Threads.nthreads()) where T
+function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveConfigs,mProj,O::AbstractOperator,ψG::T,AllPlaqs = collect(plaquetteIterator(InitialState)),nThreads = n_threads_default(size(SaveConfigs,3))) where T
     Lx,Ly,Nwalkers,NSteps = size(SaveConfigs)
 
     setup = setup_many_walker_GFMC(InitialState,Nwalkers,nThreads)
@@ -217,7 +217,7 @@ function measure_operator(InitialState,method::AbstractGFMCMethod,outfile,SaveCo
     return results
 end
 
-function measure_operator(InitialState,method::AbstractGFMCMethod,SaveConfigs,mProj,O::AbstractOperator,ψG,AllPlaqs = collect(plaquetteIterator(InitialState));outfile = nothing,nThreads=2*Threads.nthreads())
+function measure_operator(InitialState,method::AbstractGFMCMethod,SaveConfigs,mProj,O::AbstractOperator,ψG,AllPlaqs = collect(plaquetteIterator(InitialState));outfile = nothing,nThreads=n_threads_default(size(SaveConfigs,3)))
     measure_operator(InitialState,method,outfile,SaveConfigs,mProj,O,ψG,AllPlaqs,nThreads)
 end
 

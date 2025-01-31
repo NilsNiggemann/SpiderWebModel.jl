@@ -113,7 +113,7 @@ function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatri
 end
 stochastic_reconfiguration_step(E_i,Ok_i,::AbstractSRSolver) = error("solver not implemented")
 
-function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,GWF::SymmetryReducedWaveFunction,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = Threads.nthreads(),nThreads=2*Threads.nthreads(),outfile=nothing,initializer = UnguidedWalkInitializer(equilibration_steps,0.8);verbose=true,report_steps=1,reset = false)
+function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,GWF::SymmetryReducedWaveFunction,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = Threads.nthreads(),nThreads=n_threads_default(Nwalkers),outfile=nothing,initializer = UnguidedWalkInitializer(equilibration_steps,0.8);verbose=true,report_steps=1,reset = false)
     
     (;psi,indicesMapping,uniqueInds) = GWF
     ψG = deepcopy(psi)
@@ -202,7 +202,7 @@ function stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,NSte
     outfile=nothing,
     pre_equilibration_steps=5*equilibration_steps,
     scatter_fraction=0.8,
-    nThreads=2*Threads.nthreads(),
+    nThreads=n_threads_default(Nwalkers),
     initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),
     kwargs...)
     

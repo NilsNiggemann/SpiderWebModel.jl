@@ -127,7 +127,7 @@ function post_move_update_GWF_buffer!(Buffer::SimpleJastrow_GWF_Buffer,ψG::Simp
     return Buffer
 end
 
-function guidingfuncRatio_log(ψG::SimpleJastrowFunction,Walker::SpiderWebWalker,move::Tuple,Buffer::SimpleJastrow_GWF_Buffer)
+@inline function guidingfuncRatio_log(ψG::SimpleJastrowFunction,Walker::SpiderWebWalker,move::Tuple,Buffer::SimpleJastrow_GWF_Buffer)
     m = get_m_i(ψG)
     Config = get_config(Walker)
 
