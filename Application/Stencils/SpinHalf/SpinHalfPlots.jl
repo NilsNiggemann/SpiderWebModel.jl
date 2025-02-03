@@ -23,7 +23,6 @@ function getSectorConfig(L,i)
     S.= SW.getSelectedS12PeriodicState(L,i)
 end
 
-spinecolors(color) = (;topspinecolor = color,bottomspinecolor = color,leftspinecolor = color,rightspinecolor = color)
 
 function plotSectorEnergies!(fig,ax,ens,configs;inset_scale = 1,top_inset_pos=idx->(0.05 +0.18(idx-1),-0.01),bot_inset_pos=(0.9,-0.09),axkwargs...)
     axkwargs = SW.getConfigAxis(getSectorConfig(8,1))

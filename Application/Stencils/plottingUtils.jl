@@ -7,8 +7,13 @@ using SpiderWebModel.HDF5
 dropmean(A; dims=:) = dropdims(mean(A; dims=dims); dims=dims)
 dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
 
-function errlines!(ax::MakieHelpers.Makie.AbstractAxis,x,y,err;bandkwargs = (;),kwargs...)
-    l = scatterlines!(ax,x,y;markersize=0,kwargs...)
+spinecolors(color) = (;topspinecolor = color,bottomspinecolor = color,leftspinecolor = color,rightspinecolor = color)
+
+function errlines!(ax::MakieHelpers.Makie.AbstractAxis,x,y,err;bandkwargs = (;),markersize=0,kwargs...)
+    l = scatterlines!(ax,x,y;markersize,kwargs...)
+    if markersize != 0
+        errorbars!(ax,x,y,err,whiskerwidth = 3.5,color = l.color[];kwargs...)
+    end
     band!(ax,x,y .- err,y .+ err;color = (l.color[],0.3),bandkwargs...)
 end
 errlines!(x,y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),x,y,err;bandkwargs,kwargs...)
