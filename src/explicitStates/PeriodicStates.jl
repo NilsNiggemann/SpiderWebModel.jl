@@ -100,6 +100,20 @@ function periodicPlainWeave(L)
     ] .*2
     getPeriodicState(UC, L, L, 0)
 end
+
+function periodicState6x6Condensate(L)
+    UC = SA[
+        0  0  -1  0  0  0;
+        0  1   0  1  0  1;
+        0  0  -1  0  0  0;
+        0  0   0  0  0  0;
+        0  0  -1  0  0  0;
+        0  0   0  0  0  0;
+    ]
+    getPeriodicState(UC, L, L, 0)
+end
+
+
 SELECTED_S12CONFS = [
     # PeriodicMatrix(Int8[1 1 1 -1; 1 -1 -1 -1],2, 4, 2),
     PeriodicMatrix(Int8[1 1 1 -1; -1 -1 1 -1; 1 -1 1 1; 1 -1 -1 -1],4,4,0),
