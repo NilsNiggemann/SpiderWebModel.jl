@@ -149,6 +149,7 @@ function constructGroundstates(
     NRuns::Integer,
     fixedFraction::Real,
     Dat_type::Type,
+    SpinValue,
 )
     p = ProgressMeter.Progress(NRuns; showspeed = true)
 
@@ -169,7 +170,7 @@ function constructGroundstates(
         for iter in inds
             model = modelfactory(L,ENV)
             JuMP.set_attribute(model, MOI.NumberOfThreads(), 1)
-            fixinds, vals = getRandomSpins(L, fixedFraction)
+            fixinds, vals = getRandomSpins(L, fixedFraction;S=SpinValue)
             fixSpins!(model, fixinds, vals)
 
             x, step_successful,status = constructGroundstate(model, L, Dat_type)
@@ -194,6 +195,7 @@ function constructGroundstates_noProgbar(
     NRuns::Integer,
     fixedFraction::Real,
     Dat_type::Type,
+    SpinValue,
 )
 
     exampleSol = _default_arr_type(Dat_type,L,L)
@@ -210,7 +212,7 @@ function constructGroundstates_noProgbar(
         for iter in inds
             model = modelfactory(L,ENV)
             JuMP.set_attribute(model, MOI.NumberOfThreads(), 1)
-            fixinds, vals = getRandomSpins(L, fixedFraction)
+            fixinds, vals = getRandomSpins(L, fixedFraction,S=SpinValue)
             fixSpins!(model, fixinds, vals)
 
             x, step_successful,status = constructGroundstate(model, L, Dat_type)
@@ -241,7 +243,7 @@ function constructGroundstates(
 )
     modelfactory(L,Env) = setUpSpiderWeb(L,Env; TimeLimit, OutputFlag = false, S=0.5,boundaryCondition,kwargs...)
 
-    constructGroundstates(L, modelfactory, NRuns, fixedFraction::Real,Bool)
+    constructGroundstates(L, modelfactory, NRuns, fixedFraction::Real,Bool,0.5)
 end
 
 function constructGroundstatesSpin1(
@@ -257,8 +259,8 @@ function constructGroundstatesSpin1(
     # modelfactory(L,Env = GRB_ENV_REF[]) = setUpSpiderWeb(L; TimeLimit, OutputFlag = false, S=1,boundaryCondition,kwargs...)
     modelfactory(L,Env) = setUpSpiderWeb(L,Env; TimeLimit, OutputFlag = false, S=1,boundaryCondition,kwargs...)
     if progress
-        return constructGroundstates(L, modelfactory, NRuns, fixedFraction,Int8)
+        return constructGroundstates(L, modelfactory, NRuns, fixedFraction,Int8,1)
     else
-        return constructGroundstates_noProgbar(L, modelfactory, NRuns, fixedFraction,Int8)
+        return constructGroundstates_noProgbar(L, modelfactory, NRuns, fixedFraction,Int8,1)
     end
 end

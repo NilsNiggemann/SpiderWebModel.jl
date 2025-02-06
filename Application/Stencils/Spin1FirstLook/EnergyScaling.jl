@@ -42,11 +42,14 @@ function optimizeWF!(ψG,S,CTSR,nThermal;dt = 1e-4,NSteps = 100,NConfs = 10,show
 
     E0 = stochReconfRes.E0
     idx = 0
+    NSteps_base = NSteps
     while E0[end] > E0[begin]
+        @warn "Optimization failed, reducing dt and increasing NSteps"
         idx += 1
         idx > 5 && error("Optimization failed")
-        dt *= 0.5
-        NSteps = NSteps *2
+        dt *= 0.75
+        NSteps += 2NSteps_base
+        SW.rand!(ψG,1e-6)
         stochReconfRes = _optimizeWF(ψG,S,CTSR,nThermal;dt = dt,NSteps = NSteps,NConfs = NConfs,showplot=showplot,kwargs...)
         E0 = stochReconfRes.E0
     end
@@ -159,7 +162,7 @@ for idx in eachindex(sector_nums,Symms)
         Nwalkers *=12
         nThermal = 4000
     end
-    e_i = getEnergies(S,muRange,Symm;Nwalkers,NSteps = 3000,nThermal,NRuns=12,dt = 3e-3,NConfs = 20,nopt1 = 700,nopt2 = 600)
+    e_i = getEnergies(S,muRange,Symm;Nwalkers,NSteps = 3000,nThermal,NRuns=12,dt = 3e-3,NConfs = 50,nopt1 = 700,nopt2 = 600)
     
     h5write(outfile_EnergyScaling,"$sector/energy",e_i)
     println("Sector $sector done")
@@ -201,7 +204,10 @@ function plot_energies(outfile)
 
         # Bottom row for energies
         energyFig[1,1:8] = ax = with_theme(theme_SimpleTicks()) do
-            Axis(fig, xlabel=L"\mu", ylabel=L"E_0/(N_{\text{sites}}(1-\mu))")
+            Axis(fig, xlabel=L"\mu", 
+            ylabel=L"E_0/N_{\text{sites}}"
+            # ylabel=L"E_0/(N_{\text{sites}}(1-\mu))"
+            )
         end
         L = 20
         muRange = f["muRange"][:]
@@ -209,8 +215,8 @@ function plot_energies(outfile)
             "energy" in keys(f[sector]) || continue
             Nsites = length(f[sector*"/conf"])
             energies = read(f["$sector/energy"])
-            mean_energies = dropmean(energies, dims=2) ./Nsites ./ (1 .-muRange)
-            std_energies = dropstd(energies, dims=2) ./Nsites ./ (1 .-muRange)
+            mean_energies = dropmean(energies, dims=2) ./Nsites# ./ (1 .-muRange)
+            std_energies = dropstd(energies, dims=2) ./Nsites# ./ (1 .-muRange)
 
             errlines!(ax, muRange, mean_energies, std_energies, label=L"%$i", markersize=0.1,color = colors[i],linewidth = 2)
         end
@@ -218,6 +224,26 @@ function plot_energies(outfile)
     end
     fig
 end
-outfile_EnergyScaling = "../../Data/energy_mu_S1_cp.h5"
+outfile_EnergyScaling = "../../Data/energy_mu_S1.h5"
 
 plot_energies(outfile_EnergyScaling)
+##
+
+function recoverCorrupt(fname,newfile,keys)
+    try
+        muRange = h5read(fname,"muRange")
+        h5write(newfile,"muRange",muRange)
+        
+    catch
+    end
+    for key in keys, key2 in ("conf","energy")
+        try
+            data = h5read(fname,"$key/$key2")
+            h5write(newfile,"$key/$key2",data)
+        catch
+
+        end
+    end
+
+end
+recoverCorrupt(outfile_EnergyScaling,"../../Data/energy_mu_S1_recovered.h5",["1","2","3","4","5","6","8","10"])
