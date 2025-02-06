@@ -75,22 +75,22 @@ function Fluc_Heightfield(x,y)
     x==y-1==0 && return 1
     return 0
 end
-using CairoMakie
 
-function Fluc_Continuum_sharp(x, y; base=2.5, top=0.8, height=1.)
+function pyramid(x, y; base=2.5, height=1.0)
+    slope = height / (base / 2)
+    x = x - 1
+    if abs(x) <= base / 2 && abs(y) <= base / 2  # Inside base square
+        return max(0, height - slope * max(abs(x), abs(y)))
+    else
+        return 0.0  # Outside the base
+    end
+end
+
+function Fluc_Continuum_sharp(x, y; base=2.5, top=0.8, height=1)
     # Slope of the pyramid sides
-    slope = 2*(base - top) / (2 * height)
     
     # Compute z based on x and y
-    if abs(x) <= base / 2 && abs(y) <= base / 2  # Inside base square
-        if abs(x) <= top / 2 && abs(y) <= top / 2  # Inside top square
-            return 1.0*height  # Top surface
-        else  # Slanted sides
-            return max(0,1.0*height - slope * (max(abs(x) - top / 2, abs(y) - top / 2)))
-        end
-    else
-        return 0.  # Outside the base
-    end
+    return min(top, pyramid(x, y; base=base, height=height))
 end
 
 # function Fluc_Continuum_1(x, y; smoothing=0.1,kwargs...)
@@ -101,7 +101,7 @@ Fluc_Continuum_1 = let
     
     x = -5:0.01:5
     y = -5:0.01:5
-    z = ImageFiltering.imfilter([Fluc_Continuum_sharp(x,y) for x in x, y in y],Kernel.gaussian(7))
+    z = ImageFiltering.imfilter([Fluc_Continuum_sharp(x,y,top = 0.6) for x in x, y in y],Kernel.gaussian(7))
 
     itp = Interpolations.cubic_spline_interpolation((x,y),z)
     
@@ -114,7 +114,7 @@ Line_Continuum_1 = let
     
     x = -5:0.01:5
     y = -5:0.01:5
-    z = ImageFiltering.imfilter([Fluc_Continuum_sharp(0,y) for x in x, y in y],Kernel.gaussian(7))
+    z = ImageFiltering.imfilter([Fluc_Continuum_sharp(0,y,top = 0.75) for x in x, y in y],Kernel.gaussian(7))
 
     itp = Interpolations.cubic_spline_interpolation((x,y),z)
     
@@ -122,6 +122,10 @@ Line_Continuum_1 = let
     Line_Continuum_func(r::AbstractVector) = itp(r[1], r[2])
 end
 
+function Fluc_Heightfield_discrete(x,y;kwargs...)
+    iseven(x+y) && return NaN
+    return round(Int,Fluc_Continuum_sharp(x,y;kwargs...))
+end
 
 function Line_Heightfield(x,y)
     x,y = y,x
@@ -156,7 +160,6 @@ with_theme(theme_SimpleTicks()) do
     SW.getConfigAxis(SConf1)...,
     aspect=1
     )
-
 
     # SpinConstruction[1,3:4] = axSpin2 = Axis(fig, title="(b)";SW.getConfigAxis(SConf)...)
     SpinConstruction[1,3:4] = axSpin2 = Axis(fig;
@@ -206,44 +209,18 @@ with_theme(theme_SimpleTicks()) do
     z_bottom_Fluc = -2
     z_bottom_Line = -4
 
-    let # (b)
-        
-        x = LinRange(-3,3,300)
-        y = LinRange(-3,3,300)
-
-        Fluctuator[1,1] = axFluc_cont = Axis3(fig,aspect=:data,zlabel = L"h",xlabel = L"x",ylabel = L"y",xticklabelsvisible=false,yticklabelsvisible=false,
-        xlabeloffset = 5,
-        ylabeloffset = 5,
-        zlabeloffset = 20,
-        zticks = [0,1],
-        viewmode = :fitzoom,
-        protrusions=(0,-500,-200,0),
-        xlabelcolor=:white,
-        ylabelcolor=:white,
-        )
-
-
-        z = [Fluc_Continuum_1(x,y) for x in x, y in y]
-    
-        surface!(axFluc_cont, x, y, z,
-        color = vec(z),colormap=:viridis,alpha = 0.8)
-        # return [spin_HF_continuum(x,y,Fluc_Continuum_1) for x in x, y in y]
-        heatmap!(axFluc_cont,x,y, [spin_HF_continuum(x,y,Fluc_Continuum_1) for x in x, y in y], transformation = (:xy, z_bottom_Fluc_cont),colormap=:greys)
-    
-    end
-
 
     let # (b)
 
         xgridlines = (minimum(x_discrete)-1:maximum(x_discrete)) .+0.5
         ygridlines = (minimum(y_discrete)-1:maximum(y_discrete)) .+0.5
 
-        Fluctuator[2,1] = axFluc = Axis3(fig,aspect=:data,zlabel = L"h",xlabel = L"x",ylabel = L"y",xticklabelsvisible=false,yticklabelsvisible=false,xticks = xgridlines,yticks = ygridlines,zticks = [0,1],
+        Fluctuator[1,1] = axFluc = Axis3(fig,aspect=:data,zlabel = L"h",xlabel = L"x",ylabel = L"y",xticklabelsvisible=false,yticklabelsvisible=false,xticks = xgridlines,yticks = ygridlines,zticks = [0,1],
         xlabeloffset = 5,
         ylabeloffset = 5,
         viewmode = :fitzoom,
         zlabeloffset = 20,
-        protrusions=(0,-500,-100,-500),
+        protrusions=(0,0,0,0),
 
         )
 
@@ -258,9 +235,6 @@ with_theme(theme_SimpleTicks()) do
 
         heatmap!(axFluc,x_discrete,y_discrete, [spin_HF(x,y,Fluc_Heightfield) for x in x_discrete, y in y_discrete], transformation = (:xy, z_bottom_Fluc),colormap=:greys,colorrange = [-1,1])
     
-        # x_markers = scatter!(axFluc,[Point(x,y,z_bottom) for x in x_discrete, y in y_discrete if iseven(x+y)],marker = '×',color = :lightgray,markersize = 0.5,markerspace = :data)
-
-        # translate!(x_markers,0,0,0.1)
         let 
 
             xpoints = [Point(x,y,z_bottom_Fluc+0.01) for x in x_discrete, y in y_discrete if iseven(x+y)]
@@ -284,57 +258,32 @@ with_theme(theme_SimpleTicks()) do
 
     end
 
-    
-    let # (c)
-        
-        x = LinRange(-3,3,300)
-        y = LinRange(-3,3,300)
-
-        LineMove[1,1] = axLineCont = Axis3(fig,aspect=:data,zlabel = L"h",xlabel = L"x",ylabel = L"y",xticklabelsvisible=false,yticklabelsvisible=false,
-        xlabeloffset = 5,
-        ylabeloffset = 5,
-        zlabeloffset = 20,
-        viewmode = :fitzoom,
-        zticks = [0,1],
-        protrusions=(0,-500,-200,0),
-        xlabelcolor=:white,
-        ylabelcolor=:white,
-
-        )
-
-
-        z = [Line_Continuum_1(x,y) for x in x, y in y]
-    
-        surface!(axLineCont, x, y, z,
-        color = vec(z),colormap=:viridis,alpha = 0.8)
-        heatmap!(axLineCont,x,y, [spin_HF_continuum(x,y,Line_Continuum_1) for x in x, y in y], transformation = (:xy, z_bottom_Fluc_cont),colormap=:greys)
-    
-    end
-
     let # (c)
     
-        x_discrete = -5:5
-        y_discrete = -4:4
+        x_discrete = -4:6
+        y_discrete = -5:5
                 
         xgridlines = (minimum(x_discrete)-1:maximum(x_discrete)) .+0.5
         ygridlines = (minimum(y_discrete)-1:maximum(y_discrete)) .+0.5
 
-        LineMove[2,1] = axLine = Axis3(fig,zlabel = L"h",xlabel = L"x",ylabel = L"y",xticklabelsvisible=false,yticklabelsvisible=false,aspect=:data,xticks = xgridlines,yticks = ygridlines,zticks = [0,1],
+        LineMove[1,1] = axLine = Axis3(fig,zlabel = L"h",xlabel = L"x",ylabel = L"y",xticklabelsvisible=false,yticklabelsvisible=false,aspect=:data,xticks = xgridlines,yticks = ygridlines,zticks = [0,1,2,3,4],
         xlabeloffset = 5,
         ylabeloffset = 5,
+        zlabeloffset = 25,
         viewmode = :fitzoom,
-        protrusions=(0,-500,-100,-500),
+        protrusions=(0,0,0,0),
         )
 
+        BigFluc(x,y) = Fluc_Heightfield_discrete(x,y,base = 7,height = 4,top=4)
 
-        z2 = [Line_Heightfield(x,y) for x in x_discrete, y in y_discrete]
+        z2 = [BigFluc(x,y) for x in x_discrete, y in y_discrete]
         # surface!(ax3, x, y, z2, colormap=:viridis,interpolate=false)
         meshscatter!(axLine, x_discrete, y_discrete, z2,
         marker = Makie.Rect3D(Vec3f(-0.5, -0.5, -1.0 -min_height), Vec3f(1)),
         markersize = Vec3f.(1.0, 1.0, min_height .+vec(z2)),
         color = vec(z2),colormap=:viridis)
     
-        heatmap!(axLine,x_discrete,y_discrete, [spin_HF(x,y,Line_Heightfield) for x in x_discrete, y in y_discrete], transformation = (:xy, z_bottom_Line),colormap=:greys,colorrange = [-1,1])
+        heatmap!(axLine,x_discrete,y_discrete, [spin_HF(x,y,BigFluc) for x in x_discrete, y in y_discrete], transformation = (:xy, z_bottom_Line),colormap=:greys,colorrange = [-1,1])
 
         wireframe!(axLine, xgridlines,ygridlines, [z_bottom_Line for x in xgridlines, y in ygridlines], color = :black)
         wireframe!(axLine, xgridlines,ygridlines, [0 for x in xgridlines, y in ygridlines], color = :black)
@@ -353,6 +302,61 @@ with_theme(theme_SimpleTicks()) do
             )
             
         end
+    end
+    let # (d)
+        
+        x = LinRange(-1,4,300) .-0.5
+        y = LinRange(-2,3,300) .-0.5
+
+        Fluctuator[2,1] = axFluc_cont = Axis3(fig,aspect=:data,zlabel = L"h",xlabel = L"x",ylabel = L"y",xticklabelsvisible=false,yticklabelsvisible=false,
+        xlabeloffset = 5,
+        ylabeloffset = 5,
+        zlabeloffset = 20,
+        zticks = [0,1],
+        viewmode = :fitzoom,
+        protrusions=(0,-10,-10,0),
+        xlabelcolor=:white,
+        xlabelvisible=false,
+        ylabelcolor=:white,
+        ylabelvisible=false,
+        )
+
+
+        z = [Fluc_Continuum_1(x,y) for x in x, y in y]
+    
+        surface!(axFluc_cont, x, y, z,
+        color = vec(z),colormap=:viridis,alpha = 0.8)
+        # return [spin_HF_continuum(x,y,Fluc_Continuum_1) for x in x, y in y]
+        heatmap!(axFluc_cont,x,y, [spin_HF_continuum(x,y,Fluc_Continuum_1) for x in x, y in y], transformation = (:xy, z_bottom_Fluc_cont),colormap=:greys)
+    
+    end
+
+    let # (e)
+        
+        x = LinRange(-3,3,300)
+        y = LinRange(-3,3,300)
+
+        LineMove[2,1] = axLineCont = Axis3(fig,aspect=:data,zlabel = L"h",xlabel = L"x",ylabel = L"y",xticklabelsvisible=false,yticklabelsvisible=false,
+        xlabeloffset = 5,
+        ylabeloffset = 5,
+        zlabeloffset = 20,
+        viewmode = :fitzoom,
+        zticks = [0,1],
+        protrusions=(0,-10,-10,0),
+        xlabelcolor=:white,
+        xlabelvisible=false,
+        ylabelcolor=:white,
+        ylabelvisible=false,
+
+        )
+
+
+        z = [Line_Continuum_1(x,y) for x in x, y in y]
+    
+        surface!(axLineCont, x, y, z,
+        color = vec(z),colormap=:viridis,alpha = 0.8)
+        heatmap!(axLineCont,x,y, [spin_HF_continuum(x,y,Line_Continuum_1) for x in x, y in y], transformation = (:xy, z_bottom_Fluc_cont),colormap=:greys)
+    
     end
 
     function transformSpins!(vec,sgn)
@@ -404,20 +408,23 @@ with_theme(theme_SimpleTicks()) do
     rowsize!(fig.layout,1,Relative(0.2))
     rowsize!(fig.layout,2,Relative(0.3))
 
-    rowsize!(Fluctuator,1,Relative(0.7))
-    rowsize!(Fluctuator,2,Relative(0.45))
+    rowsize!(Fluctuator,1,Relative(0.5))
+    rowsize!(Fluctuator,2,Relative(0.5))
 
-    rowsize!(LineMove,1,Relative(0.7))
-    rowsize!(LineMove,2,Relative(0.45))
+    rowsize!(LineMove,1,Relative(0.5))
+    rowsize!(LineMove,2,Relative(0.5))
 
     rowgap!(fig.layout,1,0)
-    rowgap!(fig.layout,2,-250)
+    rowgap!(LineMove,1,-50)
+    rowgap!(Fluctuator,1,-50)
     # rowgap!(fig.layout,3,-50)
     Label(SpinConstruction[1,1,TopLeft()],L"(a)")
     # Label(SpinConstruction[1,3,TopLeft()],L"(b)")
-    Label(Fluctuator[1,1,TopLeft()],L"(b)",padding = (0,0,-100,0))
-    Label(LineMove[1,1,TopLeft()],L"(c)",padding = (0,0,-100,0))
-    Label(Configs[1,1,TopLeft()],L"(d)")
+    Label(Fluctuator[1,1,TopLeft()],L"(b)",padding = (0,0,0,0))
+    Label(LineMove[1,1,TopLeft()],L"(c)",padding = (0,0,0,0))
+    Label(Fluctuator[2,1,TopLeft()],L"(d)",padding = (0,0,-80,0))
+    Label(LineMove[2,1,TopLeft()],L"(e)",padding = (0,0,-80,0))
+    Label(Configs[1,1,TopLeft()],L"(f)")
     save("../figs/PaperFigs/Heightfieldplot.png",fig,px_per_unit=3.)
     
     fig
