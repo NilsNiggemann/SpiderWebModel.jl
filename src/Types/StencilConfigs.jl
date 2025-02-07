@@ -188,7 +188,10 @@ end
     site_inds = Stencils.indices(A, I)
     
     # inds = Iterators.filter(i->checkbounds(Bool,A,CartesianIndex(site_inds[i])),eachindex(site_inds))
-    inds = SmallCollections.SmallVector{8,Int}(i for (i,I) in enumerate(site_inds) if checkbounds(Bool,A,CartesianIndex(I)))
+    is_safe = map(site_inds) do i
+        checkbounds(Bool,A,CartesianIndex(i))
+    end
+    inds = SmallCollections.SmallVector{8,Int}(i for i in eachindex(site_inds) if is_safe[i])
 end
 
 # `Conditional` needs handling for specific boundary conditions.

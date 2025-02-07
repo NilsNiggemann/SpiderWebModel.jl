@@ -1,11 +1,11 @@
 struct SqObs_Buffers{T_high<:AbstractFloat,T_low<:AbstractFloat,FFTType<:SqFFT} <: AbstractGFMCObservables
-    TotalWeights::CircularArrays.CircularVector{T_high}
-    energies::CircularArrays.CircularVector{T_high}
+    TotalWeights::CircularArrays.CircularVector{T_high, Vector{T_high}}
+    energies::CircularArrays.CircularVector{T_high, Vector{T_high}}
     FFTBuffers::Vector{FFTType}
-    SqBuffers::CircularArrays.CircularArray{T_low,4}
-    Gnps::CircularArrays.CircularMatrix{T_high}
-    reconfigurationTable::CircularArrays.CircularMatrix{Int}
-    PopulationMatrix::CircularArrays.CircularMatrix{Int}
+    SqBuffers::CircularArrays.CircularArray{T_low, 4, Array{T_low, 4}}
+    Gnps::CircularArrays.CircularMatrix{T_high, Matrix{T_high}}
+    reconfigurationTable::CircularArrays.CircularMatrix{Int, Matrix{Int}}
+    PopulationMatrix::CircularArrays.CircularMatrix{Int, Matrix{Int}}
     Sq_numerator::Array{T_high,3}
     Sq_denominator::Vector{T_high}
     en_numerator::Vector{T_high}
@@ -203,16 +203,19 @@ function getEnergy_step!(en_numerator,en_denominator,Gnp,localEnergies,n,NSites)
 end
 
 function getPopulationMatrix!(PopulationMatrix,reconfigurationTable::AbstractMatrix,n,projectionLength)
-    PopulationMatrix .= 0 
     nMax = size(reconfigurationTable,2)
-    for α in axes(reconfigurationTable,1)
-        α´ = α
-        for i_m in 0:projectionLength
-            if n-i_m < 1
-                break
+    PopulationMatrixParent = parent(PopulationMatrix)
+    fill!(PopulationMatrixParent,0)
+    for i_m in 0:min(n-1,projectionLength)
+        for α in axes(reconfigurationTable,1)
+            if i_m == 0
+                pop = 1
+            else
+                pop = PopulationMatrixParent[α,i_m]
             end
-            α´ = reconfigurationTable[α´,n-i_m]
-            PopulationMatrix[α´,i_m+1] += 1
+            pop == 0 && continue
+            α´ = reconfigurationTable[α,n-i_m]
+            PopulationMatrixParent[α´,i_m+1] += pop
         end
     end
     return PopulationMatrix
@@ -270,7 +273,10 @@ function normalized_Sq(Sq_numerator::AbstractArray{T,3},Sq_denominator::Abstract
 end
 function normalized_Sq!(Sq,Sq_numerator,Sq_denominator)
     for i in eachindex(Sq_denominator)
-        @. Sq[:,:,i] = Sq_numerator[:,:,i] / (Sq_denominator[i])
+        denom⁻¹ = 1/Sq_denominator[i]
+        for j in axes(Sq,2), k in axes(Sq,1)
+            Sq[k,j,i] = Sq_numerator[k,j,i]*denom⁻¹
+        end
     end
     return Sq
 end
