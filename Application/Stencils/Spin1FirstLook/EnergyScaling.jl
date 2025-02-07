@@ -59,14 +59,14 @@ function optimizeWF!(ψG,S,CTSR,nThermal;dt = 1e-4,NSteps = 100,NConfs = 10,show
 end
 ##
 
-function getEnergies(S,mus,Symmetry;Nwalkers = 20 * 3,NSteps = 2000,nThermal = 1000,NRuns=20,dt = 5e-3,NConfs = 20,nopt1 = 100,nopt2 = 30)
+function getEnergies(S,mus,Symmetry;Nwalkers = 20 * 3,NSteps = 2000,nThermal = 1000,NRuns=20,dt = 3e-3,NConfs = 20,nopt1 = 100,nopt2 = 30)
     ψG = initializeGWF(S,Symmetry)
     ens = zeros(length(mus),NRuns)
     for (i,mu) in enumerate(mus)
         println("mu = $mu")
 
         tau = 0.1 + 0.1*mu
-        CTSR = SW.ContinuousTimeMethod(50*tau,w_avg_estimate = 0.2*length(S),Hxx = SW.Hxx_RK(mu))
+        CTSR = SW.ContinuousTimeMethod(60*tau,w_avg_estimate = 0.2*length(S),Hxx = SW.Hxx_RK(mu))
 
         nopt = i == 1 ? nopt1 : nopt2
         @time E0_est = optimizeWF!(ψG,S,CTSR,nThermal÷5;NSteps = nopt,NConfs,dt)
@@ -103,7 +103,7 @@ Symms = [
     SW.TranslationalSymmetry([2,2],[2,-2]), #8
     SW.TranslationalSymmetry([4,0],[0,4]), #10
 ]
-outfile_EnergyScaling = "../../Data/energy_mu_S1.h5"
+outfile_EnergyScaling = "../../Data/energy_mu_S1_2.h5"
 
 ##
 
@@ -136,11 +136,12 @@ flush(stdout)
 flush(stderr)
 
 # for (sector,Symm) in zip(sector_nums,Symms)
-for idx in eachindex(sector_nums,Symms)
+for idx in eachindex(sector_nums,Symms)[1:1]
     sector = sector_nums[idx]
     print("Sector $sector")
 
     present_keys = get_keys(outfile_EnergyScaling)
+    @info "" present_keys
     if string(sector) in present_keys
         println(" skipped")
         flush(stdout)
@@ -159,75 +160,17 @@ for idx in eachindex(sector_nums,Symms)
     nThermal = 2000
 
     if sector == 1
-        Nwalkers *=12
+        Nwalkers *=40
         nThermal = 4000
     end
-    e_i = getEnergies(S,muRange,Symm;Nwalkers,NSteps = 3000,nThermal,NRuns=12,dt = 3e-3,NConfs = 50,nopt1 = 700,nopt2 = 600)
+    e_i = getEnergies(S,muRange,Symm;Nwalkers,NSteps = 3000,nThermal,NRuns=12,dt = 1e-3,NConfs = 50,nopt1 = 700,nopt2 = 600)
     
     h5write(outfile_EnergyScaling,"$sector/energy",e_i)
     println("Sector $sector done")
 end
 exit()
 ##
-using SpiderWebModel.HDF5
-using MakieHelpers
-using CairoMakie
-function plot_energies(outfile)
-    fig = Figure(size = (700, 500),fontsize = 22)
-    
 
-    toprow = fig[1,1:4] = GridLayout()
-    energyFig = fig[2:4,1:4] = GridLayout()
-    # Top row for configurations
-
-    h5open(outfile, "r") do f
-        
-        sectors = sort(filter(!=("muRange"),keys(f)),by=x->parse(Int,x))
-        
-        colors = Makie.ColorSchemes.distinguishable_colors(length(sectors), lchoices = LinRange(0,80,100))
-
-        for (i, sector) in enumerate(sectors)
-            conf = read(f["$sector/conf"])
-            if sector == "6"
-                conf .= 4SW.getStairCase(size(conf,1)) #plot the staircase state, which is in the same sector
-            end
-            S = SW.stencilConfig(conf[1:8,1:8],1)
-            toprow[1,i] = ax_conf = Axis(fig, title=L"%$i";SW.getConfigAxis(S)...,
-            yticklabelsvisible=false,
-            xticklabelsvisible=false,
-            spinecolors(colors[i])...,
-            spinewidth = 4
-            )
-            SW.plotSpinConfig!(ax_conf, S)
-            colgap!(toprow, 0)
-        end
-
-        # Bottom row for energies
-        energyFig[1,1:8] = ax = with_theme(theme_SimpleTicks()) do
-            Axis(fig, xlabel=L"\mu", 
-            ylabel=L"E_0/N_{\text{sites}}"
-            # ylabel=L"E_0/(N_{\text{sites}}(1-\mu))"
-            )
-        end
-        L = 20
-        muRange = f["muRange"][:]
-        for (i, sector) in enumerate(sectors)
-            "energy" in keys(f[sector]) || continue
-            Nsites = length(f[sector*"/conf"])
-            energies = read(f["$sector/energy"])
-            mean_energies = dropmean(energies, dims=2) ./Nsites# ./ (1 .-muRange)
-            std_energies = dropstd(energies, dims=2) ./Nsites# ./ (1 .-muRange)
-
-            errlines!(ax, muRange, mean_energies, std_energies, label=L"%$i", markersize=0.1,color = colors[i],linewidth = 2)
-        end
-        axislegend(ax, position=:lt, merge=true)
-    end
-    fig
-end
-outfile_EnergyScaling = "../../Data/energy_mu_S1.h5"
-
-plot_energies(outfile_EnergyScaling)
-##
 
 function recoverCorrupt(fname,newfile,keys)
     try

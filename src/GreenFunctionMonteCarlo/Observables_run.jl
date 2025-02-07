@@ -164,31 +164,33 @@ end
 function saveObservables!(Observables::GFMCObservables_StructureFac,n,Walkers::AbstractVector{<:SpiderWebWalker})
 
     (;Sq_numerator,Sq_denominator,reconfigurationTable,Gnps,SqBuffers,PopulationMatrix,FFTBuffers) = Observables.Buffers
-
     compute_Sq_Walkers!(SqBuffers,Walkers,n,FFTBuffers)
-
+    
     Nw = length(Walkers)
     
     m_max = size(Sq_numerator,3)
     getPopulationMatrix!(PopulationMatrix,reconfigurationTable,n,m_max-1)
-    
     Nw⁻¹ = 1/Nw
 
     m_values = 0:m_max-1
-    Threads.@threads for m_index in eachindex(m_values)
-        m = m_values[m_index]
-        Gnp = Gnps[n,1+2m]
-        Sq_denominator[m_index] += Gnp
-        # Sq_denominator[m_index] += Gnp*Nw
-        @views for α in 1:Nw
-            mult = PopulationMatrix[α,m_index]
-            mult == 0 && continue
-            mult *= Nw⁻¹
-            O = SqBuffers[:,:,α,n-m]
-            @. Sq_numerator[:,:,m_index] += O*Gnp*mult
+    Threads.@sync for m_index in eachindex(m_values)
+        Threads.@spawn begin
+            m = m_values[m_index]
+            Gnp = Gnps[n,1+2m]
+            Sq_denominator[m_index] += Gnp
+            # Sq_denominator[m_index] += Gnp*Nw
+            @views for α in 1:Nw
+                mult = PopulationMatrix[α,m_index]
+                mult == 0 && continue
+                mult *= Nw⁻¹
+                O = SqBuffers[:,:,α,n-m]
+                @. Sq_numerator[:,:,m_index] += O*Gnp*mult
+            end
+            denom⁻¹ = 1/Sq_denominator[m_index]
+            @views Observables.StructureFactor[:,:,m_index] .= Sq_numerator[:,:,m_index] .* denom⁻¹
         end
     end
-    normalized_Sq!(Observables.StructureFactor,Sq_numerator,Sq_denominator)
+    # normalized_Sq!(Observables.StructureFactor,Sq_numerator,Sq_denominator)
     
 end
 
