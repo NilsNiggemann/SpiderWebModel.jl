@@ -68,9 +68,9 @@ end
 ##
 pre_equilibration_steps = 50_000
 scatter_fraction = 0.7
-NStepsEnd = 50
-NBins = 4000
-stoch_rec_learning_rate = 8e-3
+NStepsEnd = 60
+NBins = 2000
+stoch_rec_learning_rate = 7e-3
 
 NWalkers_stochRec = Threads.nthreads() * 3
 equilibration_steps_stochRec = 5000

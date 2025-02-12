@@ -2,7 +2,7 @@
 #=
 #!/bin/bash
 # SBATCH --dependency=afterok:16952754
-#SBATCH --job-name=LmuStair
+#SBATCH --job-name=6x6Scal
 # SBATCH --job-name=tidyup
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
 #SBATCH --nodes=1
@@ -10,7 +10,7 @@
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
 #SBATCH --time=1-20:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
-#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK_Staircase/%a.out
+#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/6x6MC
 #SBATCH --partition=normal
 # SBATCH --partition=largemem
 #SBATCH --ntasks=1
@@ -23,7 +23,7 @@
 # module --force purge
 module load lang/JuliaHPC/1.10.1-foss-2022a-CUDA-11.7.0
 
-julia -O3 -t $SLURM_CPUS_PER_TASK --heap-size-hint=210G /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/StairCase_Sweep.jl/GFMC_Stair_Sq.jl $SLURM_ARRAY_TASK_ID
+julia -O3 -t $SLURM_CPUS_PER_TASK --heap-size-hint=210G /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/FiniteSizeScaling_6x6.jl/GFMC_FSS_Sq.jl $SLURM_ARRAY_TASK_ID
 exit
 =#
 
@@ -37,14 +37,16 @@ end
 import SpiderWebModel as SW
 using SpiderWebModel.HDF5
 using SpiderWebModel.Statistics
-i_arg = isinteractive() ? 80 : parse(Int, ARGS[1])
+i_arg = isinteractive() ? 10 : parse(Int, ARGS[1])
 
-μs = 0.0:0.1:1.0
+
+μs = 0:0.2:0.8
+
+Ls = (24,30,36)
 NRuns = 14
-RunBatches = 7
+RunBatches = 5
 # μs = 0.2:0.025:0.45
 
-Ls = (28,32,36,40)
 jobs_array = [(;L,μ,run) for L in Ls for μ in μs for run in 1:RunBatches:NRuns]
 
 # μs = μs[1:2:end]
@@ -91,21 +93,16 @@ end
 
 ##
 function get_S_condensate!(S)
-    S .= SW.periodicStateDenseLoops(size(S,1))
+    S .= 2SW.periodicState6x6Condensate(size(S,1))
     return S
 end
 
-function get_S_stair!(S)
-    S .= 4SW.getStairCase(size(S,1))
-    return S
-end
-##
-SECTOR_NAME  = "StairCase"
+SECTOR_NAME  = "6x6Condensate"
 
-parentState = get_S_stair!(
+parentState = get_S_condensate!(
     SW.stencilConfig(
         zeros(L,L),1,
-        boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+        boundaryCondition = :periodic
     )
 )
 
@@ -124,7 +121,6 @@ SRoutfiles = readdir(SRdir,join=true)
 getOutfilename(i) = joinpath(SRdir,"StochRec_L=$(L)_tau=$(CT_stochRec.τ)_NW=$(NWalkers_stochRec)_mu=$(μ)_$(i).h5")
 
 CT = SW.ContinuousTimeMethod(τ,w_avg_estimate = length(parentState)*0.21*(1-μ),Hxx = SW.Hxx_RK(μ))
-CT_stochRec = SW.ContinuousTimeMethod(150τ,w_avg_estimate = CT.w_avg_estimate,Hxx = CT.Hxx)
 ##
 function findNonZeroEn(filename)
     e0 = h5read(filename,"E0")
@@ -162,8 +158,9 @@ function convergence_heuristic(filename)
 
     e0diff = abs.(diff(e0))
     ΔEdiff = abs.(diff(ΔE))
+    # @info "" e0diff[end] ΔEdiff[end]
     crit1 = (e0diff[end] < 1e-3) 
-    crit2 = (ΔEdiff[end] < 5e-4)
+    crit2 = (ΔEdiff[end] < 1e-3)
     return crit1 && crit2
     # fig = Figure()
     # ax = Axis(fig[1,1],title = "$crit1 , $crit2")
@@ -175,21 +172,16 @@ function convergence_heuristic(filename)
 
 end
 # optimize starting
-if μ != 1
-    _SR_iteration = 1
-    isempty(SRoutfiles) && error("SRoutfiles not empty")
-    outfileSR = last(SRoutfiles)
-    if !convergence_heuristic(outfileSR)
-        error("no convergence of SR!")
-    end
-
-    idx = findNonZeroEn(outfileSR)
-    SW.get_params(ψG) .= findNonZeroParams(outfileSR,idx)
-    w_avg_estimate = h5read(outfileSR,"E0")[idx]
-else
-    w_avg_estimate = 0.0
-    ψG = SW.RKFunction()
+_SR_iteration = 1
+isempty(SRoutfiles) && error("SRoutfiles not empty")
+outfileSR = last(SRoutfiles)
+if !convergence_heuristic(outfileSR)
+    @warn "no full convergence of SR!"
 end
+
+idx = findNonZeroEn(outfileSR)
+SW.get_params(ψG) .= findNonZeroParams(outfileSR,idx)
+w_avg_estimate = h5read(outfileSR,"E0")[idx]
 #___________Spin-1_______________________
 ##
 
@@ -203,7 +195,7 @@ GC.gc()
 
 
 for run_num in run:min(NRuns, run+RunBatches)
-    outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/$SECTOR_NAME/L=$(L)/mu=$(μ)/$run_num/"
+    outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/eval/L=$(L)/mu=$(μ)/$run_num/"
     mkpath(outfileDIR)
 
     outfile = joinpath(outfileDIR,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run_num).h5")
