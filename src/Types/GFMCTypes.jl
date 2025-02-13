@@ -74,3 +74,5 @@ get_outfile(Observables::AbstractGFMCObservables) = Observables.outfile
 
 abstract type AbstractOperator end
 operatorname(X::T) where T <: AbstractOperator = string(T)
+
+abstract type AbstractGFMCInitializer end
