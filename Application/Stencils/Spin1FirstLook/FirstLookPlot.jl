@@ -4,8 +4,9 @@ using MakieHelpers
 using CairoMakie
 using Statistics
 include("../plottingUtils.jl")
-outfile_EnergyScaling = "../../Data/energy_mu_S1.h5"
-outfiles_Sq = [joinpath(root,file) for (root,_,files) in walkdir("../../Data/open_L20_3/") for file in files]
+cd(@__DIR__)
+outfile_EnergyScaling = "../../Data/energy_mu_S1_2.h5"
+outfiles_Sq = [joinpath(root,file) for (root,_,files) in walkdir("../../Data/open_L24/") for file in files]
 
 EnGFMC = [h5read(file,"Energy") for file in outfiles_Sq]
 SqsGFMC = [h5read(file,"StructureFactor") for file in outfiles_Sq]
