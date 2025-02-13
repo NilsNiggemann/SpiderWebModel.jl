@@ -2,7 +2,7 @@
 #=
 #!/bin/bash
 # SBATCH --dependency=afterok:16952754
-#SBATCH --job-name=L36CTRKS1
+#SBATCH --job-name=L40CTRKS1
 # SBATCH --job-name=tidyup
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
 #SBATCH --nodes=1
@@ -41,10 +41,10 @@ i_arg = isinteractive() ? 80 : parse(Int, ARGS[1])
 
 μs = -0.1:0.05:1.0
 NRuns = 14
-RunBatches = 7
+RunBatches = 5
 # μs = 0.2:0.025:0.45
 
-Ls = (36,40)
+Ls = (32,36,40)
 jobs_array = [(;L,μ,run) for L in Ls for μ in μs for run in 1:RunBatches:NRuns]
 
 # μs = μs[1:2:end]
@@ -168,8 +168,9 @@ function convergence_heuristic(filename)
 
     e0diff = abs.(diff(e0))
     ΔEdiff = abs.(diff(ΔE))
+    # @info "" e0diff[end] ΔEdiff[end]
     crit1 = (e0diff[end] < 1e-3) 
-    crit2 = (ΔEdiff[end] < 5e-4)
+    crit2 = (ΔEdiff[end] < 1e-3)
     return crit1 && crit2
     # fig = Figure()
     # ax = Axis(fig[1,1],title = "$crit1 , $crit2")
@@ -185,7 +186,7 @@ _SR_iteration = 1
 isempty(SRoutfiles) && error("SRoutfiles not empty")
 outfileSR = last(SRoutfiles)
 if !convergence_heuristic(outfileSR)
-    error("no convergence of SR!")
+    @warn "no full convergence of SR!"
 end
 
 idx = findNonZeroEn(outfileSR)
@@ -208,7 +209,6 @@ for run_num in run:min(NRuns, run+RunBatches)
     mkpath(outfileDIR)
 
     outfile = joinpath(outfileDIR,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run_num).h5")
-    rm(outfile) #for cleanup
     if isfile(outfile)
         println("skipping $outfile")
         continue

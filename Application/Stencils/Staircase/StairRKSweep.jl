@@ -3,30 +3,11 @@ using CairoMakie, MakieHelpers,Statistics
 using SpiderWebModel.HDF5
 using DataFrames
 
-include("plottingUtils.jl")
-include("FSSUtils.jl")
+include("../plottingUtils.jl")
+include("../FSSUtils.jl")
 
 ##
 
-function getFiles(L)
-    files = [joinpath(root,file) for (root,_,files) in walkdir( "/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=$L/") for file in files]
-end
-function prepResults(folder,mufilter)
-    files = [joinpath(root,file) for (root,_,files) in walkdir(folder) for file in files]
-    filter!(contains("mu=$(mufilter)_"),files)
-    # return files
-    res = vcat(SW.readResults.(files,5000)...)
-    return res
-    energies = [h5read(file,"energies") for file in files]
-    TotalWeights = [h5read(file,"TotalWeights") for file in files]
-    # mus = [h5read(file,"mu") for file in files]
-    # taus = [h5read(file,"tau") for file in files]
-
-    ens = stack(SW.getEnergies.(TotalWeights,energies,1,1000))
-end
-# entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equiv_open/",0.30)
-# entest = prepResults("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/L=32/",0.65)
-##
 function file_format(filename)
     allkeys_1 = ["energies","mu","tau","SqsGFMC","p_Sq"]
     allkeys_2 = ["Energy","mu","τ","StructureFactor"]
@@ -35,41 +16,6 @@ function file_format(filename)
         all(k->haskey(file,k),allkeys_2) && return 2
         return 0
     end
-end
-
-function getRes(folder)
-    files = let
-        filesunsrt = [joinpath(root,file) for (root,_,files) in walkdir(folder) for file in files]
-        fileformats = file_format.(filesunsrt)
-        invalid_files = findall(iszero,fileformats)
-        if !isempty(invalid_files)
-            println("invalid files:")
-            println(filesunsrt[invalid_files])
-        end
-        filesunsrt = [f for (f,i) in zip(filesunsrt,fileformats) if i == 1]
-        mus = [h5read(file,"mu") for file in filesunsrt]
-        filesunsrt[sortperm(mus)]
-    end
-        #[8:end]
-    # files = [joinpath(root,file) for (root,_,files) in walkdir("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=30/") for file in files]#[1:2:end]
-    # filter!(!contains("mu=-0.18"),files)
-    # filter!(!contains("mu=-0.2"),files)
-    ##
-    energies = stack([h5read(file,"energies") for file in files])
-    mus = [h5read(file,"mu") for file in files]
-    Sqs = stack([h5read(file,"SqsGFMC") for file in files])
-    taus = [h5read(file,"tau") for file in files]
-    p_Sq = stack([h5read(file,"p_Sq") for file in files])
-    return (;energies,mus,Sqs,taus,files,p_Sq)
-end
-
-function getSq_tau(res,tau)
-    p_Sq = res.p_Sq
-    Dtaus = reshape(res.taus,1,size(p_Sq,2))
-    taus = p_Sq .* Dtaus
-    tauInds = [findfirst(>=(tau),t) for t in eachcol(taus)]
-    # return tauInds
-    return stack(res.Sqs[:,:,ti,:,i] for (i,ti) in enumerate(tauInds))
 end
 
 function getSq_tau(res::DataFrame,tau)
@@ -106,9 +52,6 @@ function getSq_tau_mean_std(res::DataFrame,tau)
     Sqtau = getSq_tau(res,tau)
     mean(Sqtau), std(Sqtau)
 end
-res = Dict(L=>getRes("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/eval/L=$L/") for L in (16,20,24,28))
-
-##
 
 function getRes_2(folder)
     files = let
@@ -134,138 +77,59 @@ function getRes_2(folder)
     sort!(res,[:mu,:L])
 end
 ##
-res_2 = getRes_2(ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/eval/")
+res = getRes_2("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/StairCase/L=28/")
 ##
 with_theme(theme_SimpleTicks()) do
     ind = 1
     L = 28
-    Nsites = length(res[28].Sqs[1:end-1,1:end-1,1,ind,begin])
-    enmean = mean(res[28].energies,dims=2)[1:250,1,ind] ./ Nsites
+    resL = get_res(res,L=L,mu=0.8)
 
-    enstd = std(res[28].energies,dims=2)[1:250,1,ind] ./ Nsites
+    Nsites = length(getSq_tau(res,10.))
+    enmean = mean(resL.Energy)./ Nsites
+
+    enstd = std(resL.Energy)./ Nsites
     # enmean = mean(entest,dims=2)[:,1]
     # enstd = std(entest,dims=2)[:,1]
-    tau = res[28].taus[ind]
-    errlines((eachindex(enmean).-1) .*tau,enmean,enstd,axis = (;ylabel = L"E/N_\text{sites}",xlabel = L"\tau"))
+    tau = only(unique(resL.tau)) .* (eachindex(enmean) .-1)
+    errlines(tau,enmean,enstd,axis = (;ylabel = L"E/N_\text{sites}",xlabel = L"\tau"))
     # lines((eachindex(enmean).-1) .*tau,enmean,axis = (;ylabel = L"E/N_\text{sites}",xlabel = L"\tau"))
     # band!((eachindex(enmean).-1) .*tau,enmean - enstd , enmean + enstd,color = (:black,0.2))
     # current_figure()
 
 end
 ##
-with_theme(theme_SimpleTicks()) do 
-    L = 28
-
-    tauindices = [round(Int,8 ÷ tau) for tau in res[L].taus]
-    energies_slice = zeros(size(res[L].energies,2),size(res[L].energies,3))
-    for (i,tau) in enumerate(tauindices)
-        energies_slice[:,i] .= @view res[L].energies[tau,:,i]
-    end
-
-    enmean = dropdims(mean(energies_slice,dims=1),dims=1)
-    enstd = dropdims(std(energies_slice,dims=1),dims=1)
-    Nsites = L^2
-    # push!(enmean,0)
-    # push!(enstd,0)
-    mus2 = copy(res[L].mus)
-    # push!(mus2,1)
-    ord = sortperm(mus2)
-    mus2 = mus2[ord]
-    enmean = enmean[ord] ./ Nsites
-    enstd = enstd[ord] ./ Nsites
-
-    fig = Figure(fontsize = 22,size = (800,400))
-
-    axDE = Axis(fig[1, 1], xlabel = L"μ", ylabel = L"dE/d\mu/N_\text{sites}",
-        yaxisposition=:right,yticklabelcolor=:red,
-        yticks = SimpleTicks(),
-        xlabelvisible = false,
-        ygridvisible=false,
-        xgridvisible=false,
-        xticklabelsvisible= false,
-        xticksvisible= false,
-        # xminorticksvisible=false
-        ylabelvisible=true,
-        ylabelcolor = :red,
-        yminorticksvisible=true,yminorticks = IntervalsBetween(4),
-    )
-    ax = Axis(fig[1,1],xlabel = L"μ",ylabel = L"E/N_\text{sites}",
-    xminorticksvisible=true,xticks = -0.2:0.2:1.2,xminorticks = IntervalsBetween(2),yminorticksvisible=true,yminorticks = IntervalsBetween(4),
-    )
-    plaqPhase = [-1,0.16]
-    SLphase = [0.16,1]
-    OrderedPhase = [1,3]
-    band!(ax,plaqPhase,[-300,-300],[10,10],color = (:blue,0.2))
-
-    band!(ax,SLphase,[-300,-300],[10,10],color = (:green,0.2))
-    band!(ax,OrderedPhase,[-300,-300],[10,10],color = (:red,0.2))
-
-    # band!(axDE,,dEdmu .- std(dEdmu),dEdmu .+ std(dEdmu),color = (:red,0.2))
-
-
-    linkxaxes!(ax,axDE)
-
-
-    dEdmu = diff(enmean)./diff(mus2)
-
-    # dEdmus = diff(energies,dims=3) ./ diff(mus)
-    # enps = eachrow(energies[1000,:,:])
-    # return enps
-    # dE = diff(enp,dims=2)
-    # dEdmus = stack(eachrow(dE) ./ diff(mus))
-    # dEdmu = mean(dEdmus,dims=2)[:]
-    # return dEdmu
-    scatterlines!(axDE,mus2[2:end],dEdmu,label = "dE/dμ",color = :red,marker = :rect,linestyle = :dash)
-    scatterlines!(ax,mus2,enmean,label = "Energy",color = :black)
-    errorbars!(ax,mus2,enmean,enstd,label = "std error",color = :black,whiskerwidth = 8)
-    vlines!(ax,[0.16,1],color = :grey,linestyle = :dash)
-    xlims!(ax,extrema(mus2)...)
-    ylims!(ax,extrema(enmean)...)
-    # return enmean, mus2
-    ylims!(axDE,extrema(dEdmu)...)
-    fig
-end
-
-##
+#
 with_theme(theme_PiTicks()) do
     L = 28
-    Sq = dropmean(res[L].Sqs,dims=4)[:,:,10,:] ./ 4
-    # muPlot = [-0.06,0.2,0.3,0.6,0.94,1.1]
-    # muPlot = [0.0,0.4,0.9,1.05]
-    muPlot = [0.2,0.6,]
-
-    fig = Figure(fontsize = 22,size = 200 .*(length(muPlot),1.4))
-    ticks = PiTicks([0,pi])
-
-    # ax1 = Axis(fig[1,1],aspect = 1,xlabel = L"q_x",ylabel = L"q_y",xticks = ticks,yticks = ticks,title = L"μ = %$(mus[3])")
-    # SqMat = Sq[:,:,3]
-    # SqFunc = SW.getSqCont(SqMat)
-
-    kx = ky = trueMomenta(-pi/2,1.5pi,size(Sq,1)-1)
-    # Sqpl = SqFunc.(Iterators.product(kx,ky))
-    # hm = heatmap!(ax1,kx,ky,Sqpl,colormap = :viridis)
-    # muPlot = [0.9,0.92,0.94,0.96]
-    mupls = res[L].mus[[findfirst(>=(mu),res[L].mus) for mu in muPlot]]
-    spinconf = SW.SpinConfig(SW.periodicStateLoops(8),1)
-    ax0 = Axis(fig[1,0];SW.getConfigAxis(spinconf)...,xticks = 1:2:8 ,yticks = 1:2:8,xlabel = L"x",ylabel = L"y")
+    muPlot = [0.1,0.8,0.9,1.0]
     
-    SW.plotSpinConfig!(ax0,spinconf)
+    fig = Figure(fontsize = 22,size = 170 .*(length(muPlot),1.85))
+    ticks = PiTicks([0,pi])
+    axes = [Axis(fig[1,i],aspect=1,
+    # title = L"μ = %$(muPlot[i])",
+    yticklabelsvisible=i==1,xticks=ticks,yticks=ticks,xlabel = L"q_x",ylabel = L"q_y", ylabelvisible = i==1) for i in eachindex(muPlot)]
+    
+    for (i,mu) in enumerate(muPlot)
+        # return getSq(res,tau=15.,L=L,mu=mu)
+        SqMat = SW.expand_Sq(mean(getSq(res,tau=15.,L=L,mu=mu)))
 
-    axes = [Axis(fig[1,i],aspect=1,title = L"μ = %$(mupls[i])",yticklabelsvisible=i==1,xticks=ticks,yticks=ticks,xlabel = L"q_x",ylabel = L"q_y", ylabelvisible = i==1) for i in eachindex(muPlot)]
+        kx = ky = trueMomenta(-pi/2,1.5pi,L)
 
-    for (i,ax) in enumerate(axes)
-        i_mu = findfirst(>(muPlot[i]),res[L].mus)
-        SqMat = Sq[:,:,i_mu]
-        mupl = res[L].mus[i_mu]
         SqFunc = SW.getSqCont(SqMat)
         Sqpl = SqFunc.(Iterators.product(kx,ky))
-        heatmap!(ax,kx,ky,Sqpl,colormap = :viridis)
+        hm = heatmap!(axes[i],kx,ky,Sqpl,colormap = :viridis)
+        Colorbar(fig[0,i],hm,ticks = SimpleTicks(),vertical = false,flipaxis = true,label = L"\mathcal{S}(\mathbf{q})",width = Relative(0.9))
+        
+        band!(axes[i],[-0.5pi,0.5pi],[1.1pi,1.1pi],[1.5pi,1.5pi],color = (:black,0.5))
+        text!(axes[i],Point(0,1.3pi),text=L"μ = %$mu",color = :white,align = (:center,:center))
+        
+        # text!(axes[i],Point(0,1.3pi),text=L"μ = %$mu",color = :black,align = (:center,:center))
     end
+    rowgap!(fig.layout,1,5)
+    colgap!(fig.layout,1,0)
     colgap!(fig.layout,2,0)
-    # colgap!(fig.layout,3,0)
-    # colgap!(fig.layout,4,0)
-    Label(fig[1,0, TopLeft()],L"a)$$",padding = (-30,0,-10,0))
-    Label(fig[1,1, TopLeft()],L"b)$$",padding = (-30,0,-10,0))
+    colgap!(fig.layout,3,0)
+
     fig
 end
 ##
@@ -280,34 +144,6 @@ with_theme(theme_SimpleTicks()) do
     p_Sq = res[L].p_Sq[:,muIndex]
     dTau = res[L].taus[muIndex]
     tau = p_Sq .*dTau
-    # return heatmap(SqMat[:,:,20])
-    Sq_examp = SqMat[:,:,10]
-    inds = sort(collect(CartesianIndices(Sq_examp))[:],by = x->Sq_examp[x],rev=true)
-    # for I in ((5,5),(7,7),(10,3),(5,9))
-    for I in inds[[1,5,15,12,20,50]]
-        i,j = Tuple(I)
-        range = 1:120
-        # scatterlines!(ax,tau[range],SqMat[i,j,range],marker = '×')
-        # errorbars!(ax,tau[range],SqMat[i,j,range],SqErr[i,j,range],whiskerwidth = 6,linewidth=0.5)
-        errlines!(ax,tau[range],SqMat[i,j,range],SqErr[i,j,range],linewidth=0.5)
-    end
-    fig
-end
-##
-with_theme(theme_SimpleTicks()) do
-    L = 40
-    resL = get_res(res_2,mu=0.5,L=L)
-
-    SqsGFMC = resL.Sq
-
-    SqMat = mean(SqsGFMC)
-    SqErr = std(SqsGFMC)
-
-    fig = Figure(size = 120 .* (4,4))
-    ax = Axis(fig[1,1],xlabel = L"τ",ylabel = L"\mathcal{S}(\mathbf{q})")
-
-    dTau = only(unique(resL.tau))
-    tau = (axes(SqMat,3).-1) .*dTau
     # return heatmap(SqMat[:,:,20])
     Sq_examp = SqMat[:,:,10]
     inds = sort(collect(CartesianIndices(Sq_examp))[:],by = x->Sq_examp[x],rev=true)
@@ -458,129 +294,46 @@ with_theme(theme_PiTicks()) do
     fig
 end
 
-
 ##
-function getXiLs(res,res_2)
+function getXiLs(res,res_36)
     
     xis = Dict{Int,Vector{Float64}}()
     xis_err = Dict{Int,Vector{Float64}}()
     mus = Dict{Int,Vector{Float64}}()
-    MaxSqs = Dict{Int,Vector{Float64}}()
-    MaxSqs_err = Dict{Int,Vector{Float64}}()
 
-    for L in filter(!=(32),unique(res_2.L))
-    # for L in unique(res_2.L)
-        res2filt = filter(row -> row.L == L,res_2)
-        unique_mus = unique(res2filt.mu)
+    let L=36
+        unique_mus = unique(res_36.mu)
         k = trueMomenta(0,2pi,L)
         i_k = findfirst(==(pi/2),k)
 
-        Sq = [getSq(res2filt,mu = mu,L = L,tau=5) for mu in unique_mus]
-        MaxSqs[L] = [mean(getindex.(Sq,i_k,i_k)) for Sq in Sq]
-        MaxSqs_err[L] = [std(getindex.(Sq,i_k,i_k)) for Sq in Sq]
-
+        Sq = [getSq(res_36,mu = mu,L = L,tau=10) for mu in unique_mus]
         xi_L = [getXis(Sq,CartesianIndex(i_k,i_k)) for Sq in Sq]
         xis[L] = mean.(xi_L) ./ L
         xis_err[L] = std.(xi_L) ./ L
         mus[L] = unique_mus
-
     end
 
     for L in (20,24,28)
         Sqs = eachslice(getSq_tau(res[L],10),dims=(3,4))
         k = trueMomenta(0,2pi,L)
         i_k = findfirst(==(pi/2),k)
-        # xi_L = [getXis(Sq,CartesianIndex(i_k,i_k)) for Sq in eachslice(Sqs,dims=1)]
         xi_L = [getXis(Sq,CartesianIndex(i_k,i_k)) for Sq in eachslice(Sqs,dims=1)]
-
-        MaxSqs[L] = mean([getindex.(Sq,i_k,i_k) for Sq in eachslice(Sqs,dims=1)])./4
-        MaxSqs_err[L] = std([getindex.(Sq,i_k,i_k) for Sq in eachslice(Sqs,dims=1)])./4
-        
-
         xis[L] = mean(xi_L) ./ L
-        xis_err[L] = std(xi_L) ./ L
         xis_err[L] = std(xi_L) ./ L
         mus[L] = res[L].mus
     end
 
-    return (;MaxSqs,MaxSqs_err,xis,xis_err,mus)
+    return (;xis,xis_err,mus)
 end
-xi_res = getXiLs(res,res_2)
-
-crossings = detect_crossings(xi_res.mus,xi_res.xis)
-##
-with_theme(theme_SimpleTicks()) do 
-
-    fig = Figure(fontsize = 22,size = 200 .*(3,2))
-    
-
-    ax_scal = Axis(fig[1,1],xlabel = L"μ",ylabel = L"\xi/L")
+xi_res = getXiLs(res,res_36)
 
 
-    # return fig
-    # ax2 = insetAtPoint(fig,ax,(0.6,3.2),(110,60))
-    # ax2 = Axis(fig[2,1],xlabel = L"μ",ylabel = L"\xi/L")
-    # linkaxes!(ax,ax2)
 
-    Linestyles = [:dash,:dot,:dashdot,:solid,:solid]
-    # allmus = [musSmall,musMedium,mus]
-    # allxis = [xisSmall,xisMedium,xis]
-    scatterkwargs = Dict(
-        16 => (;marker = '+'),
-        20 => (;marker = '▴'),
-        24 => (;marker = '●' ) ,
-        28 => (;marker = '×',markersize =18),
-        32 => (;marker = '▼',markersize =18),
-        36 => (;marker = '▲',markersize =10),
-        40 => (;marker = '■',markersize =10),
-    )
-    
-    for (L,linestyle) in zip((20,24,28,36,40),Linestyles)
-    # for (L,linestyle) in zip(keys(res),Linestyles)
-        # Sq = res[L].Sqs[:,:,5,:,:]
-        mus = xi_res.mus[L]
-        muFilter = findall(x->x<=1,mus)
+xis_intPol = let
 
-        xiLs = xi_res.xis[L][muFilter]
-        xiLserr = xi_res.xis_err[L][muFilter]
-
-        musPlot = mus[muFilter]
-        
-        scatterlines!(ax_scal,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
-        errorbars!(ax_scal,musPlot,xiLs,xiLserr,whiskerwidth = 5)
-        
-    end
-    
-
-    g = 1
-    mu_c = 1.1
-    inset = insetAtPoint(fig,ax_scal,(0.7,3.8),1 .*(110,60),xlabel = L"1/L",ylabel = L"(μ^\star-%$mu_c)^{%$g}")
-    
-    # scatter!(ax_scal,crossings.crossings,crossings.yvals)
-    
-    x_cross_extrap = 1 ./ crossings.L
-
-    y_cross_extrap = (mu_c.-crossings.crossings).^g
-
-    scatterlines!(inset,x_cross_extrap,y_cross_extrap)
-    # scatterlines!(inset,crossings.L,crossings.crossings)
-
-    x_fit = LinRange(0,maximum(x_cross_extrap),100)
-    fitfunc(x) = x * y_cross_extrap[begin] / x_cross_extrap[begin]
-
-    lines!(inset,x_fit,fitfunc.(x_fit),color = :red,linestyle = :dash)
-
-    # xlims!(inset,0.0,maximum(x_cross_extrap))
-    # ylims!(ax_scal,0,5)
-    # vlines!(ax_scal,[mu_c],color = :grey,linestyle = :dash)
-    # text!(ax_scal,Point(0.22,3.5),text=L"μ_c = %$mu_c",color = :grey,align = (:left,:center))
-    # ylims!(ax2,0.04,1.8)
-    axislegend(ax_scal,position = :lb)
-
-    fig
-    
+    Dict(L=> interpolate((xi_res.mus[L],), xi_res.xis[L], Gridded(Linear())) for L in keys(xi_res.xis))
 end
-
+crossings = detect_crossings(xis_intPol)
 ##
 with_theme(theme_SimpleTicks()) do 
 
@@ -605,9 +358,9 @@ with_theme(theme_SimpleTicks()) do
     qx = qy = trueMomenta(-0.5pi,1.5pi,L_Plot)
     FSS_Plot[1,1] = ax_scal = Axis(fig,xlabel = L"μ",ylabel = L"\xi/L")
 
-    mu_show = (0.,0.6,0.7)
+    mu_show = (0.,0.3,0.8)
 
-    SqsGFMC = [SW.expand_Sq.(getSq(res_2,tau=15,mu=mu,L=L_Plot)) for mu in mu_show]
+    SqsGFMC = [SW.expand_Sq.(getSq(res_36,tau=15,mu=mu,L=L_Plot)) for mu in mu_show]
 
     SqMat = mean.(SqsGFMC)
     SqErr = std.(SqsGFMC)
@@ -693,20 +446,11 @@ with_theme(theme_SimpleTicks()) do
     # ax2 = Axis(fig[2,1],xlabel = L"μ",ylabel = L"\xi/L")
     # linkaxes!(ax,ax2)
 
-    Linestyles = [:dash,:dot,:dashdot,:solid,:solid]
+    Linestyles = [:dash,:dot,:solid]
     # allmus = [musSmall,musMedium,mus]
     # allxis = [xisSmall,xisMedium,xis]
-    scatterkwargs = Dict(
-        16 => (;marker = '+'),
-        20 => (;marker = '▴'),
-        24 => (;marker = '●' ) ,
-        28 => (;marker = '×',markersize =18),
-        32 => (;marker = '▼',markersize =18),
-        36 => (;marker = '▲',markersize =10),
-        40 => (;marker = '■',markersize =10),
-    )
-    
-    for (L,linestyle) in zip((20,24,28,36,40),Linestyles)
+    scatterkwargs = Dict(16 => (;marker = '+'),20 => (;marker = '▲'),24 => (;marker = '●' ) ,28 => (;marker = '×',markersize =18),36 => (;marker = '■',markersize =10))
+    for (L,linestyle) in zip((20,24,28),Linestyles)
     # for (L,linestyle) in zip(keys(res),Linestyles)
         # Sq = res[L].Sqs[:,:,5,:,:]
         mus = xi_res.mus[L]
@@ -714,35 +458,26 @@ with_theme(theme_SimpleTicks()) do
 
         xiLs = xi_res.xis[L][muFilter]
         xiLserr = xi_res.xis_err[L][muFilter]
-
         musPlot = mus[muFilter]
         
         scatterlines!(ax_scal,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
         errorbars!(ax_scal,musPlot,xiLs,xiLserr,whiskerwidth = 5)
-        
     end
-    
 
-    g = 1
-    mu_c = 1.1
-    inset = insetAtPoint(fig,ax_scal,(0.7,3.8),1 .*(110,60),xlabel = L"1/L",ylabel = L"(μ^\star-%$mu_c)^{%$g}")
-    
-    # scatter!(ax_scal,crossings.crossings,crossings.yvals)
-    
-    x_cross_extrap = 1 ./ crossings.L
+    let L=36,linestyle = :dashdot
+        musPlot = xi_res.mus[L]
+        xiLs = xi_res.xis[L]
+        xiLserr = xi_res.xis_err[L]
 
-    y_cross_extrap = (mu_c.-crossings.crossings).^g
+        scatterlines!(ax_scal,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
+        errorbars!(ax_scal,musPlot,xiLs,xiLserr,whiskerwidth = 5)
 
-    scatterlines!(inset,x_cross_extrap,y_cross_extrap)
-    # scatterlines!(inset,crossings.L,crossings.crossings)
+    end
 
-    x_fit = LinRange(0,maximum(x_cross_extrap),100)
-    fitfunc(x) = x * y_cross_extrap[begin] / x_cross_extrap[begin]
+    inset = insetAtPoint(fig,ax_scal,(0.7,3.8),0.8 .*(110,60),xlabel = L"L",ylabel = L"μ_c")
+    scatterlines!(inset,crossings.L,crossings.crossings)
 
-    lines!(inset,x_fit,fitfunc.(x_fit),color = :red,linestyle = :dash)
-
-    # xlims!(inset,0.0,maximum(x_cross_extrap))
-    # ylims!(ax_scal,0,5)
+    ylims!(ax_scal,0,5)
     # vlines!(ax_scal,[mu_c],color = :grey,linestyle = :dash)
     # text!(ax_scal,Point(0.22,3.5),text=L"μ_c = %$mu_c",color = :grey,align = (:left,:center))
     # ylims!(ax2,0.04,1.8)
@@ -761,14 +496,14 @@ with_theme(theme_SimpleTicks()) do
 end
 
 ##
-    
+
 with_theme(theme_SimpleTicks()) do 
     L = 36
-    muIndex = findfirst(>=(0.8),res_2.mu)
+    muIndex = findfirst(>=(0.8),res_36.mu)
 
-    μ = res_2.mu[muIndex]
+    μ = res_36.mu[muIndex]
 
-    SqsGFMC = SW.expand_Sq.(getSq(res_2,tau=26,mu=μ,L=L))
+    SqsGFMC = SW.expand_Sq.(getSq(res_36,tau=26,mu=μ,L=L))
     SqMat = mean(SqsGFMC)
     SqErr = std(SqsGFMC)
     fittingCoefs = optimizeCoeffs(SqMat)
