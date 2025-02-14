@@ -125,7 +125,7 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
     # _, = getDistReduction(InitialState,ψG)
     maxNSteps = maximum(NSteps)
     prob = setup_GFMC_problem(InitialState,method,Nwalkers,maxNSteps,nThreads,ψG)
-    initializeGFMC!(prob,equilibration_steps,initializer)
+    initializeGFMC!(prob,initializer)
     equilibrate!(prob,equilibration_steps;nThreads,reconfigure=false)
     results = get_stoch_rec_Observables(n,ψG,outfile)
 
@@ -144,7 +144,7 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
         # end
         fill_all_Buffers!(prob,nThreads)
         if reset
-            initializeGFMC!(prob,equilibration_steps,initializer)
+            initializeGFMC!(prob,initializer)
             equilibrate!(prob,equilibration_steps;nThreads,reconfigure=false)
         end
         # @time res = runGFMC!(prob,range,reconfigure)

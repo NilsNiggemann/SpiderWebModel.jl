@@ -66,10 +66,36 @@ function initialize!(Walkers::AbstractVector{<:SpiderWebWalker},I::CombinedIniti
     initialize!(Walkers,I.I2)
 end
 
-function initializeGFMC!(prob::AbstractGFMCProblem,equilibration_steps=0,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8))
+function initializeGFMC!(prob::AbstractGFMCProblem,initializer)
     
     (;Walkers,Observables,method,ψG) = prob
     initialize!(Walkers,initializer)
 
+    return prob,Observables
+end
+
+struct VariableTimePropagation{T<:AbstractVector,Proptype<:ContinuousTimeMethod} <: AbstractGFMCInitializer 
+    tauRange::T
+    Propagator::Proptype
+end
+
+function initializeGFMC!(prob::AbstractGFMCProblem,initializer::VariableTimePropagation)
+    
+    StepNum = 1
+    nThreads = length(prob.Walkers)
+    accumulated_time = 50.
+    for τ in initializer.tauRange
+        prob = Accessors.@set prob.method.τ = τ
+        
+        if accumulated_time >= 20
+            fill_all_Buffers!(prob,nThreads)
+            accumulate_time = 0.
+        end
+        
+        accumulated_time += τ
+        runGFMC!(prob,StepNum,nThreads,true,false,false)
+    end
+    
+    (;Observables) = prob
     return prob,Observables
 end

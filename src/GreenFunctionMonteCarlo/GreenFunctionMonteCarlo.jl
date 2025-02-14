@@ -338,8 +338,6 @@ function _save_h5_array(file,datasetname,arr)
     file[datasetname] = arr
 end
 
-
-
 function equilibrate!(prob::AbstractGFMCProblem,equilibration_steps;nThreads=Threads.nthreads(),reconfigure=true)
     runGFMC!(prob,equilibration_steps,nThreads,reconfigure,false,false,false)
 end
@@ -359,7 +357,7 @@ function pre_estimate_energies!(Observables,weights,Walkers,method,i,equilibrati
 end
 
 function startManyWalkerGFMC!(prob::AbstractGFMCProblem,NStepsRange,nThreads::Int,equilibration_steps::Int,initializer = UnguidedWalkInitializer(equilibration_steps ÷ 5,0.8))
-    initializeGFMC!(prob,nThreads,initializer)
+    initializeGFMC!(prob,initializer)
     equilibrate!(prob,equilibration_steps;nThreads)
     outfile = get_outfile(prob.Observables)
     saveParameters(outfile,equilibration_steps,prob.method,prob.ψG)
