@@ -46,7 +46,8 @@ function optimizeWF!(ψG,S,CTSR,nThermal;dt = 1e-4,NSteps = 100,NConfs = 10,show
     while E0[end] > E0[begin]
         @warn "Optimization failed, reducing dt and increasing NSteps"
         idx += 1
-        idx > 5 && error("Optimization failed")
+        # idx > 5 && error("Optimization failed")
+        idx > 4 && break
         dt *= 0.75
         NSteps += 2NSteps_base
         SW.rand!(ψG,1e-6)
@@ -59,45 +60,36 @@ function optimizeWF!(ψG,S,CTSR,nThermal;dt = 1e-4,NSteps = 100,NConfs = 10,show
 end
 ##
 
-function getEnergies(S,mus,Symmetry;Nwalkers = 20 * 3,NSteps = 2000,nThermal = 1000,NRuns=20,dt = 3e-3,NConfs = 20,nopt1 = 100,nopt2 = 30)
+function getEnergy(S,mu,Symmetry;Nwalkers = 20 * 3,NSteps = 2000,nThermal = 1000,NRuns=20,dt = 3e-3,NConfs = 20,nopt=1000,pre_init_steps=800)
     ψG = initializeGWF(S,Symmetry)
-    ens = zeros(length(mus),NRuns)
-    for (i,mu) in enumerate(mus)
-        println("mu = $mu")
-        
-        tau = 0.1 + 0.1*mu
-        CTSR = SW.ContinuousTimeMethod(30*tau,w_avg_estimate = 0.2*length(S),Hxx = SW.Hxx_RK(mu))
-        
-        if (i-1) %10 == 0
-            nopt = nopt1
-            SW.rand!(ψG,1e-6)
-        else
-            nopt = nopt2
-        end
-        @time E0_est = optimizeWF!(ψG,S,CTSR,nThermal÷5;NSteps = nopt,NConfs,dt)
-        flush(stdout)
-        flush(stderr)
+    SW.rand!(ψG,1e-6)
+    tau = 0.1 + 0.1*mu
 
-        
-        CT = SW.ContinuousTimeMethod(tau,w_avg_estimate = E0_est,Hxx = CTSR.Hxx)
-        initializer = SW.VariableTimePropagation(LinRange(10,tau,800),CT)
+    CTSR = SW.ContinuousTimeMethod(30*tau,w_avg_estimate = 0.2*length(S),Hxx = SW.Hxx_RK(mu))
 
-        @time results_en = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,Nwalkers,NSteps,50,ψG.psi,estimate_w_avg=true,equilibration_steps=nThermal,initializer=initializer).Energy for _ in 1:NRuns])
-        flush(stdout)
-        flush(stderr)
-        # @time results_en = SW.measure_Sq_GFMC(S,CT,Nwalkers,NSteps,50,ψG.psi,equilibration_steps=NSteps÷5, estimate_w_avg=true)
-        # return results_en
-        # display(plotEnergies(results,CT))
-        en = stack(results_en)[end,:]
-        ens[i,:] .= en
+    @time E0_est = optimizeWF!(ψG,S,CTSR,nThermal÷5;NSteps = nopt,NConfs,dt)
 
-    end
-    return ens
+    flush(stdout)
+    flush(stderr)
+
+    CT = SW.ContinuousTimeMethod(tau,w_avg_estimate = E0_est,Hxx = CTSR.Hxx)
+    initializer = SW.VariableTimePropagation(LinRange(10,tau,pre_init_steps),CT)
+
+    @time results = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,Nwalkers,NSteps,50,ψG.psi,estimate_w_avg=true,equilibration_steps=nThermal,initializer=initializer) for _ in 1:NRuns])
+
+    results_en = [r.Energy[end] for r in results]
+
+    results_sf = stack([r.StructureFactor[:,:,end] for r in results])
+
+    flush(stdout)
+    flush(stderr)
+
+    return results_en,results_sf
 end
 ##
 
 sector_nums = [1,2,3,4,5,6,8,10]
-muRange = reverse(LinRange(-0.1,0.99,30))
+muRange = LinRange(-0.1,0.99,30)
 
 L = 20
 Symms = [
@@ -110,11 +102,7 @@ Symms = [
     SW.TranslationalSymmetry([2,2],[2,-2]), #8
     SW.TranslationalSymmetry([4,0],[0,4]), #10
 ]
-outfile_EnergyScaling = "../../Data/energy_mu_S1_3.h5"
-
-##
-
-# outfile_EnergyScaling = "../../Data/energy_mu_S1.h5"
+output_dir = "../../Data/EnergyScaling_S1_L$L"
 
 function get_keys(file)
     h5open(file,"r") do f
@@ -122,78 +110,62 @@ function get_keys(file)
     end
 end
 
-
-h5open(outfile_EnergyScaling,"cw") do f
-    
-    pres_keys = keys(f)
-    if "muRange" in pres_keys
-        if f["muRange"][:] != Array(muRange)
-            rm(outfile_EnergyScaling)
-            f["muRange"] = Array(muRange)
-        end
-    else    
-        f["muRange"] = Array(muRange)
-    end
-end
-
-mkpath(dirname(outfile_EnergyScaling))
+mkpath(output_dir)
 
 println("start main loop")
 flush(stdout)
 flush(stderr)
 
-# for (sector,Symm) in zip(sector_nums,Symms)
-for idx in eachindex(sector_nums,Symms)[1:1]
+for idx in eachindex(sector_nums,Symms)
     sector = sector_nums[idx]
-    print("Sector $sector")
-
-    present_keys = get_keys(outfile_EnergyScaling)
-    @info "" present_keys
-    if string(sector) in present_keys
-        println(" skipped")
-        flush(stdout)
-        continue
-    end
-    println(" started")
+    println("Sector $sector")
     flush(stdout)
-    
+
+    sector_dir = joinpath(output_dir, "sector_$sector")
+    mkpath(sector_dir)
+
     Symm = Symms[idx]
     S = SW.get4x4PeriodicSpinConf(L,sector)
-    h5write(outfile_EnergyScaling,"$sector/conf", Array(S))
 
-    SW.Random.seed!(1232)
-    
-    Nwalkers = 28*20
-    nThermal = 1000
+    for mu in muRange
+        mu_file = joinpath(sector_dir, "mu_$(round(mu, digits=3)).h5")
+        if isfile(mu_file)
+            println("mu = $mu skipped")
+            continue
+        end
+        try
+            h5write(mu_file, "sector", sector)
+            h5write(mu_file, "mu", mu)
+            
+        catch e
+            @warn e
+            continue
+        end
+        println("mu = $mu started")
+        flush(stdout)
 
-    # if sector == 1
-    #     Nwalkers *=40
-    #     nThermal = 4000
-    # end
-    e_i = getEnergies(S,muRange,Symm;Nwalkers,NSteps = 3000,nThermal,NRuns=12,dt = 1e-3,NConfs = 50,nopt1 = 1500,nopt2 = 500)
-    
-    h5write(outfile_EnergyScaling,"$sector/energy",e_i)
+        SW.Random.seed!(1232)
+        
+        Nwalkers = 28*5
+        nThermal = 500
+        NSteps = 3000
+        NRuns = 12
+        nopt=1500
+        NConfs=50
+        pre_init_steps = 500
+
+        if sector == 1
+            Nwalkers *=20
+            nThermal = 4000
+            pre_init_steps = 1200
+        end
+        
+        results_en, results_sf = getEnergy(S, mu, Symm; Nwalkers, NSteps, nThermal, NRuns, dt = 8e-3, NConfs, nopt,pre_init_steps)
+
+        h5write(mu_file, "energies", results_en)
+        h5write(mu_file, "structure_factors", results_sf)
+        println("mu = $mu done")
+    end
     println("Sector $sector done")
 end
-exit()
-##
 
-
-function recoverCorrupt(fname,newfile,keys)
-    try
-        muRange = h5read(fname,"muRange")
-        h5write(newfile,"muRange",muRange)
-        
-    catch
-    end
-    for key in keys, key2 in ("conf","energy")
-        try
-            data = h5read(fname,"$key/$key2")
-            h5write(newfile,"$key/$key2",data)
-        catch
-
-        end
-    end
-
-end
-recoverCorrupt(outfile_EnergyScaling,"../../Data/energy_mu_S1_recovered.h5",["1","2","3","4","5","6","8","10"])
