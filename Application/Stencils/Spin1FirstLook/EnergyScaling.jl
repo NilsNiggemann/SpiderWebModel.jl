@@ -66,15 +66,21 @@ function getEnergies(S,mus,Symmetry;Nwalkers = 20 * 3,NSteps = 2000,nThermal = 1
         println("mu = $mu")
         
         tau = 0.1 + 0.1*mu
-        CTSR = SW.ContinuousTimeMethod(60*tau,w_avg_estimate = 0.2*length(S),Hxx = SW.Hxx_RK(mu))
+        CTSR = SW.ContinuousTimeMethod(30*tau,w_avg_estimate = 0.2*length(S),Hxx = SW.Hxx_RK(mu))
         
-        nopt = i == 1 ? nopt1 : nopt2
+        if (i-1) %10 == 0
+            nopt = nopt1
+            SW.rand!(ψG,1e-6)
+        else
+            nopt = nopt2
+        end
         @time E0_est = optimizeWF!(ψG,S,CTSR,nThermal÷5;NSteps = nopt,NConfs,dt)
         flush(stdout)
         flush(stderr)
+
         
         CT = SW.ContinuousTimeMethod(tau,w_avg_estimate = E0_est,Hxx = CTSR.Hxx)
-        initializer = SW.VariableTimePropagation_2(LinRange(10,tau,500),CT)
+        initializer = SW.VariableTimePropagation(LinRange(10,tau,800),CT)
 
         @time results_en = fetch.([Threads.@spawn SW.measure_Sq_GFMC(S,CT,Nwalkers,NSteps,50,ψG.psi,estimate_w_avg=true,equilibration_steps=nThermal,initializer=initializer).Energy for _ in 1:NRuns])
         flush(stdout)
@@ -104,7 +110,7 @@ Symms = [
     SW.TranslationalSymmetry([2,2],[2,-2]), #8
     SW.TranslationalSymmetry([4,0],[0,4]), #10
 ]
-outfile_EnergyScaling = "../../Data/energy_mu_S1_2.h5"
+outfile_EnergyScaling = "../../Data/energy_mu_S1_3.h5"
 
 ##
 
@@ -158,13 +164,13 @@ for idx in eachindex(sector_nums,Symms)[1:1]
     SW.Random.seed!(1232)
     
     Nwalkers = 28*20
-    nThermal = 2000
+    nThermal = 1000
 
     # if sector == 1
     #     Nwalkers *=40
     #     nThermal = 4000
     # end
-    e_i = getEnergies(S,muRange,Symm;Nwalkers,NSteps = 3000,nThermal,NRuns=12,dt = 1e-3,NConfs = 50,nopt1 = 700,nopt2 = 600)
+    e_i = getEnergies(S,muRange,Symm;Nwalkers,NSteps = 3000,nThermal,NRuns=12,dt = 1e-3,NConfs = 50,nopt1 = 1500,nopt2 = 500)
     
     h5write(outfile_EnergyScaling,"$sector/energy",e_i)
     println("Sector $sector done")
