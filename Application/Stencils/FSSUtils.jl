@@ -79,7 +79,7 @@ function detect_crossings(mus::Dict,xis::Dict)
 end
 
 
-function getXiLs(res::DataFrame)
+function getXiLs(res::DataFrame,Q = pi/2)
     
     xis = Dict{Int,Vector{Float64}}()
     xis_err = Dict{Int,Vector{Float64}}()
@@ -88,8 +88,7 @@ function getXiLs(res::DataFrame)
     for L in unique(res.L)
         unique_mus = unique(res.mu)
         k = trueMomenta(0,2pi,L)
-        i_k = findfirst(==(pi/2),k)
-
+        i_k = findfirst(==(Q),k)
         Sq = [getSq(res,mu = mu,L = L,tau=10) for mu in unique_mus]
         xi_L = [getXis(Sq,CartesianIndex(i_k,i_k)) for Sq in Sq]
         xis[L] = mean.(xi_L) ./ L
