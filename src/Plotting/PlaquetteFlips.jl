@@ -52,6 +52,18 @@ function plotPlaquetteHighlight!(ax,Point;kwargs...)
         ;kwargs...
     )
 end
+
+function plotSiteHighlight!(ax, Point; kwargs...)
+    px, py = Point
+    band!(
+        ax,
+        [px - 0.5, px + 0.5],
+        [py - 0.5, py - 0.5],
+        [py + 0.5, py + 0.5],
+        ; kwargs...
+    )
+end
+
 function plotApplPlaquettes(State, op = nothing; heatmapkwargs = (;), kwargs...)
     fig = plotSpinConfig(State; heatmapkwargs...)
     plotApplPlaquettes!(current_axis(), State, op; kwargs...)

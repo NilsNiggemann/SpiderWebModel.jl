@@ -4,6 +4,7 @@ using MakieHelpers
 using CairoMakie
 import SpiderWebModel as SW
 using SpiderWebModel.HDF5
+using Statistics
 dropmean(A; dims=:) = dropdims(mean(A; dims=dims); dims=dims)
 dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
 
@@ -26,7 +27,7 @@ function errlines(args...;axis = (;),kwargs...)
     fig
 end
 
-function numberheatmap!(ax::MakieHelpers.Makie.AbstractAxis,x,y,z;plotheatmap=true,kwargs...)
+function numberheatmap!(ax::MakieHelpers.Makie.AbstractAxis,x,y,z::AbstractMatrix;plotheatmap=true,kwargs...)
     if plotheatmap
         heatmap!(ax,x,y,z;kwargs...)
     end
@@ -34,6 +35,10 @@ function numberheatmap!(ax::MakieHelpers.Makie.AbstractAxis,x,y,z;plotheatmap=tr
         color = z[i, j] < mean(z) ? :white : :black
         text!(ax,xi,yj,text = string(z[i,j]),align = (:center, :center);color)
     end
+end
+function numberheatmap!(ax::MakieHelpers.Makie.AbstractAxis,x,y,z::Function;kwargs...)
+    zMat = [z(x,y) for x in x, y in y]
+    numberheatmap!(ax,x,y,zMat;kwargs...)
 end
 numberheatmap!(args...;kwargs...) = numberheatmap!(current_axis(),args...;kwargs...)
 function numberheatmap(args...;axis = (;),kwargs...)
