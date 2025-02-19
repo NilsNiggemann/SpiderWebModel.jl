@@ -434,7 +434,7 @@ AsymFieldTheory(q::AbstractVector,coefs::AbstractVector) = AsymFieldTheory(q[1],
 AsymFieldTheory(q::Tuple,coefs::AbstractVector) = AsymFieldTheory(q[1],q[2],coefs[1],coefs[2],coefs[3])
 
 
-function optimizeCoeffs(SqMat,weightfunc=x->one(first(x)))
+function optimizeCoeffs(SqMat,weightfunc=x->one(first(x));verbose=false)
     q = trueMomenta(0., 2pi, size(SqMat, 1))[1:size(SqMat, 1)]
 
     function loss(v, w)
@@ -452,7 +452,7 @@ function optimizeCoeffs(SqMat,weightfunc=x->one(first(x)))
     x0 = [1., 1.]
 
     res = optimize(loss, x0)
-    @info res
+    verbose && @info res
     coefs = abs.(Optim.minimizer(res))
     return coefs
 end
