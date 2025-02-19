@@ -146,7 +146,7 @@ end
 
 ##
 with_theme(theme_SimpleTicks()) do
-    fig = Figure(size= 0.8 .*(800, 1000),fontsize = 19)
+    fig = Figure(size= 0.75 .*(800, 1000),fontsize = 19)
     SpinConstruction = GridLayout()
     Fluctuator = GridLayout()
     LineMove = GridLayout()
@@ -274,6 +274,7 @@ with_theme(theme_SimpleTicks()) do
         ygridlines = (minimum(y_discrete)-1:maximum(y_discrete)) .+0.5
 
         LineMove[1,1] = axLine = Axis3(fig,zlabel = L"h",xlabel = L"x",ylabel = L"y",xticklabelsvisible=false,yticklabelsvisible=false,aspect=:data,xticks = xgridlines,yticks = ygridlines,zticks = [0,1,2,3],
+        zticklabelsvisible=false,
         xlabeloffset = 5,
         ylabeloffset = 5,
         zlabeloffset = 25,
@@ -433,6 +434,14 @@ with_theme(theme_SimpleTicks()) do
 
     rowsize!(LineMove,1,Relative(0.5))
     rowsize!(LineMove,2,Relative(0.5))
+
+    discrete_colormap = cgrad(:greys, 3, categorical = true)
+
+    Colorbar(LineMove[1,2],colorrange=(-1,1),ticks = -1:1,colormap = discrete_colormap,height = Relative(0.3),width = Relative(1),label = L"S^z",valign=0.35)
+    colsize!(LineMove,2,Relative(0.03))
+
+    Colorbar(LineMove[2,2],colormap = :hot,height = Relative(0.3),width = Relative(1),label = L"||E^{μν}||^2",valign=0.15)
+    colsize!(LineMove,2,Relative(0.03))
 
     rowgap!(fig.layout,1,-10)
     rowgap!(LineMove,1,-100)
