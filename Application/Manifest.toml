@@ -1199,9 +1199,9 @@ version = "0.8.10"
 
 [[deps.MakieHelpers]]
 deps = ["CairoMakie", "Makie", "MakieCore", "PrecompileTools"]
-git-tree-sha1 = "1a2ee69a54e1e09ba15dab243cd5055d61f8f539"
+git-tree-sha1 = "0b915eb9da935d6a669ce4dbbba4126ea6fde8b8"
 uuid = "769ed66a-a1e3-4c16-885f-a5b16fb973c2"
-version = "0.2.10"
+version = "0.2.11"
 
 [[deps.ManualMemory]]
 git-tree-sha1 = "bcaef4fc7a0cfe2cba636d84cda54b5e4e4ca3cd"

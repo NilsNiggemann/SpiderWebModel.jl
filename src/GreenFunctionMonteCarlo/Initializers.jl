@@ -61,9 +61,9 @@ struct CombinedInitializer{I1 <: AbstractGFMCInitializer,I2 <: AbstractGFMCIniti
     I2::I2
 end
 
-function initialize!(Walkers::AbstractVector{<:SpiderWebWalker},I::CombinedInitializer)
-    initialize!(Walkers,I.I1)
-    initialize!(Walkers,I.I2)
+function initializeGFMC!(prob::AbstractGFMCProblem,I::CombinedInitializer)
+    initializeGFMC!(prob,I.I1)
+    initializeGFMC!(prob,I.I2)
 end
 
 function initializeGFMC!(prob::AbstractGFMCProblem,initializer)
@@ -99,3 +99,44 @@ function initializeGFMC!(prob::AbstractGFMCProblem,initializer::VariableTimeProp
     (;Observables) = prob
     return prob,Observables
 end
+
+struct StochasticResettingInitializer{T<:AbstractVector,Proptype<:ContinuousTimeMethod,B} <: AbstractGFMCInitializer 
+    tauRange::T
+    Propagator::Proptype
+    reset_timescale::Float64
+    startConfig::B
+end
+
+function initializeGFMC!(prob::AbstractGFMCProblem, initializer::StochasticResettingInitializer)
+    StepNum = 1
+    Walkers = prob.Walkers
+    nThreads = length(Walkers)
+    accumulated_time_buffers = 50.
+    accumulated_time_reset = zeros(length(Walkers))
+
+    for τ in initializer.tauRange
+        prob = Accessors.@set prob.method.τ = τ
+        
+        if accumulated_time_buffers >= 20
+            fill_all_Buffers!(prob, nThreads)
+            accumulated_time_buffers = 0.
+        end
+        
+        accumulated_time_buffers += τ
+        accumulated_time_reset .+= τ
+
+        runGFMC!(prob, StepNum, nThreads, true, false, false)
+        
+        for (i, Walker) in enumerate(Walkers)
+            if exp(-accumulated_time_reset[i]/initializer.reset_timescale) < rand()
+                reset_config!(Walker,initializer.startConfig)
+                accumulated_time_reset[i] = 0.
+            end
+        end
+    end
+    
+    (;Observables) = prob
+    return prob, Observables
+end
+
+reset_config!(Walker,startConfig::AbstractMatrix) = get_config(Walker) .= startConfig
