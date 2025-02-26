@@ -8,9 +8,9 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=1-20:00:00
+#SBATCH --time=2-20:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
-#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/6x6MC
+#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/6x6MC/%a.out
 #SBATCH --partition=normal
 # SBATCH --partition=largemem
 #SBATCH --ntasks=1
@@ -37,10 +37,10 @@ end
 import SpiderWebModel as SW
 using SpiderWebModel.HDF5
 using SpiderWebModel.Statistics
-i_arg = isinteractive() ? 10 : parse(Int, ARGS[1])
+i_arg = isinteractive() ? 16 : parse(Int, ARGS[1])
 
 
-μs = 0:0.2:0.8
+μs = -0.2:0.2:0.8
 
 Ls = (24,30,36)
 NRuns = 14
@@ -67,13 +67,13 @@ jobs_array = [(;L,μ,run) for L in Ls for μ in μs for run in 1:RunBatches:NRun
 # NStepsEnd = 2000
 # NBins = 400
 ##
-NSteps = 10_000
+NSteps = 15_000
 NBinsEval = 1
 equilibration_steps = 1000
 pre_equilibration_steps = 50_000
 NWalkers = round(Int,128*20*(L/24)^4)
-if 0.1<= μ <= 0.5
-    NWalkers *= 4
+if μ <= 0.5
+    NWalkers *= 2
 end
 NWalkers = (NWalkers - NWalkers%128)
 scatter_fraction = 0.5
@@ -82,13 +82,12 @@ projection_order = 150
 # -- debug params --
 if isinteractive()
     # L = 12
-    NSteps = 100
-    equilibration_steps = 10
-    pre_equilibration_steps = 1000
-    NWalkers = 12
+    NSteps = 10
+    equilibration_steps = 2000
+    pre_equilibration_steps = 10000
+    NWalkers = 1000
     NRuns = 2
     projection_order = 20
-    NStepsEnd = 10
 end
 
 ##
@@ -193,9 +192,12 @@ CT = SW.ContinuousTimeMethod(τ,w_avg_estimate,SW.Hxx_RK(μ))
 # initializer = getInitializer(parentState,μ,ψG;NWalkers=NWalkers,NSteps = 100,OptIndep = 6,outfileDIR=outfileDIR_init)
 GC.gc()
 
-
+initializer = SW.CombinedInitializer(
+    SW.UnguidedWalkInitializer(pre_equilibration_steps,1.), 
+    SW.StochasticResettingInitializer(exp10.(LinRange(1,log10(CT.τ),1000)),CT,200.,S)
+)
 for run_num in run:min(NRuns, run+RunBatches)
-    outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/eval/L=$(L)/mu=$(μ)/$run_num/"
+    outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/$(SECTOR_NAME)*_longprop/L=$(L)/mu=$(μ)/$run_num/"
     mkpath(outfileDIR)
 
     outfile = joinpath(outfileDIR,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run_num).h5")
@@ -208,7 +210,7 @@ for run_num in run:min(NRuns, run+RunBatches)
     h5write(outfile,"L",L)
     h5write(outfile,"mu",μ)
 
-    @time results = SW.measure_Sq_GFMC(parentState,CT,NWalkers,NSteps,projection_order,ψG;equilibration_steps,pre_equilibration_steps,scatter_fraction,outfile,estimate_w_avg = true)
+    @time results = SW.measure_Sq_GFMC(parentState,CT,NWalkers,NSteps,projection_order,ψG;equilibration_steps,pre_equilibration_steps,scatter_fraction,outfile,estimate_w_avg = true,initializer)
     # initializer
     GC.gc()
     println("GFMC done")

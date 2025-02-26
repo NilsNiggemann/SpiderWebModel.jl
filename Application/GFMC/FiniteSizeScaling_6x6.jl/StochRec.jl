@@ -40,9 +40,9 @@ end
 import SpiderWebModel as SW
 using SpiderWebModel.HDF5
 using SpiderWebModel.Statistics
-i_arg = isinteractive() ? 10 : parse(Int, ARGS[1])
+i_arg = isinteractive() ? 2 : parse(Int, ARGS[1])
 
-μs = 0:0.2:0.8
+μs = -0.2:0.2:0.8
 
 Ls = (24,30,36)
 jobs_array = [(;L,μ) for L in Ls for μ in μs]
@@ -55,6 +55,7 @@ if μ==1.0
     @info "skipping μ=1.0 for stoch rec"
     exit()
 end
+
 τ = 0.10+ 0.1μ
 ##
 # L = 32
@@ -72,8 +73,8 @@ end
 pre_equilibration_steps = 50_000
 scatter_fraction = 0.7
 NStepsEnd = 60
-NBins = 2000
-stoch_rec_learning_rate = 3e-3
+NBins = 3000
+stoch_rec_learning_rate = 5e-3
 
 NWalkers_stochRec = Threads.nthreads() * 8
 equilibration_steps_stochRec = 5000
@@ -162,8 +163,8 @@ function convergence_heuristic(filename)
 
     e0diff = abs.(diff(e0))
     ΔEdiff = abs.(diff(ΔE))
-    crit1 = (e0diff[end] < 1e-3) 
-    crit2 = (ΔEdiff[end] < 5e-4)
+    crit1 = (e0diff[end] < 1e-4) 
+    crit2 = (ΔEdiff[end] < 1e-4)
     return crit1 && crit2
 end
 # optimize starting
@@ -177,14 +178,15 @@ if !isempty(SRoutfiles)
         global outfileSR = getOutfilename(_SR_iteration)
     end
 end
-
-if isfile(getOutfilename(_SR_iteration-1))
-    idx = findNonZeroEn(filename)
-    SW.get_params(ψG) .= findNonZeroParams(getOutfilename(_SR_iteration-1),idx)
-    SW.enforceSymmetry!(ψGSymm)
+prevOutfileSR = getOutfilename(_SR_iteration-1)
+if isfile(prevOutfileSR)
+    idx = findNonZeroEn(prevOutfileSR)
+    SW.get_params(ψG) .= findNonZeroParams(prevOutfileSR,idx)
+    SW.enforceSymmetries!(ψGSymm)
 end
 ##
 # optimize starting
+
 
 if !isfile(outfileSR)
     @info "starting run" L τ NStepsEnd NWalkers_stochRec outfileSR
