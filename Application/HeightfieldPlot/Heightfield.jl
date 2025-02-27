@@ -160,7 +160,7 @@ with_theme(theme_SimpleTicks()) do
     SConf2 = SW.stencilConfig(zeros(4,4),1)
     # Panel (a): Schematic-like grid
     SpinConstruction[1,1:2] = axSpin1 = Axis(fig;
-    #  title=L"(a)";
+    #  title=L"(a)$$";
     xticklabelsvisible=false,
     yticklabelsvisible=false,
     SW.getConfigAxis(SConf1)...,
@@ -448,13 +448,13 @@ with_theme(theme_SimpleTicks()) do
     rowgap!(Fluctuator,1,-100)
     rowgap!(fig.layout,4,-10)
     # rowgap!(fig.layout,3,-50)
-    Label(SpinConstruction[1,1,TopLeft()],L"(a)")
-    # Label(SpinConstruction[1,3,TopLeft()],L"(b)")
-    Label(Fluctuator[1,1,TopLeft()],L"(b)",padding = (0,0,-80,0))
-    Label(LineMove[1,1,TopLeft()],L"(c)",padding = (0,0,-80,0))
-    Label(Fluctuator[2,1,TopLeft()],L"(d)",padding = (0,0,-120,0))
-    Label(LineMove[2,1,TopLeft()],L"(e)",padding = (0,0,-120,0))
-    Label(Configs[1,1,TopLeft()],L"(f)")
+    Label(SpinConstruction[1,1,TopLeft()],L"(a)$$")
+    # Label(SpinConstruction[1,3,TopLeft()],L"(b)$$")
+    Label(Fluctuator[1,1,TopLeft()],L"(b)$$",padding = (0,0,-80,0))
+    Label(LineMove[1,1,TopLeft()],L"(c)$$",padding = (0,0,-80,0))
+    Label(Fluctuator[2,1,TopLeft()],L"(d)$$",padding = (0,0,-120,0))
+    Label(LineMove[2,1,TopLeft()],L"(e)$$",padding = (0,0,-120,0))
+    Label(Configs[1,1,TopLeft()],L"(f)$$")
     save("../figs/PaperFigs/Heightfieldplot.png",fig,px_per_unit=3.)
     
     fig

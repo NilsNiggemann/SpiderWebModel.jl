@@ -47,9 +47,9 @@ function optimizeWF!(ψG,S,CTSR,nThermal;dt = 1e-4,NSteps = 100,NConfs = 10,show
         @warn "Optimization failed, reducing dt and increasing NSteps"
         idx += 1
         # idx > 5 && error("Optimization failed")
-        idx > 4 && break
-        dt *= 0.75
-        NSteps += 2NSteps_base
+        idx > 3 && break
+        dt *= 0.2
+        NSteps += round(Int,0.5*NSteps_base)
         SW.rand!(ψG,1e-6)
         stochReconfRes = _optimizeWF(ψG,S,CTSR,nThermal;dt = dt,NSteps = NSteps,NConfs = NConfs,showplot=showplot,kwargs...)
         E0 = stochReconfRes.E0
@@ -151,12 +151,13 @@ for idx in eachindex(sector_nums,Symms)
         NSteps = 3000
         NRuns = 12
         nopt=1500
-        NConfs=50
+        NConfs=30
         pre_init_steps = 500
 
         if sector == 1
             Nwalkers *=20
             nThermal = 4000
+            NConfs = 50
             pre_init_steps = 1200
         end
         
