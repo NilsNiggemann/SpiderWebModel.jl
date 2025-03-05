@@ -1,8 +1,8 @@
 #!/bin/bash
 #=
 #!/bin/bash
-# SBATCH --dependency=afterok:20274147
-#SBATCH --job-name=6x6Scal
+# SBATCH --dependency=afterok:20344482
+#SBATCH --job-name=S0L40
 # SBATCH --job-name=tidyup
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
 #SBATCH --nodes=1
@@ -10,7 +10,7 @@
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
 #SBATCH --time=2-20:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
-#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/6x6MC/%a.out
+#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/S0/%a.out
 #SBATCH --partition=normal
 # SBATCH --partition=largemem
 #SBATCH --ntasks=1
@@ -23,7 +23,7 @@
 # module --force purge
 module load lang/JuliaHPC/1.10.1-foss-2022a-CUDA-11.7.0
 
-julia -O3 -t $SLURM_CPUS_PER_TASK --heap-size-hint=210G /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/FiniteSizeScaling_6x6.jl/GFMC_FSS_Sq.jl $SLURM_ARRAY_TASK_ID
+julia -O3 -t $SLURM_CPUS_PER_TASK --heap-size-hint=210G /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/L40S0Sector.jl/L40S0.jl $SLURM_ARRAY_TASK_ID
 exit
 =#
 
@@ -37,12 +37,12 @@ end
 import SpiderWebModel as SW
 using SpiderWebModel.HDF5
 using SpiderWebModel.Statistics
-i_arg = isinteractive() ? 40 : parse(Int, ARGS[1])
+i_arg = isinteractive() ? 2 : parse(Int, ARGS[1])
 
 
-μs = -0.2:0.2:0.8
+μs = (0.1,0.2,0.4)
 
-Ls = (24,30,36)
+Ls = (40,)
 NRuns = 14
 RunBatches = 5
 # μs = 0.2:0.025:0.45
@@ -67,10 +67,10 @@ jobs_array = [(;L,μ,run) for L in Ls for μ in μs for run in 1:RunBatches:NRun
 # NStepsEnd = 2000
 # NBins = 400
 ##
-NSteps = 15_000
+NSteps = 10_000
 NBinsEval = 1
 equilibration_steps = 2000
-pre_equilibration_steps = 1_000_000_000
+pre_equilibration_steps = 50_000
 NWalkers = round(Int,128*20*(L/24)^4)
 if μ <= 0.5
     NWalkers *= 2
@@ -91,19 +91,12 @@ if isinteractive()
 end
 
 ##
-function get_S_condensate!(S)
-    S .= 2SW.periodicState6x6Condensate(size(S,1))
-    return S
-end
+SECTOR_NAME  = "S0"
 
-SECTOR_NAME  = "6x6Condensate"
-
-parentState = get_S_condensate!(
-    SW.stencilConfig(
+parentState = SW.stencilConfig(
         zeros(L,L),1,
         boundaryCondition = :periodic
     )
-)
 
 ##
 
@@ -194,10 +187,10 @@ GC.gc()
 
 initializer = SW.CombinedInitializer(
     SW.UnguidedWalkInitializer(pre_equilibration_steps,0.7), 
-    SW.StochasticResettingInitializer(LinRange(2,CT.τ,1000),CT,Inf,parentState)
+    SW.StochasticResettingInitializer(LinRange(1,CT.τ,1000),CT,Inf,parentState)
 )
 for run_num in run:min(NRuns, run+RunBatches)
-    outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/$(SECTOR_NAME)_longprop/L=$(L)/mu=$(μ)/$run_num/"
+    outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/$(SECTOR_NAME)*_longprop/L=$(L)/mu=$(μ)/$run_num/"
     mkpath(outfileDIR)
 
     outfile = joinpath(outfileDIR,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run_num).h5")
