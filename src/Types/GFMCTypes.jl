@@ -34,7 +34,7 @@ struct DiscreteTimeMethod <: AbstractGFMCMethod
 end
 DiscreteTimeMethod(;Λ=1.,nBranch,w_avg_estimate=1.) = DiscreteTimeMethod(Λ,nBranch,w_avg_estimate)
 set_w_avg_estimate(method::DiscreteTimeMethod,w_avg_estimate) = DiscreteTimeMethod(method.Λ,method.nBranch,w_avg_estimate)
-
+get_w_avg_estimate(DT::DiscreteTimeMethod) = DT.w_avg_estimate
 struct ContinuousTimeMethod{F2} <: AbstractGFMCMethod 
     τ::Float64
     w_avg_estimate::Float64

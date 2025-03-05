@@ -73,7 +73,7 @@ with_theme(theme_SimpleTicks()) do
 
     # Panel (a): Schematic-like gridw
     SpinConstruction[1,1:2] = ax1 = Axis(fig,
-    #  title=L"(a)";
+    #  title=L"(a)$$";
     SW.getConfigAxis(SConf)...,
     aspect=1
     )
@@ -175,11 +175,11 @@ with_theme(theme_SimpleTicks()) do
         SW.plotFractons!(ax, Confs[i])
     end
 
-    Label(SpinConstruction[1,1,TopLeft()],L"(a)")
-    Label(SpinConstruction[1,3,TopLeft()],L"(b)")
-    Label(Fluctuator[1,1,TopLeft()],L"(c)")
-    Label(LineMove[1,1,TopLeft()],L"(d)")
-    Label(Configs[1,1,TopLeft()],L"(e)")
+    Label(SpinConstruction[1,1,TopLeft()],L"(a)$$")
+    Label(SpinConstruction[1,3,TopLeft()],L"(b)$$")
+    Label(Fluctuator[1,1,TopLeft()],L"(c)$$")
+    Label(LineMove[1,1,TopLeft()],L"(d)$$")
+    Label(Configs[1,1,TopLeft()],L"(e)$$")
 
     fig
 end

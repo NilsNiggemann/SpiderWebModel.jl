@@ -11,46 +11,6 @@ dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
 spinecolors(color) = (;topspinecolor = color,bottomspinecolor = color,leftspinecolor = color,rightspinecolor = color)
 strd(x;kwargs...) = string(round(x,digits=2;kwargs...))
 
-function errlines!(ax::MakieHelpers.Makie.AbstractAxis,x,y,err;bandkwargs = (;),markersize=0,kwargs...)
-    l = scatterlines!(ax,x,y;markersize,kwargs...)
-    if markersize != 0
-        errorbars!(ax,x,y,err,whiskerwidth = 3.5,color = l.color[];kwargs...)
-    end
-    band!(ax,x,y .- err,y .+ err;color = (l.color[],0.3),bandkwargs...)
-end
-errlines!(x,y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),x,y,err;bandkwargs,kwargs...)
-errlines!(y,err;bandkwargs = (;),kwargs...) = errlines!(current_axis(),eachindex(y),y,err;bandkwargs,kwargs...)
-errlines!(ax::MakieHelpers.Makie.AbstractAxis,y,err;bandkwargs = (;),kwargs...) = errlines!(ax,eachindex(y),y,err;bandkwargs,kwargs...)
-function errlines(args...;axis = (;),kwargs...)
-    fig = Figure()
-    ax = Axis(fig[1,1];axis...)
-    errlines!(ax,args...;kwargs...)
-    fig
-end
-
-function numberheatmap!(ax::MakieHelpers.Makie.AbstractAxis,x,y,z::AbstractMatrix;plotheatmap=true,kwargs...)
-    if plotheatmap
-        heatmap!(ax,x,y,z;kwargs...)
-    end
-    for (i,xi) in enumerate(x), (j,yj) in enumerate(y)
-        color = z[i, j] < mean(z) ? :white : :black
-        text!(ax,xi,yj,text = string(z[i,j]),align = (:center, :center);color)
-    end
-end
-function numberheatmap!(ax::MakieHelpers.Makie.AbstractAxis,x,y,z::Function;kwargs...)
-    zMat = [z(x,y) for x in x, y in y]
-    numberheatmap!(ax,x,y,zMat;kwargs...)
-end
-numberheatmap!(args...;kwargs...) = numberheatmap!(current_axis(),args...;kwargs...)
-function numberheatmap(args...;axis = (;),kwargs...)
-    fig = Figure()
-    ax = Axis(fig[1,1];axis...)
-    numberheatmap!(ax,args...;kwargs...)
-    fig
-end
-numberheatmap!(z::AbstractMatrix;kwargs...) = numberheatmap!(axes(z,1),axes(z,2),z;kwargs...)
-numberheatmap(z::AbstractMatrix;kwargs...) = numberheatmap(axes(z,1),axes(z,2),z;kwargs...)
-
 _getkwargs(::Any) = (;xlabel = L"projection order $$")
 _getkwargs(m::SW.ContinuousTimeMethod) = (;xlabel = L"\tau")
 _getscaling(m::SW.DiscreteTimeMethod) = m.nBranch
@@ -255,7 +215,7 @@ function plotVarEn(stochReconfRes;normalization=1,movavg = 1,E_exact = NaN,alpha
     axVar = Axis(fig[1,1], ylabel = "σE", yaxisposition=:right,yticklabelcolor=:red,ylabelcolor = :red,ygridstyle = :dash,xgridvisible = false,xticksvisible = false,xticklabelsvisible = false;yscale)
 
     ax2 = Axis(fig[2,1], xlabel = "Iteration", ylabel = "α")
-    ax2norm = Axis(fig[2,1], ylabel = "||Δα||", yaxisposition=:right,yticklabelcolor=:red,ylabelcolor = :red,ygridstyle = :dash,xgridvisible = false,xticksvisible = false,xticklabelsvisible = false)
+    ax2norm = Axis(fig[2,1], ylabel = "||Δα||", yaxisposition=:right,yticklabelcolor=:red,ylabelcolor = :red,ygridstyle = :dash,xgridvisible = false,xticksvisible = false,xticklabelsvisible = false;yscale)
     linkxaxes!(ax,axVar, ax2,ax2norm)
 
     Epl =stochReconfRes.E0 ./ normalization
@@ -320,6 +280,14 @@ function plotVarEn(filename::String;plotDiff=true,detectZero=true,alpha_index = 
         return plotVarEn(res;plotDiff,alpha_index,kwargs...)
     end
 end
+
+function filter_outliers(energies::Vector{Vector{Float64}})
+    mean_energy = mean(energies)
+    std_energy = std(energies)
+    filtered_indices = findall(i -> all(abs.(energies[i] .- mean_energy) .<= std_energy), 1:length(energies))
+    return filtered_indices
+end
+
 function trueMomenta(kmin,kmax,L)
     nmin = floor(Int,L*kmin/(2pi))
     nmax = ceil(Int,L*kmax/(2pi))
