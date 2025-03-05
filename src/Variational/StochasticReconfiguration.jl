@@ -10,15 +10,15 @@ LinearAlgebra.isposdef(S::QuantumMetric) = true
 Base.:(==)(S1::QuantumMetric, S2::QuantumMetric) = S1.O_km == S2.O_km
 
 function QuantumMetric(O_km)
-    O_k_avg = reshape(mean(O_km,dims=1),size(O_km,2))
-    @boundscheck checkbounds(O_km,1,lastindex(O_k_avg))
+    # O_k_avg = reshape(mean(O_km,dims=1),size(O_km,2))
+    # @boundscheck checkbounds(O_km,1,lastindex(O_k_avg))
 
-    LoopVectorization.@turbo for i in eachindex(O_k_avg)
-        for j in axes(O_km,1)
-            O_km[j,i] -= O_k_avg[i]
-        end
-        # O_km[:,i] .-= O_k_avg[i]
-    end
+    # LoopVectorization.@turbo for i in eachindex(O_k_avg)
+    #     for j in axes(O_km,1)
+    #         O_km[j,i] -= O_k_avg[i]
+    #     end
+    #     # O_km[:,i] .-= O_k_avg[i]
+    # end
     Nparams = size(O_km,2)
     return QuantumMetric(O_km,Dims((Nparams,Nparams)))
 end
@@ -27,9 +27,8 @@ function LinearMaps._unsafe_mul!(y, S::QuantumMetric, v::AbstractVector)
     N_MC = size(S.O_km,2)
     O = S.O_km
     
-    zk1 = O' * (O * v) / N_MC
-
-    y .= zk1 .+1e-6.*v# .- zk2
+    zk1 = O' * (O * v) 
+    y .= zk1 ./ N_MC .+1e-6.*v# .- zk2
 
 end
 
@@ -83,7 +82,7 @@ struct IterativeSRSolver{T} <: AbstractSRSolver
 end
 IterativeSRSolver(;kwargs...) = IterativeSRSolver(kwargs)
 
-function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatrix,solver::ExplicitSRSolver = ExplicitSRSolver())
+function stochastic_reconfiguration_step!(δα,E_i::AbstractVector,Ok_i::AbstractMatrix,solver::ExplicitSRSolver = ExplicitSRSolver())
     println("computing cov")
 
     @time S = cov(Ok_i)
@@ -98,19 +97,48 @@ function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatri
         SChol = cholesky!(Symmetric(S+1e-3I),check = false)
         !issuccess(SChol) && return zeros(length(F))
     end
-    @time δα = SChol \ F
+    @time δα .= SChol \ F
     for i in axes(δα,1)
         δα[i] = -δα[i]
     end
     return δα
 end
 
-function stochastic_reconfiguration_step(E_i::AbstractVector,Ok_i::AbstractMatrix,solver::IterativeSRSolver;kwargs...)
+function stochastic_reconfiguration_step!(δα,E_i::AbstractVector,Ok_i::AbstractMatrix,solver::IterativeSRSolver;kwargs...)
+    shift_mean!(Ok_i)
+    E_i .-= mean(E_i)
     S = QuantumMetric(Ok_i)
-    F = reshape(StatsBase.cov(Ok_i,E_i),size(Ok_i,2))
-    res = -IterativeSolvers.cg(S,F;solver.kwargs...,kwargs...)
-    return res
+    # F = reshape(StatsBase.cov(Ok_i,E_i),size(Ok_i,2))
+    # Ok_i .-= mean(Ok_i,dims=1)
+    F = mycov(Ok_i,E_i)
+
+    # prob = LinearSolve.LinearProblem(S_op,F)
+    # res = -LinearSolve.solve(prob)
+    δα .= -IterativeSolvers.cg!(δα,S,F;solver.kwargs...,kwargs...)
+    return δα
 end
+
+function shift_mean!(Ok_i)
+    Ninv = 1/size(Ok_i,1)
+    for k in axes(Ok_i,2)
+        Ok_avg = zero(eltype(Ok_i))
+        LoopVectorization.@turbo for i in axes(Ok_i,1)
+            Ok_avg += Ok_i[i,k]
+        end
+        Ok_avg = Ok_avg*Ninv
+        LoopVectorization.@turbo for i in axes(Ok_i,1)
+            Ok_i[i,k] -= Ok_avg
+        end
+    end
+end
+function mycov(x::AbstractMatrix, y::AbstractVector)
+    cov_vector = zeros(eltype(x), size(x, 2))
+
+    mul!(cov_vector, x', y)
+    cov_vector ./= length(y) - 1
+    return cov_vector
+end
+
 stochastic_reconfiguration_step(E_i,Ok_i,::AbstractSRSolver) = error("solver not implemented")
 
 function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,solver::AbstractSRSolver,NSteps::AbstractVector,GWF::SymmetryReducedWaveFunction,n,dt::AbstractVector,equilibration_steps=1000,rel_tolerance=1e-2,Nwalkers = Threads.nthreads(),nThreads=n_threads_default(Nwalkers),outfile=nothing,initializer = UnguidedWalkInitializer(equilibration_steps,0.8);verbose=true,report_steps=1,reset = false)
@@ -136,7 +164,8 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
     All_E_i = zeros(Float32,maxNSteps*Nwalkers)
 
     Guiding_function_buffers = allocate_GWF_buffers_threads(ψG,InitialState,Nwalkers)
-    
+    δα = ones(Float32,Nparams)
+
     for i in 1:n
         range = eachindex(prob.Observables.TotalWeights)[1:NSteps[i]]
         # for w in prob.Walkers
@@ -158,7 +187,7 @@ function _stochastic_reconfiguration(InitialState,method::AbstractGFMCMethod,sol
         observables = reconf_obs(InitialState,method,confs,ψG,Ok_i,E_i,uniqueInds)
         # (;EL_avg,EL_err ) = observables
         # return observables
-        δα = stochastic_reconfiguration_step(observables.E_i,observables.Ok_i,solver)
+        stochastic_reconfiguration_step!(δα,observables.E_i,observables.Ok_i,solver)
         normDelta = norm(δα)/norm(params)
 
         add_reconstructedFullParams!(ψG,indicesMapping,δα .*dt[i])
