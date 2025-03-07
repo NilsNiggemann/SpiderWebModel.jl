@@ -376,14 +376,14 @@ with_theme(theme_SimpleTicks()) do
     end
 
     M = SW.stencilConfig(zeros(8,8),1)
-    col = CartesianIndices(M)[3,1:2:end]
+    col = CartesianIndices(M)[2,1:2:end]
 
     M_ = SW.stencilConfig(zeros(8,8),1)
-    row = CartesianIndices(M)[1:2:end,3]
+    row = CartesianIndices(M)[1:2:end,2]
 
-    diag = SW.getDiagonal(M,3,1,true)
+    diag = SW.getDiagonal(M,4,1,true)
 
-    antidiag = SW.getDiagonal(M,3,-1,true)
+    antidiag = SW.getDiagonal(M,4,-1,true)
 
     changesites = [col,row,CartesianIndices(M)[diag.indices[1]],CartesianIndices(M)[antidiag.indices[1]]]
     # labels = ["M⎸","M_","M╱","M╲"]
@@ -455,7 +455,7 @@ with_theme(theme_SimpleTicks()) do
     Label(Fluctuator[2,1,TopLeft()],L"(d)$$",padding = (0,0,-120,0))
     Label(LineMove[2,1,TopLeft()],L"(e)$$",padding = (0,0,-120,0))
     Label(Configs[1,1,TopLeft()],L"(f)$$")
-    save("../figs/PaperFigs/Heightfieldplot.png",fig,px_per_unit=3.)
+    # save("../figs/PaperFigs/Heightfieldplot.png",fig,px_per_unit=3.)
     
     fig
 end

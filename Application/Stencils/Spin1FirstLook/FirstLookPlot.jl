@@ -7,13 +7,13 @@ include("../plottingUtils.jl")
 cd(@__DIR__)
 outfile_EnergyScaling = "../../Data/energy_mu_S1_3.h5"
 # outfiles_Sq = [joinpath(root,file) for (root,_,files) in walkdir("../../Data/open_L24/") for file in files]
-outfiles_Sq = [joinpath(root,file) for (root,_,files) in walkdir("../../Data/S0periodic_L28/mu=0.4/") for file in files]
+outfiles_Sq = [joinpath(root,file) for (root,_,files) in walkdir("../../Data/S0periodic_L28/mu=0.5/") for file in files]
 
 EnGFMC = [h5read(file,"Energy") for file in outfiles_Sq]
 SqsGFMC = [h5read(file,"StructureFactor") for file in outfiles_Sq]
 inds = filter_outliers(EnGFMC)
-EnGFMC = EnGFMC[inds]
-SqsGFMC = SqsGFMC[inds]
+# EnGFMC = EnGFMC[inds]
+# SqsGFMC = SqsGFMC[inds]
 errlines(mean(EnGFMC),std(EnGFMC))
 ##
 using DataFrames
@@ -100,7 +100,7 @@ function plot_overview(results_df)
         mean_energies = mean.(energies) ./ L^2 #./(1 .-mus)
         std_energies = std.(energies) ./ L^2 #./(1 .-mus)
 
-        tline = errlines!(ax, mus, mean_energies, std_energies, label=L"%$i", markersize=0.1, color = colors[i], linewidth = 1)
+        tline = errlines!(ax, mus, mean_energies, std_energies, label=L"%$i", markersize=0.1, color = colors[i], linewidth = 1.5)
 
         # ann_pos = max(2,round(Int,(i-1)/length(sectors) * length(mus)))
 
@@ -123,17 +123,18 @@ function plot_overview(results_df)
         muSim = results_df.mu[findfirst(>=(mu_plot), results_df.mu)]
         resPl = only(filter(x->x.mu==muSim&&x.Sector == 1,results_df))
         # SqMat = dropmean(resPl.StructureFactor,dims=3)
-        SqMat = mean(SqsGFMC)[:,:,1]
+        SqMat = mean(SqsGFMC)[:,:,end]
         
         Sq = SW.getSqCont(SqMat, cutoffEnd = 0)
         qx = qy = trueMomenta(-0.5pi, 1.5pi, size(SqMat, 1))
         hm = heatmap!(axSQ, qx, qy, Sq)
-        scatter!(axSQ, Point(pi/2,pi/2), color = :black, markersize = 5)
+        # scatter!(axSQ, Point(pi/2,pi/2), color = :black, markersize = 5)
         Colorbar(SqFig[0,1], hm, label = L"\mathcal{S}(\mathbf{q})", vertical = false,ticks = SimpleTicks())
     end
     Label(fig[1, 1,TopLeft()], L"(a)$$", fontsize = 22)
     Label(fig[2, 1,TopLeft()], L"(b)$$", fontsize = 22)
     Label(EnergyFig[1, 1,TopLeft()], L"(c)$$", fontsize = 22)
+    save("../../figs/PaperFigs/EnergyScaling_S1_L20.pdf", fig)
     fig
 end
 

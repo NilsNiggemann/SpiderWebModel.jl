@@ -9,3 +9,7 @@
 .vscode/*
 /temp/*
 /Data/GFMC_1*
+err*.txt
+out*.txt
+energy_mu_S1.h5
+Application/Data
