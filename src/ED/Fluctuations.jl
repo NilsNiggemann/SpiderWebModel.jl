@@ -88,7 +88,7 @@ function transformSpinsAlongDiagonal!(Conf, org, slope,transformation,wrap=false
     return Conf
 end
 
-function getDiagonal(Conf,org,slope,wrap = true)
+function getDiagonal(Conf::StencilSpinConfig,org,slope,wrap = true)
     j = org
     diagInds = Int[]
     for i in axes(Conf.Mat, 1)
@@ -103,6 +103,22 @@ function getDiagonal(Conf,org,slope,wrap = true)
         end
     end
     return @view Conf[diagInds]
+end
+function getDiagInds(Conf,org,slope,wrap = true)
+    j = org
+    diagInds = Int[]
+    LI = LinearIndices(Conf)
+    for i in axes(Conf, 1)
+        j += slope
+        if wrap
+            idx_linear = CircularArrays.CircularArray(LI)[i,j]
+        else
+            checkbounds(Bool, Conf, i, j) || continue
+            idx_linear = LI[i,j]
+        end
+        push!(diagInds,idx_linear)
+    end
+    return diagInds
 end
 
 function transformSpinsAlongRow!(Conf, i, transformation,offset = 0)

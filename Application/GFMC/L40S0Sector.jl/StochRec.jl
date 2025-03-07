@@ -2,13 +2,13 @@
 #=
 #!/bin/bash
 # SBATCH --dependency=afterok:16952754
-#SBATCH --job-name=SR_6x6
+#SBATCH --job-name=SR_S0
 # SBATCH --job-name=tidyup
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=2-20:00:00
+#SBATCH --time=1-20:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
 #SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/SR/%a.out
 #SBATCH --partition=normal
@@ -23,7 +23,7 @@
 # module --force purge
 module load lang/JuliaHPC/1.10.1-foss-2022a-CUDA-11.7.0
 
-julia -O3 -t $SLURM_CPUS_PER_TASK --heap-size-hint=210G /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/FiniteSizeScaling_6x6.jl/StochRec.jl $SLURM_ARRAY_TASK_ID
+julia -O3 -t $SLURM_CPUS_PER_TASK --heap-size-hint=210G /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/L40S0Sector.jl/StochRec.jl $SLURM_ARRAY_TASK_ID
 exit
 =#
 using LinearAlgebra
@@ -42,19 +42,15 @@ using SpiderWebModel.HDF5
 using SpiderWebModel.Statistics
 i_arg = isinteractive() ? 2 : parse(Int, ARGS[1])
 
-μs = -0.2:0.2:0.8
+μs = (0.1,0.2,0.4)
 
-Ls = (24,30,36)
+Ls = (40,)
 jobs_array = [(;L,μ) for L in Ls for μ in μs]
 
 # μs = μs[1:2:end]
 # μs = μs[2:2:end]
 
 (;L,μ) = jobs_array[i_arg]
-if μ==1.0
-    @info "skipping μ=1.0 for stoch rec"
-    exit()
-end
 
 τ = 0.10+ 0.1μ
 ##
@@ -72,13 +68,13 @@ end
 ##
 pre_equilibration_steps = 50_000
 scatter_fraction = 0.7
-NStepsEnd = 50
+NStepsEnd = 40
 NBins = 3000
-stoch_rec_learning_rate = 5e-3
+stoch_rec_learning_rate = 8e-3
 
-NWalkers_stochRec = Threads.nthreads() * 6
+NWalkers_stochRec = Threads.nthreads() * 3
 equilibration_steps_stochRec = 2000
-report_steps_SR = 1
+report_steps_SR = 5
 ##
 # -- debug params --
 if isinteractive()
@@ -94,24 +90,16 @@ if isinteractive()
 end
 
 ##
-function get_S_condensate!(S)
-    S .= 2SW.periodicState6x6Condensate(size(S,1))
-    return S
-end
+SECTOR_NAME  = "S0"
 
-SECTOR_NAME  = "6x6Condensate"
-
-parentState = get_S_condensate!(
-    SW.stencilConfig(
+parentState = SW.stencilConfig(
         zeros(L,L),1,
         boundaryCondition = :periodic
-    )
 )
-
 ##
 
 ψG = SW.SimpleJastrowFunction(parentState)
-Symmetry = SW.TranslationalSymmetry(SW.SA[6,0],SW.SA[0,6])
+Symmetry = SW.TranslationalSymmetry(SW.SA[1,-1],SW.SA[1,1])
 # Symmetry = SW.SymmetryGroup(SW.ExchangeSymmetry())
 # ψGSymm = SW.getNonSymmetric(ψG)
 ψGSymm = SW.symmetrize(ψG,Symmetry,parentState)

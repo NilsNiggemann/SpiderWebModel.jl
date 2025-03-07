@@ -3,7 +3,7 @@ function setUpSpiderWeb(optimizer, L; kwargs...)
     setUpSpiderWeb!(model, L, optimizer();kwargs...)
 end
 
-function setUpSpiderWeb!(model, L, opt = nothing;S=0.5, boundaryCondition = :open,STotZero = false)
+function setUpSpiderWeb!(model, L, opt = nothing;S=0.5, boundaryCondition = :open,STot=nothing, S_staggered = nothing,STotZero = false,MI = nothing, M_ = nothing, M_diag = nothing, M_anti = nothing)
     INDEX = 1:L
     if S==0.5
         JuMP.@variable(model, Sz[INDEX, INDEX], Bin)
@@ -12,22 +12,90 @@ function setUpSpiderWeb!(model, L, opt = nothing;S=0.5, boundaryCondition = :ope
     else
         error("S > 1 not implemented")
     end
-    setConstraints!(model, L, opt, boundaryCondition,STotZero)
+    if STotZero  # backwards compatibility
+        STot = 0
+    end
+    setConstraints!(model, L, opt, boundaryCondition,STot,S_staggered,MI,M_,M_diag,M_anti)
 end
 
-function setConstraints!(model, L, opt, boundaryCondition,STotZero)
+S_stag(Sz) = sum((-1)^(i + j) * Sz[i, j] for i in axes(Sz, 1), j in axes(Sz, 2))
+
+function setConstraints!(model, L, opt, boundaryCondition, STot=nothing, S_staggered = nothing,MI = nothing, M_ = nothing, M_diag = nothing, M_anti = nothing)
     Sz = model[:Sz]
     for i = 1:L
         for j = 1:L
             iseven(i + j) || continue
-            setConstraint!(model, Sz, i, j,opt,boundaryCondition,L)
+            setConstraint!(model, Sz, i, j, opt, boundaryCondition, L)
         end
     end
 
-    if STotZero
-        JuMP.@constraint(model, sum(Sz) == 0)
+    if STot isa Integer
+        JuMP.@constraint(model, sum(Sz) == STot)
     end
+
+    if STot isa NTuple{2}
+        JuMP.@constraint(model, sum(Sz[I] for I in CartesianIndices(Sz) if iseven(sum(Tuple(I)))) == STot[1])
+        JuMP.@constraint(model, sum(Sz[I] for I in CartesianIndices(Sz) if isodd(sum(Tuple(I)))) == STot[2])
+    end
+    
+    if M_ isa AbstractVector
+        for j in axes(Sz,2)
+            JuMP.@constraint(model, sum(Sz[i,j] for i in 1+isodd(j):2:L) == M_[j])
+        end
+    end
+    if MI isa AbstractVector
+        for j in axes(Sz,2)
+            JuMP.@constraint(model, sum(Sz[j,i] for i in 1+isodd(j):2:L) == MI[j])
+        end
+    end
+    CI = CartesianIndices(Sz)
+    if M_diag isa AbstractVector
+        for j in axes(Sz,2)[2:2:end]
+            diag = getDiagInds(CI,j,1,true)
+            JuMP.@constraint(model, sum(Sz[CI[i]] for i in diag) == M_diag[j])
+        end
+    end
+    if M_anti isa AbstractVector
+        for j in axes(Sz,2)[2:2:end]
+            diag = getDiagInds(CI,j,-1,true)
+            JuMP.@constraint(model, sum(Sz[CI[i]] for i in diag) == M_anti[j])
+        end
+    end
+
+    if S_staggered isa Integer
+        JuMP.@constraint(model, S_stag(Sz) == S_staggered)
+    end
+
     return model
+end
+
+function plotConstraints(S,MI,M_,M_diag,M_anti)
+    fig = plotApplPlaquettes(S)
+    Lx,Ly = size(S)
+    if M_ isa AbstractVector
+        for j in axes(S,2)
+            scatterlines!([Point(i,j) for i in 1+isodd(j):2:Ly])
+        end
+    end
+    if MI isa AbstractVector
+        for j in axes(S,2)
+            scatterlines!([Point(j,i) for i in 1+isodd(j):2:Lx])
+        end
+    end
+    if M_diag isa AbstractVector
+        for j in axes(S,2)[2:2:end]
+            diag = getDiagInds(S,j,1,true)
+            scatter!([Point(Tuple(CartesianIndices(S)[i])) for i in diag])
+        end
+    end
+    if M_anti isa AbstractVector
+        for j in axes(S,2)[2:2:end]
+            diag = getDiagInds(S,j,-1,true)          
+            scatter!([Point(Tuple(CartesianIndices(S)[i])) for i in diag])
+        end
+    end
+    fig
+    
 end
 
 function setConstraint!(model, Sz, i, j,opt,boundaryCondition,L)
@@ -91,10 +159,10 @@ function getRandomSpins(L::Integer, FixedFraction::Real;S=0.5)
     return fixInds, vals
 end
 
-function setUpSpiderWeb(L::Integer,ENV;boundaryCondition=:open,S=0.5,STotZero=false, kwargs...)
+function setUpSpiderWeb(L::Integer,ENV;boundaryCondition=:open,S=0.5,STot=nothing, S_staggered = nothing,MI = nothing, M_ = nothing,M_diag = nothing,M_anti = nothing, kwargs...)
     model = JuMP.Model(() -> Gurobi.Optimizer(ENV))
     JuMP.set_silent(model)
-    setUpSpiderWeb!(model, L;boundaryCondition,S,STotZero)
+    setUpSpiderWeb!(model, L;boundaryCondition,S,STot,S_staggered,MI,M_,M_diag,M_anti)
     # JuMP.set_optimizer_attribute(model, "LogFile", LogFile)
     setGurobiParameters!(model; OutputFlag = false, TimeLimit = 3 * 60, kwargs...)
     return model

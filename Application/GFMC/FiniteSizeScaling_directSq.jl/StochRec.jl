@@ -195,7 +195,7 @@ end
 if isfile(getOutfilename(_SR_iteration-1))
     idx = findNonZeroEn(filename)
     SW.get_params(ψG) .= findNonZeroParams(getOutfilename(_SR_iteration-1),idx)
-    SW.enforceSymmetry!(ψGSymm)
+    SW.enforceSymmetries!(ψGSymm)
 end
 ##
 # optimize starting
