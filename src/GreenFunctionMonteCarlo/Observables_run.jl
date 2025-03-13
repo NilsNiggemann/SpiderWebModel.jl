@@ -223,7 +223,7 @@ function getPopulationMatrix!(PopulationMatrix,reconfigurationTable::AbstractMat
     return PopulationMatrix
 end
 
-function measure_Sq_GFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,mProj,ψG; equilibration_steps = 0, pre_equilibration_steps = equilibration_steps ÷ 5, scatter_fraction = 0.8,initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),nThreads=n_threads_default(Nwalkers),outfile = nothing,estimate_w_avg=true,kwargs...)
+function measure_Sq_GFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMethod,Nwalkers::Integer,nSteps::Integer,mProj,ψG; equilibration_steps = 0, pre_equilibration_steps = equilibration_steps ÷ 5, scatter_fraction = 0.8,initializer = UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction),nThreads=n_threads_default(Nwalkers),outfile = nothing,estimate_w_avg=true,verbose=true,kwargs...)
     prob = setup_Sq_problem(InitialState,method,Nwalkers,nSteps,mProj,nThreads,ψG,outfile)
 
     initializeGFMC!(prob,initializer)
@@ -239,7 +239,7 @@ function measure_Sq_GFMC(InitialState::StencilSpinConfig,method::AbstractGFMCMet
         runGFMC!(prob,steps;nThreads,reconfigure=true,save_energies = true,saveObservables = false)
 
         if estimate_w_avg
-            w_avg = get_w_avg_estimate(prob)
+            w_avg = get_w_avg_estimate(prob;verbose)
             if isfinite(w_avg)
                 prob = set_w_avg_estimate(prob,w_avg)
             end
@@ -302,7 +302,7 @@ function normalized_En!(Energy,numerator,denominator,NSites)
     end
 end
 
-function get_w_avg_estimate(prob)
+function get_w_avg_estimate(prob;verbose=true)
     Energy = prob.Observables.Energy
     
     minpos = findfirst(>(0),diff(Energy))
@@ -311,7 +311,7 @@ function get_w_avg_estimate(prob)
     isnan(E0) && return firstindex(!isnan,Energy)
     
     w_avg_estimate = -E0
-    println("w_avg_estimate = $w_avg_estimate")
+    verbose && println("w_avg_estimate = $w_avg_estimate")
     # w_avg_estimate = -mean(energies)
     
     return w_avg_estimate
