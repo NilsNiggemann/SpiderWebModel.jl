@@ -140,3 +140,46 @@ function initializeGFMC!(prob::AbstractGFMCProblem, initializer::StochasticReset
 end
 
 reset_config!(Walker,startConfig::AbstractMatrix) = get_config(Walker) .= startConfig
+
+struct MaxFlipConf{T<:StencilSpinConfig}
+    S::T
+    S_Buffer::T
+end
+
+MaxFlipConf(S::StencilSpinConfig) = MaxFlipConf(copy(S),copy(S))
+
+function reset_config!(Walker,startConfig::MaxFlipConf) 
+    (;S,S_Buffer) = startConfig
+    S_Buffer .= get_config(Walker)
+
+    if NPlaquettes(S_Buffer) > NPlaquettes(S)
+        S .= S_Buffer
+    else
+        get_config(Walker) .= S
+    end
+end
+
+function findMaxFlipConf(S;numRuns = 10,tau=2.,Nwalkers=200,NSteps =1000,ψG = PlaquetteNumberGuidingFunction(0.8),mu=-20,resettingTime=Inf,tauRange = LinRange(100,tau,10),pre_equilibration_steps=2_000_000,scatter_fraction = 0.9,kwargs...)
+    CT = ContinuousTimeMethod(tau,w_avg_estimate = 0.,Hxx = Hxx_RK(mu))
+    
+    initializer() = CombinedInitializer(
+        UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction), 
+        StochasticResettingInitializer(tauRange,CT,float(resettingTime),MaxFlipConf(S))
+    )
+    
+    res = fetch.([Threads.@spawn startManyWalkerGFMC(S,CT,Nwalkers,NSteps,ψG;equilibration_steps=0,initializer=initializer(),kwargs...) for _ in 1:numRuns])
+    
+    Snew = copy(S)
+    maxConf = copy(Snew)
+    
+    for r in res
+        for x in eachslice(r.SaveConfigs,dims = (3,4))
+            Snew.= x
+            if NPlaquettes(Snew) > NPlaquettes(maxConf)
+                maxConf .= Snew
+            end
+        end
+    end
+    return maxConf
+
+end

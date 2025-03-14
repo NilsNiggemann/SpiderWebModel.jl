@@ -288,6 +288,14 @@ function filter_outliers(energies::Vector{Vector{Float64}})
     return filtered_indices
 end
 
+function find_min_en(energies::Vector{Vector{Float64}})
+    enstart = getindex.(energies,1)
+    mean_energy = mean(enstart)
+    std_energy = std(enstart)
+    filtered_indices = findall(i -> enstart[i] <= mean_energy - 0.5std_energy, eachindex(enstart))
+    return filtered_indices
+end
+
 function trueMomenta(kmin,kmax,L)
     nmin = floor(Int,L*kmin/(2pi))
     nmax = ceil(Int,L*kmax/(2pi))
