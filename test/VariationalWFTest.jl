@@ -38,6 +38,36 @@ function TestWFRatio(ψG,S;tol=1e-10)
     end
 end
 
+function TestWFRatio(ψG::SW.SimpleJastrowFunction,S;tol=1e-10)
+    Buff = SW.allocate_GWF_buffer(ψG,S)
+    W = SW.spiderWebWalker(copy(S),collect(SW.plaquetteIterator(S)))
+    SW.getMoves!(W)
+    psiname = SW.guidingfunc_name(ψG)
+
+    SW.compute_GWF_buffer!(Buff,ψG,W)
+    @testset "$psiname ψ(x´) / ψ(x)" begin
+        for m in W.moves[1:1]
+            (i,j,op) = m
+
+            Spr = copy(S)
+            SW.applyPlaquette!(Spr,i,j,op)
+            
+            @test SW.guidingfuncRatio(ψG,W,m,Buff) - ψG(Spr)/ψG(S) ≈ 0 atol=tol
+            
+            oldBuff = SW.allocate_GWF_buffer(ψG,S)
+            SW.compute_GWF_buffer!(oldBuff,ψG,W)
+            
+            W.Config .= Spr
+            SW.post_move_update_GWF_buffer!(oldBuff,ψG,W,m)
+            newBuff = SW.allocate_GWF_buffer(ψG,Spr)
+            SW.compute_GWF_buffer!(newBuff,ψG,W)
+            @test newBuff.h_i ≈ oldBuff.h_i
+            W.Config .= S
+        end
+    
+    end
+end
+
 
 @testset "wavefunctions" begin
     
@@ -76,7 +106,6 @@ end
     SW.rand!(SW.get_params(ψJastrow))  .*= 1e-2
     SW.get_v_ij(ψJastrow) .= SW.Symmetric(SW.get_v_ij(ψJastrow))
     TestWFRatio(ψJastrow,S)
-
 
 end
 ##
