@@ -1,16 +1,16 @@
 #!/bin/bash
 #=
 #!/bin/bash
-# SBATCH --dependency=afterok:20810971
-#SBATCH --job-name=6x6Scal
+#SBATCH --dependency=afterok:20583915
+#SBATCH --job-name=genGFMC
 # SBATCH --job-name=tidyup
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=1-20:00:00
+#SBATCH --time=2-20:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
-#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/6x6MC/%a.out
+#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/SGen/%a.out
 #SBATCH --partition=normal
 # SBATCH --partition=largemem
 #SBATCH --ntasks=1
@@ -23,9 +23,10 @@
 # module --force purge
 module load lang/JuliaHPC/1.10.1-foss-2022a-CUDA-11.7.0
 
-julia -O3 -t $SLURM_CPUS_PER_TASK --heap-size-hint=210G /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/FiniteSizeScaling_6x6.jl/GFMC_FSS_Sq.jl $SLURM_ARRAY_TASK_ID
+julia -O3 -t $SLURM_CPUS_PER_TASK --heap-size-hint=210G /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/GenericSector.jl/GFMC_gen.jl $SLURM_ARRAY_TASK_ID
 exit
 =#
+
 cd(@__DIR__)
 using Pkg
 Pkg.activate(@__DIR__)
@@ -38,25 +39,31 @@ using SpiderWebModel.HDF5
 using SpiderWebModel.Statistics
 i_arg = isinteractive() ? 40 : parse(Int, ARGS[1])
 
-μs = -0.2:0.2:0.8
+μs = (0.6,0.7,0.8,0.9,0.95)
+confs = h5read(ENV["MYSCRATCH"]*"confs/confs_fixed_conserved_2.h5","confs")
+L = size(confs)[1]
+numConfs = size(confs)[3]
 
-Ls = (24,30,36)
-NRuns = 14
-RunBatches = 2
-# μs = 0.2:0.025:0.45
+NRuns = 15
+RunBatches = 3
 
-
-jobs_array = [(;L,mu,run) for L in Ls for mu in μs for run in 1:RunBatches:NRuns]
+jobs_array = [(;confnum,mu,run) for confnum in 1:5 for mu in μs for run in 1:RunBatches:NRuns]
 
 # μs = μs[1:2:end]
 # μs = μs[2:2:end]
 
-(;L,mu,run) = jobs_array[i_arg]
+(;confnum,mu,run) = jobs_array[i_arg]
 μ = mu
-τ = 0.1 +0.1μ
+# μs = 0.2:0.025:0.45
+
+# μs = μs[1:2:end]
+# μs = μs[2:2:end]
+
+τ = 0.20+ 0.1μ
 ##
 # L = 32
 # NSteps = 12_000
+# NBinsEval = 1
 # NRuns = 14
 # equilibration_steps = 800
 # pre_equilibration_steps = 50_000
@@ -66,14 +73,14 @@ jobs_array = [(;L,mu,run) for L in Ls for mu in μs for run in 1:RunBatches:NRun
 # NStepsEnd = 2000
 # NBins = 400
 ##
-NSteps = 10_000
+NSteps = 15_000
+NBinsEval = 1
 equilibration_steps = 2000
-pre_equilibration_steps = 5_000_000_000
-NWalkers = round(Int,128*40*(L/24)^4)
-
+pre_equilibration_steps = 50_000
+NWalkers = round(Int,128*25*(L/24)^4)
 NWalkers = (NWalkers - NWalkers%128)
-scatter_fraction = max(0.4,0.9 *(mu))
-projection_order = 120
+scatter_fraction = 0.5
+projection_order = 80
 ##
 # -- debug params --
 if isinteractive()
@@ -87,42 +94,13 @@ if isinteractive()
 end
 
 ##
-function get_S_condensate!(S)
-    S .= 2SW.periodicState6x6Condensate(size(S,1))
-    return S
-end
+SECTOR_NAME  = "RandConf_$(confnum)"
 
-SECTOR_NAME  = "6x6Condensate"
-
-parentState = get_S_condensate!(
-    SW.stencilConfig(
+parentState = SW.stencilConfig(
         zeros(L,L),1,
         boundaryCondition = :periodic
-    )
 )
-
-function get_max_conf_from_hdf5(directory)
-    files = readdir(directory, join=true)
-    max_moves = -Inf
-    max_conf = nothing
-
-    for file in files
-        h5file = h5open(file, "r")
-        Nmoves = read(h5file, "Nmoves")
-        println("Nmoves: $Nmoves")
-        if Nmoves > max_moves
-            max_moves = Nmoves
-            max_conf = read(h5file, "maxConf")
-        end
-        close(h5file)
-    end
-
-    return max_conf
-end
-
-config_dir = ENV["MYSCRATCH"] * "/Spiderweb/MaxFlip/$(SECTOR_NAME)/L=$(L)/"
-max_conf = get_max_conf_from_hdf5(config_dir)
-parentState .= max_conf
+parentState .= confs[:,:,confnum]
 ##
 
 # initializer = getInitializer(parentState,μ;NWalkers,NSteps = 1,OptIndep = 2)
@@ -211,11 +189,11 @@ CT = SW.ContinuousTimeMethod(τ,w_avg_estimate,SW.Hxx_RK(μ))
 GC.gc()
 
 initializer = SW.CombinedInitializer(
-    SW.UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction), 
-    SW.StochasticResettingInitializer(LinRange(200,CT.τ,50),CT,Inf,parentState)
+    SW.UnguidedWalkInitializer(pre_equilibration_steps,0.7), 
+    SW.StochasticResettingInitializer(LinRange(1,CT.τ,1000),CT,Inf,parentState)
 )
 for run_num in run:min(NRuns, run+RunBatches)
-    outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/$(SECTOR_NAME)_maxFlipInit_2/L=$(L)/mu=$(μ)/$run_num/"
+    outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/$(SECTOR_NAME)*_longprop/L=$(L)/mu=$(μ)/$run_num/"
     mkpath(outfileDIR)
 
     outfile = joinpath(outfileDIR,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run_num).h5")

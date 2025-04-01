@@ -1,7 +1,7 @@
 #!/bin/bash
 #=
 #!/bin/bash
-# SBATCH --dependency=afterok:16952754
+# SBATCH --dependency=afterok:20794586
 #SBATCH --job-name=LmuStair
 # SBATCH --job-name=tidyup
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
@@ -37,20 +37,21 @@ end
 import SpiderWebModel as SW
 using SpiderWebModel.HDF5
 using SpiderWebModel.Statistics
-i_arg = isinteractive() ? 80 : parse(Int, ARGS[1])
+i_arg = isinteractive() ? 53 : parse(Int, ARGS[1])
 
 μs = 0.0:0.1:1.0
 NRuns = 14
 RunBatches = 7
 # μs = 0.2:0.025:0.45
 
-Ls = (28,32,36,40)
-jobs_array = [(;L,μ,run) for L in Ls for μ in μs for run in 1:RunBatches:NRuns]
+Ls = (28,32,36)
+jobs_array = [(;L,mu,run) for L in Ls for mu in μs for run in 1:RunBatches:NRuns]
 
 # μs = μs[1:2:end]
 # μs = μs[2:2:end]
 
-(;L,μ,run) = jobs_array[i_arg]
+(;L,mu,run) = jobs_array[i_arg]
+μ = mu
 τ = 0.10+ 0.1μ
 ##
 # L = 32
@@ -68,13 +69,10 @@ jobs_array = [(;L,μ,run) for L in Ls for μ in μs for run in 1:RunBatches:NRun
 NSteps = 10_000
 NBinsEval = 1
 equilibration_steps = 1000
-pre_equilibration_steps = 50_000
+pre_equilibration_steps = 5_000_000
 NWalkers = round(Int,128*20*(L/24)^4)
-if 0.1<= μ <= 0.5
-    NWalkers *= 4
-end
 NWalkers = (NWalkers - NWalkers%128)
-scatter_fraction = 0.5
+scatter_fraction = 0.7
 projection_order = 150
 ##
 # -- debug params --
@@ -105,7 +103,7 @@ SECTOR_NAME  = "StairCase"
 parentState = get_S_stair!(
     SW.stencilConfig(
         zeros(L,L),1,
-        boundary = SW.Stencils.Wrap(),padding = SW.Stencils.Conditional()
+        boundaryCondition=:periodic
     )
 )
 
@@ -121,10 +119,7 @@ SRdir = ENV["MYSCRATCH"]*"/Spiderweb/DataStochRec/L=$L/periodic_RK_Full_$(SECTOR
 mkpath(SRdir)
 SRoutfiles = readdir(SRdir,join=true)
 
-getOutfilename(i) = joinpath(SRdir,"StochRec_L=$(L)_tau=$(CT_stochRec.τ)_NW=$(NWalkers_stochRec)_mu=$(μ)_$(i).h5")
-
 CT = SW.ContinuousTimeMethod(τ,w_avg_estimate = length(parentState)*0.21*(1-μ),Hxx = SW.Hxx_RK(μ))
-CT_stochRec = SW.ContinuousTimeMethod(150τ,w_avg_estimate = CT.w_avg_estimate,Hxx = CT.Hxx)
 ##
 function findNonZeroEn(filename)
     e0 = h5read(filename,"E0")
@@ -177,7 +172,7 @@ end
 # optimize starting
 if μ != 1
     _SR_iteration = 1
-    isempty(SRoutfiles) && error("SRoutfiles not empty")
+    isempty(SRoutfiles) && error("SRoutfiles empty")
     outfileSR = last(SRoutfiles)
     if !convergence_heuristic(outfileSR)
         error("no convergence of SR!")
