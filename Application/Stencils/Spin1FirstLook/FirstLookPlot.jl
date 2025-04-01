@@ -159,9 +159,9 @@ function plot_overview(results_df,results_df_others)
     fig = Figure(size =  1.1 .* (800, 500), fontsize = 22)
     toprow = fig[1, 1:4] = GridLayout()
     botrow = fig[2 ,1:4]= GridLayout()
-    EnergyFig = botrow[1, 2:4] = GridLayout()
+    EnergyFig = botrow[1, 1:4] = GridLayout()
 
-    SqFig = botrow[1, 1] = GridLayout()
+    # SqFig = botrow[1, 1] = GridLayout()
     SideRow = fig[1:2, 5] = GridLayout()
 
     sectors = unique(results_df.Sector)
@@ -252,26 +252,12 @@ function plot_overview(results_df,results_df_others)
 
     rowsize!(fig.layout, 1, Relative(0.25))
     colsize!(botrow, 1, Relative(0.4))
-
-    SqFig[1, 1] = axSQ = Axis(fig, xlabel=L"q_x", ylabel=L"q_y", aspect = 1, xticks = PiTicks([0, pi]), yticks = PiTicks([0, pi]))
-    
-    let mu_plot = 0.1
-        muSim = results_df.mu[findfirst(>=(mu_plot), results_df.mu)]
-        resPl = only(filter(x->x.mu==muSim&&x.Sector == 1,results_df))
-        # SqMat = dropmean(resPl.StructureFactor,dims=3)
-        SqMat = mean(SqsGFMC)[:,:,end]
-        
-        Sq = SW.getSqCont(SqMat, cutoffEnd = 0)
-        qx = qy = trueMomenta(-0.5pi, 1.5pi, size(SqMat, 1))
-        hm = heatmap!(axSQ, qx, qy, Sq)
-        # scatter!(axSQ, Point(pi/2,pi/2), color = :black, markersize = 5)
-        Colorbar(SqFig[0,1], hm, label = L"\mathcal{S}(\mathbf{q})", vertical = false,ticks = SimpleTicks())
-    end
     colsize!(fig.layout, 5, Relative(0.2))
-    colgap!(fig.layout, 4, -15)
+    colgap!(fig.layout, 4, 10)
     Label(fig[1, 1,TopLeft()], L"(a)$$", fontsize = 22)
-    Label(fig[2, 1,TopLeft()], L"(b)$$", fontsize = 22)
-    Label(EnergyFig[1, 1,TopLeft()], L"(c)$$", fontsize = 22)
+    # Label(fig[2, 1,TopLeft()], L"(b)$$", fontsize = 22)
+    Label(EnergyFig[1, 1,TopLeft()], L"(b)$$", fontsize = 22)
+    Label(SideRow[1, 1,TopLeft()], L"(c)$$", fontsize = 22)
     save("../../figs/PaperFigs/EnergyScaling_S1_L20.pdf", fig)
     fig
 end
