@@ -256,8 +256,8 @@ function plot_overview(results_df,results_df_others)
     colgap!(fig.layout, 4, 10)
     Label(fig[1, 1,TopLeft()], L"(a)$$", fontsize = 22)
     # Label(fig[2, 1,TopLeft()], L"(b)$$", fontsize = 22)
-    Label(EnergyFig[1, 1,TopLeft()], L"(b)$$", fontsize = 22)
-    Label(SideRow[1, 1,TopLeft()], L"(c)$$", fontsize = 22)
+    Label(SideRow[1, 1,TopLeft()], L"(b)$$", fontsize = 22)
+    Label(EnergyFig[1, 1,TopLeft()], L"(c)$$", fontsize = 22)
     save("../../figs/PaperFigs/EnergyScaling_S1_L20.pdf", fig)
     fig
 end
