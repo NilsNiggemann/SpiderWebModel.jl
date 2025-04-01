@@ -77,11 +77,11 @@ function getRes_2(folder)
     sort!(res,[:mu,:L])
 end
 ##
-res = getRes_2("/scratch/hpc-prf-pm2frg/niggeni/Spiderweb/DataS1_CT_RK_equil/StairCase/L=28/")
+res = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase/")
 ##
 with_theme(theme_SimpleTicks()) do
     ind = 1
-    L = 28
+    L = 32
     resL = get_res(res,L=L,mu=0.8)
 
     Nsites = length(getSq_tau(res,10.))
@@ -98,40 +98,82 @@ with_theme(theme_SimpleTicks()) do
 
 end
 ##
-#
+xis = getXiCol(res,(pi/2,pi/2);tau = 10)
+Sqmax = getSqMaxCol(res,(pi/2,pi/2),tau = 10)
+res.xi = xis
+res.Sqmax = Sqmax
+##
 with_theme(theme_PiTicks()) do
-    L = 28
-    muPlot = [0.1,0.8,0.9,1.0]
+    L = 36
+    # muPlot = [0.1,0.8,0.9,1.0]
+    muPlot = [0.4,0.6,0.8,1.0]
     
-    fig = Figure(fontsize = 22,size = 170 .*(length(muPlot),1.85))
-    ticks = PiTicks([0,pi])
-    axes = [Axis(fig[1,i],aspect=1,
-    # title = L"μ = %$(muPlot[i])",
-    yticklabelsvisible=i==1,xticks=ticks,yticks=ticks,xlabel = L"q_x",ylabel = L"q_y", ylabelvisible = i==1) for i in eachindex(muPlot)]
-    
-    for (i,mu) in enumerate(muPlot)
-        # return getSq(res,tau=15.,L=L,mu=mu)
-        SqMat = SW.expand_Sq(mean(getSq(res,tau=15.,L=L,mu=mu)))
+    fig = Figure(fontsize = 22,size = 300 .*(2,2.5))
 
-        kx = ky = trueMomenta(-pi/2,1.5pi,L)
+    fig_xi = GridLayout()
+    fig.layout[1,1:2] = fig_xi
+    
+    axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\xi/L",xticks = SimpleTicks(),yticks = SimpleTicks())
+
+    for L in filter!(<(40), unique(res.L))
+        resFilt = filter(x->x.L==L,res)
+        unique_mus = unique(resFilt.mu)
+        data = map(unique_mus) do mu
+            resmu = filter(x->x.mu==mu,resFilt)
+            return mean(resmu.xi)/L, std(resmu.xi)/L ,mu
+            # return mean(resmu.Sqmax), std(resmu.Sqmax) ,mu
+        end
+        xi = getindex.(data,1)
+        xierr = getindex.(data,2)
+        mu = getindex.(data,3)
+        scatterlines!(axis,mu,xi,marker = '×',markersize = 10,label = "L = $L")
+        errorbars!(axis,mu,xi,xierr,whiskerwidth = 6,linewidth=0.5)
+    end
+    # xlims!(axis,0.6,1)
+    # ylims!(axis,0.0,70)
+    axislegend(axis,position = :rt)
+    fig_SQ = GridLayout()
+    fig.layout[2,1:2] = fig_SQ
+
+
+    ticks = PiTicks([0, pi])
+
+    axInds = [(i,(2j-1)) for (i, j) in Iterators.product(1:2, 1:2)]
+    ColbarInds = [(i,j+1) for (i, j) in axInds]
+
+    axes = [Axis(fig_SQ[i, j], aspect=1,
+    yticklabelsvisible=j==1, xticks=ticks, yticks=ticks, xlabel=L"q_x", ylabel=L"q_y", ylabelvisible=j==1,xticklabelsvisible= i==2, xlabelvisible = i==2) 
+    for (i, j) in axInds]
+    
+
+    for (idx, mu) in enumerate(muPlot)
+        i, j = divrem(idx - 1, 2) .+ 1
+        SqMat = SW.expand_Sq(mean(getSq(res, tau=4., L=L, mu=mu)))
+
+        kx = ky = trueMomenta(-pi/2, 1.5pi, L)
 
         SqFunc = SW.getSqCont(SqMat)
-        Sqpl = SqFunc.(Iterators.product(kx,ky))
-        hm = heatmap!(axes[i],kx,ky,Sqpl,colormap = :viridis)
-        Colorbar(fig[0,i],hm,ticks = SimpleTicks(),vertical = false,flipaxis = true,label = L"\mathcal{S}(\mathbf{q})",width = Relative(0.9))
+        Sqpl = SqFunc.(Iterators.product(kx, ky))
+        hm = heatmap!(axes[i, j], kx, ky, Sqpl, colormap=:viridis)
+        Colorbar(fig_SQ[ColbarInds[idx]...], hm, ticks=SimpleTicks(), vertical=true, flipaxis=true, label=L"\mathcal{S}(\mathbf{q})", width=Relative(0.5),labelvisible=ColbarInds[idx][2] == 4)
         
-        band!(axes[i],[-0.5pi,0.5pi],[1.1pi,1.1pi],[1.5pi,1.5pi],color = (:black,0.5))
-        text!(axes[i],Point(0,1.3pi),text=L"μ = %$mu",color = :white,align = (:center,:center))
-        
-        # text!(axes[i],Point(0,1.3pi),text=L"μ = %$mu",color = :black,align = (:center,:center))
-    end
-    rowgap!(fig.layout,1,5)
-    colgap!(fig.layout,1,0)
-    colgap!(fig.layout,2,0)
-    colgap!(fig.layout,3,0)
+        text!(axes[i, j], Point(0.5,0.99), text=L"\mu = %$(mu)", align=(:center, :top),space = :relative, strokecolor = (:black,0.3), strokewidth = 4)
+        text!(axes[i, j], Point(0.5,0.99), text=L"\mu = %$(mu)", align=(:center, :top),space = :relative,color = :white)
 
+        # band!(axes[i, j], [-0.5pi, 0.5pi], [1.1pi, 1.1pi], [1.5pi, 1.5pi], color=(:black, 0.5))
+        # text!(axes[i, j], Point(0, 1.3pi), text=L"μ = %$mu", color=:white, align=(:center, :center))
+    end
+    rowsize!(fig.layout, 1, Relative(0.4))
+    # rowgap!(fig.layout, 1, 5)
+    colsize!(fig_SQ, 2, Relative(0.05))
+    colsize!(fig_SQ, 4, Relative(0.05))
+    Label(fig_xi[1, 1, TopLeft()], L"a)$$", padding = (-30, 0, -10, 0))
+    Label(fig_SQ[1, 1, TopLeft()], L"b)$$", padding = (-30, 0, -10, 0))
+    # colgap!(fig.layout, 2, 0)
+    save("../../figs/PaperFigs/StairCaseSpin1Overview.pdf", fig)
     fig
 end
+
 ##
 with_theme(theme_SimpleTicks()) do
     L = 28
