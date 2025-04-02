@@ -1,0 +1,5 @@
+[deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+GraphMakie = "1ecd5474-83a3-4783-bb4f-06765db800d2"
+MakieHelpers = "769ed66a-a1e3-4c16-885f-a5b16fb973c2"
+SpinFRGLattices = "053fb7f8-31b7-4f68-aef8-4452b415dd8c"

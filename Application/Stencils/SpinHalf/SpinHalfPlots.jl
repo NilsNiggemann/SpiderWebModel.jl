@@ -165,7 +165,7 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     Right_Half[2, 1] = EN_Plot
 
     exemplaryConfig = SW.SpinConfig(ClassicalConfigs[1][10:22,10:22],0.5)
-    stairCase_state = SW.SpinConfig(SW.getStairCase(12),0.5)
+    stairCase_state = SW.stencilConfig(SW.getStairCase(12),0.5,boundaryCondition = :periodic)
 
     axkwargs = (;xminorticksvisible=true,yminorticksvisible=true,xtickwidth = 2,ytickwidth = 2,xminortickwidth = 1.8,yminortickwidth = 1.8,xticksize=9,yticksize=9,xminorticksize=6,yminorticksize=6,xminortickalign =1,yminortickalign =1,xtickalign =1,xticksmirrored =true,yticksmirrored=true,ytickalign=1,
     xlabelpadding = -5,
@@ -182,7 +182,7 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
 
     SW.plotApplPlaquettes!(ax_generic_conf,exemplaryConfig,markersize = 8)
 
-    SpinConf_Fig[1, 2] = ax_staircase_conf = Axis(fig; SW.getConfigAxis(stairCase_state)...,xticklabelsvisible = false,yticklabelsvisible = false,spinecolors(:blue)...,spinewidth = 5
+    SpinConf_Fig[1, 2] = ax_staircase_conf = Axis(fig; SW.getConfigAxis(stairCase_state)...,xticklabelsvisible = false,yticklabelsvisible = false,spinecolors(:blue)...,spinewidth = 3
     )
 
     SW.plotApplPlaquettes!(ax_staircase_conf,stairCase_state,markersize = 8)
@@ -192,7 +192,7 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
 
         SW.plotPlaquetteHighlight!(ax_staircase_conf,Point(4,3),color = (:lime,0.4))
 
-        point_env = [Point(-2,-2),Point(2,-2),Point(2,2),Point(-2,2),Point(-2,-2)]
+        point_env = [Point(-2.4,-2.4),Point(2.4,-2.4),Point(2.4,2.4),Point(-2.4,2.4),Point(-2.4,-2.4)]
 
         lines!([p_lime + p for p in point_env],color = :lime,linewidth = 2,linestyle = :dash)
     end
@@ -264,12 +264,6 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     hm_mu0 = heatmap!(axmu0, kx_mu0, ky_mu0, SqMat;colorrange,colormap = :turbo )
 
 
-
-    # Label(fig[1,1, TopLeft()],L"a)$$",padding = (-30,0,-20,0))
-    # Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-20,0))
-    # Label(fig[1,3, TopLeft()],L"c)$$",padding = (-30,0,-20,0))
-    # Label(fig[2,1, TopLeft()],L"d)$$",padding = (-30,0,-20,0))
-    # Label(fig[2,2, TopLeft()],L"e)$$",padding = (-30,0,-20,0))
 
     textpos = Point(-pi/2,3pi/2)
 
