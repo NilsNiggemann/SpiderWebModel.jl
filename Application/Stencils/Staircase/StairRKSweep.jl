@@ -78,6 +78,7 @@ function getRes_2(folder)
 end
 ##
 res = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase/")
+filter!(x->x.mu>=0.6 && x.L>20,res)
 ##
 with_theme(theme_SimpleTicks()) do
     ind = 1
@@ -106,7 +107,7 @@ res.Sqmax = Sqmax
 with_theme(theme_PiTicks()) do
     L = 36
     # muPlot = [0.1,0.8,0.9,1.0]
-    muPlot = [0.4,0.6,0.8,1.0]
+    muPlot = [0.6,0.8,0.9,1.0]
     
     fig = Figure(fontsize = 22,size = 300 .*(2,2.5))
 
