@@ -1,6 +1,6 @@
 using CairoMakie
 using CairoMakie.Makie.ColorSchemes
-function plotSpinConfig!(ax, S::AbstractSpinConfig; plotConstraints = true, kwargs...)
+function plotSpinConfig!(ax, S::AbstractSpinConfig; plotConstraints = true, constraintkwargs =(;), kwargs...)
     vals = filter!(x -> !ismissing(x) && !isnan(x), unique(S.Mat))
     isempty(vals) && (vals = [-1, 1])
     Amin = min(minimum(vals), -getSpin(S))
@@ -17,7 +17,7 @@ function plotSpinConfig!(ax, S::AbstractSpinConfig; plotConstraints = true, kwar
     if plotConstraints
         points =
             [Point(Tuple(I)...) for I in CartesianIndices(S.Mat) if iseven(sum(Tuple(I)))]
-        scatter!(ax, points, marker = '×', color = :darkgray, markersize = 20)
+        scatter!(ax, points, marker = '×', color = :darkgray, markersize = 20;constraintkwargs...)
     end
     translate!(hm, 0, 0, -100)
     return hm

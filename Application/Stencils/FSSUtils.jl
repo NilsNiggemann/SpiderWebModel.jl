@@ -24,6 +24,11 @@ function getxi(Sq)
     return getxi(Sq,I)
 end
 
+function getSq_tau(Sq::Array{T,3},tau::Real,Dtau::Real) where T
+    tauInd = ceil(Int,tau/Dtau)
+    return @view Sq[:,:,tauInd]
+end
+
 ##
 function getXis(Sqs)
     xis = zeros(size(Sqs,4))
@@ -94,5 +99,39 @@ function getXiLs(res::DataFrame,Q = pi/2)
         xis[L] = mean.(xi_L) ./ L
         xis_err[L] = std.(xi_L) ./ L
         mus[L] = unique_mus
+    end
+end
+
+function getXiCol(res::DataFrame,Q = (pi/2,pi/2);tau = 10)
+    # return 
+    
+    
+    xiL = map(zip(res.L,res.Sq,res.tau)) do (L,Sq,dtau)
+        # println(typeof(Sq))
+        k = trueMomenta(0,2pi,L)
+        
+        i_k = findfirst(==(Q[1]),k)
+        j_k = findfirst(==(Q[2]),k)
+
+        Sqtau = getSq_tau(Sq,tau,dtau)
+        xi = getxi(Sqtau,CartesianIndex(i_k,j_k))
+    end
+end
+function getSqMaxCol(res::DataFrame,Q = nothing;tau = 10)
+    # return 
+    
+    Sqmax = map(zip(res.L,res.Sq,res.tau)) do (L,Sq,dtau)
+        # println(typeof(Sq))
+        k = trueMomenta(0,2pi,L)
+        
+        
+        Sqtau = getSq_tau(Sq,tau,dtau)
+        if isnothing(Q)
+            return maximum(Sqtau)
+        else
+            i_k = findfirst(==(Q[1]),k)
+            j_k = findfirst(==(Q[2]),k)
+            return Sqtau[i_k,j_k]
+        end
     end
 end

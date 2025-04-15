@@ -98,10 +98,12 @@ end
 # res = getRes(ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/6x6Condensate_equil/")
 
 res2 = getRes(ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/6x6Condensate_longprop_2/")
-res3 = getRes(ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/6x6Condensate_longprop_3/")
+# res3 = getRes(ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/6x6Condensate_longprop_3/")
+res3 = getRes(ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/6x6Condensate_maxFlipInit_2/")
 filter!(x->!(x.L in res3.L && x.mu in res3.mu),res2)
 # res = res2
-res = vcat(res2, res3)
+# res = vcat(res2, res3)
+res = res3
 sort!(res, [:mu, :L])
 # res = getRes(ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/S0*_longprop/")
 ##
@@ -393,6 +395,26 @@ end
 
 
 ##
+with_theme(theme_PiTicks()) do 
+    fig = Figure(fontsize = 22,size = 100 .*(3,3),  
+    backgroundcolor = :transparent
+    )
+    ax_BCorr = Axis3(fig[1,1];xlabel = L"q_x",ylabel = L"q_y",zlabel = L"ω(\textbf{q})",
+    zlabeloffset = 30,
+    zticklabelpad = 10,
+    # xticks=PiTicks((-pi,0,pi)),yticks=PiTicks((-pi,0,pi)),
+    xticks = PiTicks([0,pi]), yticks = PiTicks([0,pi]),
+    zticks=SimpleTicks((0,1,2)),azimuth=1.6pi,elevation=0.3pi)
+    qxPhot = trueMomenta(-0.5pi,1.5pi,250)
+    qyPhot = trueMomenta(-0.5pi,1.5pi,250)
+    hm_B = surface!(ax_BCorr,qxPhot,qyPhot,photonDispersion,colormap = Makie.cgrad(:thermal,rev=false))
+    save("../../figs/PaperFigs/photonDispersion.png",fig)
+    fig
+    # text!(ax_BCorr,Point(pi/2,pi/2),text="TODO!",color = :black,align = (:center,:center),fontsize = 40)
+end
+##
+filter!(x->x.mu >=0.0,res)
+using CairoMakie.FileIO
 with_theme(theme_SimpleTicks()) do 
 
     fig = Figure(fontsize = 22,size = 400 .*(3,2))
@@ -416,16 +438,17 @@ with_theme(theme_SimpleTicks()) do
     
     PiTicksArgs = (;xticks = PiTicks([0,pi]), yticks = PiTicks([0,pi]))
 
-    L_Plot = 30
+    L_Plot = 36
 
     (;qx,qy,xygrid,p1_discrete,xticks,tRange_new,kpath,p1_points) = get_q_Cuts(L_Plot)
 
-    FSS_Plot[1,1] = ax_scal = Axis(fig,xlabel = L"μ",ylabel = L"\textrm{max}(\mathcal{S}(\mathbf{q}))/N_\textrm{sites}")
+    FSS_Plot[1,1] = ax_scal = Axis(fig,xlabel = L"μ",ylabel = L"\textrm{max}(\mathcal{S}(\mathbf{q}))")
     # FSS_Plot[1,1] = ax_scal = Axis(fig,xlabel = L"μ",ylabel = L"\textrm{max}_\Delta \mathcal{S}(\mathbf{q})")
-    FSS_Plot[1,1] = ax_scal2 = Axis(fig,yaxisposition = :right,ylabel = L"\delta \mathcal{S}(\mathbf{q})",yticklabelcolor = :red,ylabelcolor = :red)
+    FSS_Plot[1,1] = ax_scal2 = Axis(fig,yaxisposition = :right,ylabel = L"$\delta \mathcal{S}(\mathbf{q})$ (dashed)",yticklabelcolor = :gray20,ylabelcolor = :gray20)
 
     # linkxaxes!(ax_scal,ax_scal2)
-    mu_show = (0.,0.4,0.8)
+    # mu_show = (0.8,0.8,0.8)
+    mu_show = (0.2,0.4,0.8)
     # mu_show = (-0.2,0.0,0.2)
 
     SqsGFMC = [SW.expand_Sq.(getSq(res,tau=11,mu=mu,L=L_Plot)) for mu in mu_show]
@@ -476,7 +499,6 @@ with_theme(theme_SimpleTicks()) do
         Colorbar(Sq_Heatmaps[0,1:3],ticks = SimpleTicks(),width = Relative(1),height = Relative(0.8);colorrange,vertical=false,label = L"\mathcal{S}(\mathbf{q})")
 
     end
-
     with_theme(theme_SimpleTicks()) do 
         SqCuts[1,1] = axPath1 = Axis(fig;
         # ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" ,
@@ -513,17 +535,32 @@ with_theme(theme_SimpleTicks()) do
     SqRandomCuts[1,1] = plotRandomCuts!(fig, resRandConfs)
 
     with_theme(theme_PiTicks()) do 
-        FT_Plot[1,2] = ax_BCorr = Axis3(fig;xlabel = L"q_x",ylabel = L"q_y",zlabel = L"ω(\textbf{q})",
-        # xticks=PiTicks((-pi,0,pi)),yticks=PiTicks((-pi,0,pi)),
-        PiTicksArgs...,
-        zticks=SimpleTicks((0,1,2)),azimuth=1.6pi,elevation=0.3pi)
-        qPhot = trueMomenta(-0.5pi,1.5pi,30)
-        hm_B = surface!(ax_BCorr,qPhot,qPhot,photonDispersion,colormap = Makie.cgrad(:thermal,rev=false))
-
-        # text!(ax_BCorr,Point(pi/2,pi/2),text="TODO!",color = :black,align = (:center,:center),fontsize = 40)
+        FT_Plot[1,2] = ax_BCorr = Axis(fig,
+        ylabelvisible = false,
+        aspect = DataAspect(),
+        xlabelvisible = false,
+        xticklabelsvisible = false,
+        yticklabelsvisible = false,
+        xticksvisible = false,
+        backgroundcolor = (:white, 0.0),
+        # backgroundcolor = (:black, 0.8),
+        yticksvisible = false,
+        xgridvisible = false,
+        tellheight = false,
+        tellwidth = false,    
+        ygridvisible = false,
+        bottomspinevisible = false,
+        topspinevisible = false,
+        leftspinevisible = false,
+        rightspinevisible = false,
+        )
+        img = load("../../figs/PaperFigs/photonDispersion.png")[90:end,90:end]
+        image!(ax_BCorr, rotr90(img))
     end
-
-    Linestyles = [:dash, :dot, :dashdot, :solid, :solid]
+    colsize!(FT_Plot,1,Relative(0.4))
+    colsize!(FT_Plot,2,Relative(0.6))
+    colgap!(FT_Plot,1,Relative(-0.))
+    Linestyles = [:solid, :solid, :solid]
     scatterkwargs = Dict(
         16 => (;marker = '+'),
         20 => (;marker = '▴'),
@@ -534,6 +571,12 @@ with_theme(theme_SimpleTicks()) do
         40 => (;marker = '■', markersize = 10),
     )
     ylim_max = 0
+
+    cols = Dict(
+        24 => :blue,
+        30 => :red,
+        36 => :black,
+    )
     for (L, linestyle) in zip((24,30,36), Linestyles)
         resL = get_res(res, L=L)
         isempty(resL) && continue
@@ -545,7 +588,7 @@ with_theme(theme_SimpleTicks()) do
         
         qx = qy = trueMomenta(0, 2pi, L)
         for mu in mus
-            SqsGFMC = SW.expand_Sq.(getSq(res, tau=12, mu=mu, L=L))
+            SqsGFMC = SW.expand_Sq.(getSq(res, tau=4, mu=mu, L=L))
             SqMat = mean(SqsGFMC)
             SqErr = std(SqsGFMC)
             fittingCoefs = optimizeCoeffs(SqMat)
@@ -554,7 +597,7 @@ with_theme(theme_SimpleTicks()) do
             norm_diffs_individual = [SW.norm(Sq .- SqFT) ./L^2 for Sq in SqsGFMC]
 
             # max_deviation_individual = [maximum(abs.(Sq .- SqFT)) for Sq in SqsGFMC]
-            max_Sq_individual = [maximum(Sq)/L^2 for Sq in SqsGFMC]
+            max_Sq_individual = [maximum(Sq) for Sq in SqsGFMC]
             # max_Sq_individual = [getxi(CA.CircularArray(Sq)) for Sq in SqsGFMC]
             
             norm_diff = mean(norm_diffs_individual)
@@ -568,14 +611,17 @@ with_theme(theme_SimpleTicks()) do
             push!(max_Sqs, max_Sq)
             push!(max_Sqs_err, max_Sq_err)
         end
-        if L == 36
-            errorbars!(ax_scal2, mus, norm_diffs,norm_diff_errs, label=L"L=%$L",whiskerwidth = 10,color = :red)
-            scatterlines!(ax_scal2, mus, norm_diffs, label=L"L=%$L"; linestyle=:solid,color = :red, scatterkwargs[L]...)
+
+        if L == 36 || true
+            errorbars!(ax_scal2, mus, norm_diffs,norm_diff_errs, label=L"L=%$L",whiskerwidth = 10,color = cols[L])
+            scatterlines!(ax_scal2, mus, norm_diffs, label=L"L=%$L"; linestyle=:dash,color = cols[L], linewidth = 0.5,scatterkwargs[L]...)
+            # scatter!(ax_scal2, mus, norm_diffs, label=L"L=%$L";color = cols[L], scatterkwargs[L]...)
         end
         # ylim_max = max(ylim_max,maximum(max_Sqs))
-        errorbars!(ax_scal, mus, max_Sqs,max_Sqs_err, label=L"L=%$L",whiskerwidth = 10)
-        scatterlines!(ax_scal, mus, max_Sqs, label=L"L=%$L"; linestyle, scatterkwargs[L]...)
+        errorbars!(ax_scal, mus, max_Sqs,max_Sqs_err, label=L"L=%$L",whiskerwidth = 10,color = cols[L])
+        scatterlines!(ax_scal, mus, max_Sqs, label=L"L=%$L"; linestyle,color = cols[L], scatterkwargs[L]...)
     end
+    
     # ylims!(ax_scal,nothing,1.6ylim_max)
     axislegend(ax_scal,position = :rt,merge=true)
 
@@ -585,17 +631,42 @@ with_theme(theme_SimpleTicks()) do
     rowsize!(Sq_Heatmaps,1,Relative(0.9))
     colsize!(fig.layout,1,Relative(0.05))
     rowgap!(Sq_Heatmaps,1,2)
+    colgap!(BotRow,4,Relative(-0.))
     # colgap!(Sq_Heatmaps,2,-40)
     # colgap!(Sq_Heatmaps,3,-40)
     # colgap!(Sq_Heatmaps,4,-40)
     # colgap!(Sq_Heatmaps,5,-40)
-    Label(FSS_Plot[1,1,TopLeft()],L"(a)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (-30,0,0,0))
-    Label(Sq_Heatmaps[0,1,TopLeft()],L"(b)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (-30,0,0,0))
-    Label(SqCuts[1,1,TopLeft()],L"(c)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (-30,0,0,0))
+    Label(fig[1,1,TopLeft()],L"(a)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (-30,0,0,0))
+    Label(fig[1,5,TopLeft()],L"(b)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (140,0,0,0))
+    Label(fig[2,5,TopLeft()],L"(c)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (140,0,0,0))
     Label(SqRandomCuts[1,1,TopLeft()],L"(d)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (-50,0,0,0))
-    Label(FT_Plot[1,1,TopLeft()],L"(e)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,-30,0,0))
-    Label(FT_Plot[1,2,TopLeft()],L"(f)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,-30,0,0))
+    Label(fig[3,5,TopLeft()],L"(e)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,-140,0,0))
+    Label(fig[3,6,TopLeft()],L"(f)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,-170,0,0))
     save("../../figs/SqFieldTheoryComparison.pdf",fig)
     fig
     
 end
+##
+
+img = load("photonDispersion.png")
+
+f = Figure()
+ax = Axis(f[1, 1], 
+ylabelvisible = false,
+aspect = DataAspect(),
+xlabelvisible = false,
+xticklabelsvisible = false,
+yticklabelsvisible = false,
+xticksvisible = false,
+backgroundcolor = (:white, 0.0),
+yticksvisible = false,
+xgridvisible = false,
+ygridvisible = false,
+bottomspinevisible = false,
+topspinevisible = false,
+leftspinevisible = false,
+rightspinevisible = false,
+)
+img = load("photonDispersion.png")
+image!(ax, rotr90(img))
+f

@@ -183,7 +183,7 @@ function plot_overview(results_df,results_df_others)
             spinecolors(colors[i])...,
             spinewidth = 4,
         )
-        SW.plotSpinConfig!(ax_conf, S)
+        SW.plotSpinConfig!(ax_conf, S,constraintkwargs = (;markersize = 10))
         colgap!(toprow, 0)
     end
     Colorbar(toprow[1, 10], colorrange = [-1, 1],
@@ -222,8 +222,8 @@ function plot_overview(results_df,results_df_others)
         SideRow[i, 1] = ax_conf = Axis(fig;
             SW.getConfigAxis(S)...,
             yticklabelsvisible = false,
-            xminorgridwidth=0.2,
-            yminorgridwidth=0.2,
+            xminorgridwidth=i==1 ? 0.7 : 0.0,
+            yminorgridwidth=i==1 ? 0.7 : 0.0,
             xticklabelsvisible = false,
             spinecolors(colors[i])...,
             spinewidth = 3,
