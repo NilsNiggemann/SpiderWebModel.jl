@@ -1,16 +1,16 @@
 #!/bin/bash
 #=
 #!/bin/bash
-# SBATCH --dependency=afterok:20794586
-#SBATCH --job-name=FLmuStair
+# SBATCH --dependency=afterok:20810971
+#SBATCH --job-name=6x6Scal
 # SBATCH --job-name=tidyup
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=0-24:00:00
+#SBATCH --time=0-20:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
-#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK_Staircase/%a.out
+#SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/6x6MC/%a.out
 #SBATCH --partition=normal
 # SBATCH --partition=largemem
 #SBATCH --ntasks=1
@@ -23,10 +23,9 @@
 # module --force purge
 module load lang/JuliaHPC/1.10.1-foss-2022a-CUDA-11.7.0
 
-julia -O3 -t $SLURM_CPUS_PER_TASK --heap-size-hint=210G /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/StairCase_Sweep.jl/GFMC_Stair_Sq.jl $SLURM_ARRAY_TASK_ID
+julia -O3 -t $SLURM_CPUS_PER_TASK --heap-size-hint=210G /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/FiniteSizeScaling_6x6.jl/GFMC_FSS_Sq_smallmu.jl $SLURM_ARRAY_TASK_ID
 exit
-=#
-
+=# 
 cd(@__DIR__)
 using Pkg
 Pkg.activate(@__DIR__)
@@ -37,36 +36,37 @@ end
 import SpiderWebModel as SW
 using SpiderWebModel.HDF5
 using SpiderWebModel.Statistics
-i_arg = isinteractive() ? 38 : parse(Int, ARGS[1])
+i_arg = isinteractive() ? 80 : parse(Int, ARGS[1])
 
-μs = 0.0:0.1:1.0
-NRuns = 10
-# RunBatches = 1
+μs = -0.2:0.2:0.8
+
+Ls = (24,30,36)
+NRuns = 14
+
 function RunBatchesFunc(L)
-    if L <= 28
-        return 10
-    elseif L < 36
-        return 5
+    if L == 24
+        return 14
+    elseif L == 30
+        return 7
     else
         return 1
     end
 end
 # μs = 0.2:0.025:0.45
 
-Ls = (28,32,36)
+Ls = (24,30,36)
 jobs_array = [(;L,mu,run) for L in Ls for mu in μs for run in 1:RunBatchesFunc(L):NRuns]
 
 # μs = μs[1:2:end]
 # μs = μs[2:2:end]
-# 7,8,9,24,25,26,27,28,29,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113
 (;L,mu,run) = jobs_array[i_arg]
 RunBatches = RunBatchesFunc(L)
+
 μ = mu
-τ = 0.1+ 0.1μ
+τ = 0.1 +0.1μ
 ##
 # L = 32
 # NSteps = 12_000
-# NBinsEval = 1
 # NRuns = 14
 # equilibration_steps = 800
 # pre_equilibration_steps = 50_000
@@ -77,46 +77,62 @@ RunBatches = RunBatchesFunc(L)
 # NBins = 400
 ##
 NSteps = 10_000
-NBinsEval = 1
-equilibration_steps = 1000
-pre_equilibration_steps = round(Int,500_000_000*(L/36))
-NWalkers = round(Int,128*30*(L/24)^4)
+equilibration_steps = 2000
+pre_equilibration_steps = 5_000_000_000
+NWalkers = round(Int,128*60*(L/24)^4)
+
 NWalkers = (NWalkers - NWalkers%128)
-scatter_fraction = 0.7
-projection_order = 120
+scatter_fraction = max(0.6,0.9 *(mu))
+projection_order = 150
 ##
 # -- debug params --
 if isinteractive()
     # L = 12
-    NSteps = 100
-    equilibration_steps = 10
-    pre_equilibration_steps = 1000
-    NWalkers = 12
+    NSteps = 10
+    equilibration_steps = 2000
+    pre_equilibration_steps = 10000
+    NWalkers = 1000
     NRuns = 2
     projection_order = 20
-    NStepsEnd = 10
 end
 
 ##
 function get_S_condensate!(S)
-    S .= SW.periodicStateDenseLoops(size(S,1))
+    S .= 2SW.periodicState6x6Condensate(size(S,1))
     return S
 end
 
-function get_S_stair!(S)
-    S .= 4SW.getStairCase(size(S,1))
-    return S
-end
-##
-SECTOR_NAME  = "StairCase"
+SECTOR_NAME  = "6x6Condensate"
 
-parentState = get_S_stair!(
+parentState = get_S_condensate!(
     SW.stencilConfig(
         zeros(L,L),1,
-        boundaryCondition=:periodic
+        boundaryCondition = :periodic
     )
 )
 
+function get_max_conf_from_hdf5(directory)
+    files = readdir(directory, join=true)
+    max_moves = -Inf
+    max_conf = nothing
+
+    for file in files
+        h5file = h5open(file, "r")
+        Nmoves = read(h5file, "Nmoves")
+        println("Nmoves: $Nmoves")
+        if Nmoves > max_moves
+            max_moves = Nmoves
+            max_conf = read(h5file, "maxConf")
+        end
+        close(h5file)
+    end
+
+    return max_conf
+end
+
+config_dir = ENV["MYSCRATCH"] * "/Spiderweb/MaxFlip/$(SECTOR_NAME)/L=$(L)/"
+max_conf = get_max_conf_from_hdf5(config_dir)
+parentState .= max_conf
 ##
 
 # initializer = getInitializer(parentState,μ;NWalkers,NSteps = 1,OptIndep = 2)
@@ -128,6 +144,8 @@ parentState = get_S_stair!(
 SRdir = ENV["MYSCRATCH"]*"/Spiderweb/DataStochRec/L=$L/periodic_RK_Full_$(SECTOR_NAME)/$(SW.guidingfunc_name(ψG))/mu=$(μ)/"
 mkpath(SRdir)
 SRoutfiles = readdir(SRdir,join=true)
+
+getOutfilename(i) = joinpath(SRdir,"StochRec_L=$(L)_tau=$(CT_stochRec.τ)_NW=$(NWalkers_stochRec)_mu=$(μ)_$(i).h5")
 
 CT = SW.ContinuousTimeMethod(τ,w_avg_estimate = length(parentState)*0.21*(1-μ),Hxx = SW.Hxx_RK(μ))
 ##
@@ -167,8 +185,9 @@ function convergence_heuristic(filename)
 
     e0diff = abs.(diff(e0))
     ΔEdiff = abs.(diff(ΔE))
+    # @info "" e0diff[end] ΔEdiff[end]
     crit1 = (e0diff[end] < 1e-3) 
-    crit2 = (ΔEdiff[end] < 5e-4)
+    crit2 = (ΔEdiff[end] < 1e-3)
     return crit1 && crit2
     # fig = Figure()
     # ax = Axis(fig[1,1],title = "$crit1 , $crit2")
@@ -180,21 +199,16 @@ function convergence_heuristic(filename)
 
 end
 # optimize starting
-if μ != 1
-    _SR_iteration = 1
-    isempty(SRoutfiles) && error("SRoutfiles empty")
-    outfileSR = last(SRoutfiles)
-    if !convergence_heuristic(outfileSR)
-        error("no convergence of SR!")
-    end
-
-    idx = findNonZeroEn(outfileSR)
-    SW.get_params(ψG) .= findNonZeroParams(outfileSR,idx)
-    w_avg_estimate = h5read(outfileSR,"E0")[idx]
-else
-    w_avg_estimate = 0.0
-    ψG = SW.RKFunction()
+_SR_iteration = 1
+isempty(SRoutfiles) && error("SRoutfiles not empty")
+outfileSR = last(SRoutfiles)
+if !convergence_heuristic(outfileSR)
+    @warn "no full convergence of SR!"
 end
+
+idx = findNonZeroEn(outfileSR)
+SW.get_params(ψG) .= findNonZeroParams(outfileSR,idx)
+w_avg_estimate = h5read(outfileSR,"E0")[idx]
 #___________Spin-1_______________________
 ##
 
@@ -206,14 +220,12 @@ CT = SW.ContinuousTimeMethod(τ,w_avg_estimate,SW.Hxx_RK(μ))
 # initializer = getInitializer(parentState,μ,ψG;NWalkers=NWalkers,NSteps = 100,OptIndep = 6,outfileDIR=outfileDIR_init)
 GC.gc()
 
-
 initializer = SW.CombinedInitializer(
     SW.UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction), 
-    SW.StochasticResettingInitializer(LinRange(200,CT.τ,40),CT,600.,parentState)
+    SW.StochasticResettingInitializer(LinRange(200,CT.τ,80),CT,800.,parentState)
 )
-
 for run_num in run:min(NRuns, run+RunBatches)
-    outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/$(SECTOR_NAME)_3/L=$(L)/mu=$(μ)/$run_num/"
+    outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/$(SECTOR_NAME)_maxFlipInit_3/L=$(L)/mu=$(μ)/$run_num/"
     mkpath(outfileDIR)
 
     outfile = joinpath(outfileDIR,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run_num).h5")

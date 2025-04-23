@@ -1,14 +1,14 @@
 #!/bin/bash
 #=
 #!/bin/bash
-# SBATCH --dependency=afterok:20794586
-#SBATCH --job-name=FLmuStair
+# SBATCH --dependency=afterok:21839386
+#SBATCH --job-name=LmuStair
 # SBATCH --job-name=tidyup
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=128
 # SBATCH --export=ALL,JULIA_EXCLUSIVE=1
-#SBATCH --time=0-24:00:00
+#SBATCH --time=0-18:00:00
 #SBATCH --chdir=/scratch/hpc-prf-pm2frg/niggeni/
 #SBATCH --output=/scratch/hpc-prf-pm2frg/niggeni/JobsOutput/Spiderweb/GFMCCTRK_Staircase/%a.out
 #SBATCH --partition=normal
@@ -23,10 +23,10 @@
 # module --force purge
 module load lang/JuliaHPC/1.10.1-foss-2022a-CUDA-11.7.0
 
-julia -O3 -t $SLURM_CPUS_PER_TASK --heap-size-hint=210G /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/StairCase_Sweep.jl/GFMC_Stair_Sq.jl $SLURM_ARRAY_TASK_ID
+julia -O3 -t $SLURM_CPUS_PER_TASK --heap-size-hint=210G /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/StairCase_Sweep.jl/GFMC_Stair_Sq_fine.jl $SLURM_ARRAY_TASK_ID
 exit
 =#
-
+#29,30,31,32,33,34,35,36,37,38,39,40,41,42,99,100,101,102,103,104,105,106,107,108,109,110,111,112,169,170,171,172,173,174,175,176,177,178,179,180,181,182
 cd(@__DIR__)
 using Pkg
 Pkg.activate(@__DIR__)
@@ -37,16 +37,17 @@ end
 import SpiderWebModel as SW
 using SpiderWebModel.HDF5
 using SpiderWebModel.Statistics
-i_arg = isinteractive() ? 38 : parse(Int, ARGS[1])
+i_arg = isinteractive() ? 30 : parse(Int, ARGS[1])
 
-μs = 0.0:0.1:1.0
+# μs = range(0.81,0.89,length = 5)
+μs = (0.78,0.81,0.85)
 NRuns = 10
 # RunBatches = 1
 function RunBatchesFunc(L)
-    if L <= 28
-        return 10
-    elseif L < 36
-        return 5
+    if L == 28
+        return 14
+    elseif L == 32
+        return 7
     else
         return 1
     end
@@ -58,7 +59,7 @@ jobs_array = [(;L,mu,run) for L in Ls for mu in μs for run in 1:RunBatchesFunc(
 
 # μs = μs[1:2:end]
 # μs = μs[2:2:end]
-# 7,8,9,24,25,26,27,28,29,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113
+# 1,2,3,6,7,8,9,10,11,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57
 (;L,mu,run) = jobs_array[i_arg]
 RunBatches = RunBatchesFunc(L)
 μ = mu
@@ -206,14 +207,12 @@ CT = SW.ContinuousTimeMethod(τ,w_avg_estimate,SW.Hxx_RK(μ))
 # initializer = getInitializer(parentState,μ,ψG;NWalkers=NWalkers,NSteps = 100,OptIndep = 6,outfileDIR=outfileDIR_init)
 GC.gc()
 
-
 initializer = SW.CombinedInitializer(
     SW.UnguidedWalkInitializer(pre_equilibration_steps,scatter_fraction), 
-    SW.StochasticResettingInitializer(LinRange(200,CT.τ,40),CT,600.,parentState)
+    SW.StochasticResettingInitializer(LinRange(200,CT.τ,60),CT,800.,parentState)
 )
-
 for run_num in run:min(NRuns, run+RunBatches)
-    outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/$(SECTOR_NAME)_3/L=$(L)/mu=$(μ)/$run_num/"
+    outfileDIR = ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/$(SECTOR_NAME)_fine_2/L=$(L)/mu=$(μ)/$run_num/"
     mkpath(outfileDIR)
 
     outfile = joinpath(outfileDIR,"Spin1GFMC_L=$(L)_tau=$(τ)_NSteps=$(NSteps)_NW=$(NWalkers)_mu=$(μ)_$(run_num).h5")
