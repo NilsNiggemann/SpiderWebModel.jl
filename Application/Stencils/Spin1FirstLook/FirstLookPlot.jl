@@ -4,6 +4,7 @@ using MakieHelpers
 using CairoMakie
 using Statistics
 using DataFrames
+using MakieExtra
 
 include("../plottingUtils.jl")
 cd(@__DIR__)
@@ -119,16 +120,16 @@ end
 results_df = collect_results("../../Data/EnergyScaling_S1_L20")
 results_df_others = convertDF("6x6",res6x6)
 results_df_others = vcat(results_df_others, convertDF("rand_2",res_random_2))
-results_df_others = vcat(results_df_others, convertDF("rand_3",res_random_3))
+# results_df_others = vcat(results_df_others, convertDF("rand_3",res_random_3))
 results_df_others = vcat(results_df_others, convertDF("rand_4",res_random_4))
 results_df_others = vcat(results_df_others, convertDF("rand_5",res_random_5))
 
 labelMap(Sector) = Dict(
     "6x6" => L"6×6",
     "rand_2" => L"\textrm{rand}_1",
-    "rand_3" => L"\textrm{rand}_2",
-    "rand_4" => L"\textrm{rand}_3",
-    "rand_5" => L"\textrm{rand}_4",
+    # "rand_3" => L"\textrm{rand}_2",
+    "rand_4" => L"\textrm{rand}_2",
+    "rand_5" => L"\textrm{rand}_3",
 )[Sector]
 # results_df = vcat(results_df, res6x6_reduced)
 
@@ -156,13 +157,13 @@ function getSectorConfig(sector)
 end
 # results_df.Config = getSectorConfig.(results_df.Sector, 8)
 function plot_overview(results_df,results_df_others)
-    fig = Figure(size =  1.1 .* (800, 500), fontsize = 22)
-    toprow = fig[1, 1:4] = GridLayout()
+    fig = Figure(size =  1.0 .* (900, 550), fontsize = 22)
+    toprow = fig[1, 1:6] = GridLayout()
     botrow = fig[2 ,1:4]= GridLayout()
     EnergyFig = botrow[1, 1:4] = GridLayout()
 
     # SqFig = botrow[1, 1] = GridLayout()
-    SideRow = fig[1:2, 5] = GridLayout()
+    SideRow = fig[2, 5:6] = GridLayout()
 
     sectors = unique(results_df.Sector)
     sectors_others = unique(results_df_others.Sector)
@@ -186,19 +187,31 @@ function plot_overview(results_df,results_df_others)
         SW.plotSpinConfig!(ax_conf, S,constraintkwargs = (;markersize = 10))
         colgap!(toprow, 0)
     end
-    Colorbar(toprow[1, 10], colorrange = [-1, 1],
+    # Colorbar(toprow[1, 10], colorrange = [-1, 1],
     # ticks = [-1,0,1],
-    ticks = ([-1,0,1], [L"|↓\rangle",L"|0\rangle",L"|↑\rangle"]), colormap = cgrad(:greys, 3, categorical = true),tellwidth = false,width = Relative(1))
+    # ticks = ([-1,0,1], [L"|↓\rangle",L"|0\rangle",L"|↑\rangle"]), colormap = cgrad(:greys, 3, categorical = true),tellwidth = false,width = Relative(1))
     
-     colsize!(toprow, 10, Relative(0.01))
-     colgap!(toprow, 9, -70)
+    #  colsize!(toprow, 10, Relative(0.01))
+    #  colgap!(toprow, 9, -70)
 
     EnergyFig[1, 1:9] = ax = with_theme(theme_SimpleTicks()) do
         Axis(fig, xlabel=L"\mu", 
-            ylabel=L"E_0/N_{\text{sites}}"
+            ylabel=L"E_0/N_{\text{sites}}",
+            # xgridvisible = false,
+            # ygridvisible = false,
         )
     end
 
+    EnergyFig[1, 1:9] = inset_En = Axis(fig,width = Relative(0.3),height = Relative(0.3),halign=0.2, valign=0.9)
+    EnergyFig[1, 1:9] = inset_En2 = Axis(fig,width = Relative(0.3),height = Relative(0.3),halign=0.8, valign=0.2)
+
+    # translate!(inset_En.blockscene,0,0,1000)
+    # translate!(inset_En2.blockscene,0,0,1000)
+    zoom_lines!(ax,inset_En)
+    zoom_lines!(ax,inset_En2)
+
+    leftzoom = (-0.05,0.15)
+    rightzoom = (0.8,0.92)
 
     for (i, sector) in enumerate(sectors)
         sector_data = results_df[results_df.Sector .== sector, :]
@@ -210,16 +223,25 @@ function plot_overview(results_df,results_df_others)
         std_energies = std.(energies) ./ L^2 #./(1 .-mus)
 
         tline = errlines!(ax, mus, mean_energies, std_energies, label=L"%$i", markersize=0.0, color = colors[i], linewidth = 1.5)
+
+        zoominds = findall(x->x>leftzoom[1]&&x<leftzoom[2], mus)
+
+        tline = errlines!(inset_En, mus[zoominds], mean_energies[zoominds], std_energies[zoominds], label=L"%$i", markersize=0.0, color = colors[i], linewidth = 3)
+        zoominds = findall(x->x>rightzoom[1]&&x<rightzoom[2], mus)
+
+        tline = errlines!(inset_En2, mus[zoominds], mean_energies[zoominds], std_energies[zoominds], label=L"%$i", markersize=0.0, color = colors[i], linewidth = 2)
     end
 
     colors = colors[length(sectors)+1:end]
     
     
+    SideRowInds = Tuple.(CartesianIndices((2,2)))
     for (i, sector) in enumerate(sectors_others)
         S = getSectorConfig(sector)
         # S = SW.stencilConfig(conf[1:8, 1:8], 1)
-
-        SideRow[i, 1] = ax_conf = Axis(fig;
+        
+        jax,iax = SideRowInds[i]
+        SideRow[iax,jax] = ax_conf = Axis(fig;
             SW.getConfigAxis(S)...,
             yticklabelsvisible = false,
             xminorgridwidth=i==1 ? 0.7 : 0.0,
@@ -230,7 +252,7 @@ function plot_overview(results_df,results_df_others)
         )
         SW.plotSpinConfig!(ax_conf, S,plotConstraints = false)
         # heatmap!(ax_conf, S, colormap = :greys)
-        Label(SideRow[i, 1, Right()], labelMap(sector), padding = (0, 0, 0, 0), rotation = pi/2)
+        Label(SideRow[iax, jax, Top()], labelMap(sector), padding = (0, 0, 0, 0), rotation = 0)
         rowgap!(SideRow, 0)
     end
 
@@ -239,27 +261,80 @@ function plot_overview(results_df,results_df_others)
         L = size(sector_data.StructureFactor[1],1)
         
         mus = sector_data.mu
+        println(mus)
         energies = sector_data.Energy
         mean_energies = mean.(energies) ./ L^2 #./(1 .-mus)
         std_energies = std.(energies) ./ L^2 #./(1 .-mus)
         
         # println(i," ", sector, " ", mean_energies)
         # tline = errlines!(ax, mus, mean_energies, std_energies, label=L"%$i", markersize=10, color = (colors[i],0.9), linewidth = 1.5)
-        tline = scatter!(ax, mus, mean_energies, std_energies, label=L"%$i", markersize=20, color = (colors[i],0.9),marker =  '×')
+        tline = scatter!(ax, mus, mean_energies, std_energies, label=L"%$i", markersize=30, color = (colors[i],0.9),marker =  '×')
+        zoominds = findall(x->x>leftzoom[1]&&x<leftzoom[2], mus)
+        tline = scatter!(inset_En, mus[zoominds], mean_energies[zoominds], std_energies[zoominds], label=L"%$i", markersize=40, color = (colors[i],0.9),marker =  '×')
+        zoominds = findall(x->x>rightzoom[1]&&x<rightzoom[2], mus)
+
+        tline = scatter!(inset_En2, mus[zoominds], mean_energies[zoominds], std_energies[zoominds], label=L"%$i", markersize=40, color = (colors[i],0.9),marker =  '×')
     end
 
     # axislegend(ax, position = :rb, merge = true,nbanks=2)
+    elem_1 = [MarkerElement(color = :black, marker = '◼', markersize = 30,strokecolor = :black,strokewidth=2)]
+    elem_2 = [MarkerElement(color = :grey, marker = '◼', markersize = 30,strokecolor = :black,strokewidth=2)]
+    elem_3 = [MarkerElement(color = :white, marker = '◼', markersize = 30,strokecolor = :black,strokewidth=2)]
+
+    Legend(fig[2, 5:6, Bottom()],
+    [elem_1,elem_2,elem_3, ],
+    [L"|↓⟩",L"|0⟩",L"|↑⟩"],
+    patchsize = (35, 35), rowgap = 10,nbanks=3,backgroundcolor = (:black,0.05),colgap=1,padding = (2,2,-2,-2),patchlabelgap=-2)
 
     rowsize!(fig.layout, 1, Relative(0.25))
     colsize!(botrow, 1, Relative(0.4))
     colsize!(fig.layout, 5, Relative(0.2))
-    colgap!(fig.layout, 4, 10)
+    colgap!(fig.layout, 4, -10)
+    colgap!(SideRow, 1, 1)
+    rowgap!(fig.layout, 1, -3)
     Label(fig[1, 1,TopLeft()], L"(a)$$", fontsize = 22)
     # Label(fig[2, 1,TopLeft()], L"(b)$$", fontsize = 22)
-    Label(SideRow[1, 1,TopLeft()], L"(b)$$", fontsize = 22)
-    Label(EnergyFig[1, 1,TopLeft()], L"(c)$$", fontsize = 22)
+    Label(fig[2, 1,TopLeft()], L"(b)$$", fontsize = 22)
+    Label(fig[2, 5,TopLeft()], L"(c)$$", fontsize = 22)
     save("../../figs/PaperFigs/EnergyScaling_S1_L20.pdf", fig)
     fig
 end
 
 plot_overview(results_df,results_df_others)
+
+##
+L_large = 28
+results_df_large = collect_results(ENV["MYSCRATCH"]*"/Spiderweb/4x4Comp/EnergyScaling_S1_L$L_large")
+
+
+let 
+    # meanenergies = mean(results_df_large.Energy)
+
+    # fig = scatter(meanenergies)
+    fig = Figure(size =  1.0 .* (900, 550), fontsize = 22)
+    ax = with_theme(theme_SimpleTicks()) do
+        Axis(fig[1,1], xlabel=L"# Sector",xticks = SimpleTicks(1:length(results_df_large.Energy)), 
+            ylabel=L"E_0/N_{\text{sites}}",
+        )
+    end
+
+    sectors = unique(results_df.Sector)
+    sectors_others = unique(results_df_others.Sector)
+    
+    colors = Makie.ColorSchemes.distinguishable_colors(length(sectors)+length(sectors_others), lchoices = LinRange(0, 80, 100))[1:length(sectors)]
+
+    # colors = Makie.ColorSchemes.distinguishable_colors(length(unique(results_df_large.Sector)))
+    Snum = eachindex(results_df_large.Energy)
+
+    enmean = mean.(results_df_large.Energy) / L_large^2
+    enstd = std.(results_df_large.Energy) / L_large^2
+
+    scatter!(ax,Snum, enmean , label = "GFMC", markersize = 10, marker = '◼', color = colors)
+    errorbars!(ax, Snum, enmean, enstd,whiskerwidth = 10, color = colors)
+
+    for (i,en) in enumerate(results_df_large.Energy)
+        # scatter!(ax,i*ones(length(en)), en/L_large^2,color = colors[i], )
+    end
+    # errorbars!(eachindex(meanenergies),meanenergies,std(results_df_large.Energy))
+    fig 
+end

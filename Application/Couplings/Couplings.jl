@@ -407,14 +407,21 @@ function plotBondsAsGraph(AllBonds)
     curvedists = zeros(length(edges(g)))
 
     # sides
-    curvedists[1] = 0.1
-    curvedists[18] = -0.1
-    curvedists[9] = 0.1
-    curvedists[4] = -0.1
+    curvedists[1] = 0.2
+    curvedists[18] = -0.2
+    curvedists[9] = 0.2
+    curvedists[4] = -0.2
 
     # diags
     curvedists[8] = -0.2
     curvedists[5] = -0.085
+
+    # bluediags
+    curvedists[11] = -0.1
+    curvedists[13] = 0.1
+    curvedists[14] = 0.1
+    curvedists[16] = -0.1
+    
     # cross
     curvedists[17] = 0.2
     curvedists[10] = 0.08
@@ -423,7 +430,7 @@ function plotBondsAsGraph(AllBonds)
 
     edgeweights = [adj_matrix[e.src,e.dst] for e in edges(g)]
 
-    edge_width = [1.5abs(e)^1.2 for e in edgeweights]
+    edge_width = [3abs(e)^1.2 for e in edgeweights]
     edge_color = [edgecolor[e] for e in edgeweights]
     
     # edgecolors = [:black for i in 1:ne(g)]
@@ -438,7 +445,7 @@ function plotBondsAsGraph(AllBonds)
         ax,
         g;
         layout = Point.(nodes),
-        edgelabels = weights,
+        # edgelabels = weights,
         nodecolor = :black,
         node_marker,
         # nlabels=repr.(1:nv(g)),
@@ -463,7 +470,7 @@ function plotBondsAsGraph(AllBonds)
 
     # p.elabels_distance[] = Dict(8 => 30)
     # save("bonds_graph.pdf", fig)
-    save("couplings_All_plaq.svg", fig)
+    save("../../figs/PaperFigs/couplings_All_plaq.svg", fig)
     return fig
 end
 

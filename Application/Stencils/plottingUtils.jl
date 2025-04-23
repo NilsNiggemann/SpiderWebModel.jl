@@ -9,7 +9,7 @@ dropmean(A; dims=:) = dropdims(mean(A; dims=dims); dims=dims)
 dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
 
 spinecolors(color) = (;topspinecolor = color,bottomspinecolor = color,leftspinecolor = color,rightspinecolor = color)
-strd(x;kwargs...) = string(round(x,digits=2;kwargs...))
+strd(x;kwargs...) = string(round(x,sigdigits=2;kwargs...))
 
 _getkwargs(::Any) = (;xlabel = L"projection order $$")
 _getkwargs(m::SW.ContinuousTimeMethod) = (;xlabel = L"\tau")
@@ -426,7 +426,7 @@ function optimizeCoeffs(SqMat,weightfunc=x->one(first(x));verbose=false)
         for (i, qx) in enumerate(q), (j, qy) in enumerate(q)
             l += abs2(SqMat[i, j] - SqFieldTheory(qx, qy, v, w))*weightfunc(SA[qx,qy])
         end
-        return l
+        return l #+ 0.00hypot(v,w)
     end
 
     loss(v) = loss(v[1], v[2])
@@ -503,7 +503,7 @@ KPoints = Dict([
     "Γ" => SVector(0,0),
     "X" => SVector(pi,0),
     "M" => SVector(pi,pi),
-    "X'" => SVector(0,pi)
+    "X'" => SVector(0,pi),
     ])
 
 
