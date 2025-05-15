@@ -483,11 +483,12 @@ with_theme(theme_SimpleTicks()) do
         fittingCoefs = optimizeCoeffs(SqMat[end])
         SqFT(qx,qy) = SqFieldTheory(qx, qy, fittingCoefs...)
 
-        A_fit,r_fit = strd.(fittingCoefs)
-
+        A_fit,r_fit = strd.(fittingCoefs,sigdigits = 3)
+        rinv = strd(1/fittingCoefs[2],sigdigits = 3)
         # ax_FT = Axis(FSS_Plot[1,1],width=Relative(0.3),height =Relative(0.3),halign = 0.9,valign = 0.9;aspect=1,title = L"$A = %$(A_fit),\ r = %$(r_fit)$",xlabel = L"q_x",ylabel = L"q_y",PiTicksArgs...,xlabelpadding=-5.)
-        ax_FT = Axis(FT_Plot[1,1];aspect=1,title = L"$A = %$(A_fit),\ r = %$(r_fit)$",xlabel = L"q_x",ylabel = L"q_y",PiTicksArgs...,xlabelpadding=-5.)
-        
+        # ax_FT = Axis(FT_Plot[1,1];aspect=1,title = L"$A = %$(A_fit),\ r = %$(r_fit)$",xlabel = L"q_x",ylabel = L"q_y",PiTicksArgs...,xlabelpadding=-5.)
+        # ax_FT = Axis(FT_Plot[1,1];aspect=1,title = L"$A = %$(A_fit),\ r^{-1} = %$(rinv)$",xlabel = L"q_x",ylabel = L"q_y",PiTicksArgs...,xlabelpadding=-5.,spinewidth,spinecolors(framecolors[3])...)
+        ax_FT = Axis(FT_Plot[1,1];aspect=1,xlabel = L"q_x",ylabel = L"q_y",PiTicksArgs...,xlabelpadding=-5.,spinewidth,spinecolors(framecolors[3])...)
         hmFT = heatmap!(ax_FT, qx, qy, SqFT;colorrange)
 
         linepoints = getindex.(Ref(KPoints), kpath)
@@ -529,16 +530,27 @@ with_theme(theme_SimpleTicks()) do
             Sqerrcut = [SqErrFunc(x,y) for (x,y) in p1_points]
 
             fittingCoefs = optimizeCoeffs(SqMat)
+
+            begin
+                A,r = strd.(fittingCoefs,sigdigits = 3)
+                rinv = strd(1/fittingCoefs[2],sigdigits = 3)
+                text!(ax, Point(0.95,0.98), text = L"A = %$(A)", align = (:right,:top),space = :relative,color = framecolors[i],fontsize = 16)
+                text!(ax, Point(0.95,0.88), text = L"r^{-1} = %$(rinv)", align = (:right,:top),space = :relative,color = framecolors[i],fontsize = 16)
+                # text!(ax, Point(0.6,0.75), text = L"r = %$(r)", align = (:top,:right),space = :relative,color = framecolors[i],fontsize = 16)
+            end
+
+
             SqFT = [SqFieldTheory(q, fittingCoefs) for q in p1_points]
             lines!(ax, tRange_new, SqFT, color = :red, linestyle = :dash)
             scatter!(ax, tRange_new, Sqcut, marker = :circle, markersize = 5, color = :black)
             errorbars!(ax, tRange_new, Sqcut, Sqerrcut, whiskerwidth = 2, linewidth = 0.5, color = :black)
+            ylims!(ax,0,maximum(Sqcut) + 0.5)
         end
     end
 
 
     axPathsRandom = SqRandomCuts[1,1] = plotRandomCuts!(fig, resRandConfs)
-    Legend(fig[3,1:4,Top()],axPathsRandom,merge=true,nbanks=3,padding= (10,10,2,2),tellheight=false,margin = (0,0,30,20),labelsize=22)
+    Legend(fig[3,1:4,Top()],axPathsRandom,merge=true,nbanks=3,padding= (10,10,2,2),tellheight=false,margin = (0,0,55,20),labelsize=22)
 
     with_theme(theme_PiTicks()) do 
         FT_Plot[1,2] = ax_BCorr = Axis(fig,
@@ -594,10 +606,12 @@ with_theme(theme_SimpleTicks()) do
         
         qx = qy = trueMomenta(0, 2pi, L)
         for mu in mus
-            SqsGFMC = SW.expand_Sq.(getSq(res, tau=11, mu=mu, L=L))
+            taufilter = mu ==0 ? 1 : 11
+            SqsGFMC = SW.expand_Sq.(getSq(res, tau=taufilter, mu=mu, L=L))
             SqMat = mean(SqsGFMC)
             SqErr = std(SqsGFMC)
             fittingCoefs = optimizeCoeffs(SqMat)
+
             SqFT = [SqFieldTheory(x, y, fittingCoefs...) for x in qx, y in qy]
             
             norm_diffs_individual = [SW.norm(Sq .- SqFT) ./L^2 for Sq in SqsGFMC]
@@ -618,7 +632,7 @@ with_theme(theme_SimpleTicks()) do
             push!(max_Sqs_err, max_Sq_err)
         end
 
-        if L == 36 || true
+        begin
             errorbars!(ax_scal2, mus, norm_diffs,norm_diff_errs, label=L"L=%$L",whiskerwidth = 10,color = cols[L])
             scatterlines!(ax_scal2, mus, norm_diffs, label=L"L=%$L"; linestyle=:dash,color = cols[L], linewidth = 0.5,scatterkwargs[L]...)
             # scatter!(ax_scal2, mus, norm_diffs, label=L"L=%$L";color = cols[L], scatterkwargs[L]...)
@@ -631,12 +645,19 @@ with_theme(theme_SimpleTicks()) do
     # ylims!(ax_scal,nothing,1.6ylim_max)
     axislegend(ax_scal,position = :rt,merge=true)
 
-    rowsize!(fig.layout,1,Relative(0.25))
-    rowsize!(fig.layout,2,Relative(0.25))
-    rowsize!(fig.layout,3,Relative(0.5))
+    rowsize!(fig.layout,1,Relative(0.325))
+    rowsize!(fig.layout,2,Relative(0.325))
+    rowsize!(fig.layout,3,Relative(0.38))
     rowsize!(Sq_Heatmaps,1,Relative(0.9))
     colsize!(fig.layout,1,Relative(0.05))
+
+    colgap!(Sq_Heatmaps,1,Relative(0.0))
+    colgap!(Sq_Heatmaps,2,Relative(0.0))
+    colgap!(SqCuts,1,Relative(0.01))
+    colgap!(SqCuts,2,Relative(0.01))
     rowgap!(Sq_Heatmaps,1,2)
+
+    rowgap!(fig.layout,2,40)
     colgap!(BotRow,4,Relative(-0.))
     # colgap!(Sq_Heatmaps,2,-40)
     # colgap!(Sq_Heatmaps,3,-40)
@@ -646,7 +667,7 @@ with_theme(theme_SimpleTicks()) do
     Label(fig[1,5,TopLeft()],L"(b)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (140,0,0,0))
     Label(fig[2,5,TopLeft()],L"(c)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (140,0,0,0))
     Label(fig[3,1,TopLeft()],L"(d)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (-30,0,0,0))
-    Label(fig[3,5,TopLeft()],L"(e)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,-140,0,0))
+    Label(fig[3,5,TopLeft()],L"(e)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,-80,0,0))
     Label(fig[3,6,TopLeft()],L"(f)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,-170,0,0))
     save("../../figs/SqFieldTheoryComparison.pdf",fig)
     fig

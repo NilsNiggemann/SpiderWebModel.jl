@@ -5,7 +5,6 @@ using DataFrames
 using MakieExtra
 include("../plottingUtils.jl")
 include("../FSSUtils.jl")
-
 ##
 
 function file_format(filename)
@@ -197,7 +196,7 @@ res.Sqmax = Sqmax
 with_theme(theme_PiTicks()) do
     L = 36
     # muPlot = [0.8,0.9,0.9,1.0]
-    muPlot = [0.8,0.85,0.9,1.0]
+    muPlot = [0.8,0.81,0.9,1.0]
     
     fig = Figure(fontsize = 22,size = 300 .*(2,2.5))
 
@@ -205,7 +204,7 @@ with_theme(theme_PiTicks()) do
     fig.layout[1,1:2] = fig_xi
     
     # axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\xi/L",xticks = SimpleTicks(),yticks = SimpleTicks())
-    axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\mathcal{S}(\mathbf{q})",xticks = SimpleTicks(),yticks = SimpleTicks())
+    axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\mathcal{S}(\frac{\pi}{2},\frac{\pi}{2})",xticks = SimpleTicks(),yticks = SimpleTicks())
 
     for L in filter!(<(40), unique(res.L))
         resFilt = filter(x->x.L==L,res)
@@ -280,15 +279,15 @@ with_theme(theme_SimpleTicks()) do
     μ = mu
     fig = Figure(size = 120 .* (4,4),fontsize = 22)
 
-    xticks = yticks = PiTicks([0,pi])
-    axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
+    xticks = yticks = PiTicks()
+    ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
 
-    ax = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,ylabelvisible = false,yticklabelsvisible = false)
+    axFT = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,ylabelvisible = false,yticklabelsvisible = false)
 
     # ax2 = Axis(fig[2,1:2],xlabel = L"|\mathbf{q}|^2",ylabel = L"\mathcal{S}(\mathbf{q})",title = L"μ= %$μ")
     Sq = SW.getSqCont(SqMat)
     Sqerr = SW.getSqCont(SqErr)
-    qx = qy = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
+    qx = qy = trueMomenta(-pi,2pi,size(SqMat,1)-1)
     Sq_q = collect(Iterators.product(qx,qy))
     Sq_q = Sq.(Iterators.product(qx,qy))
     heatmap!(ax,qx,qy,Sq_q)
@@ -306,14 +305,14 @@ with_theme(theme_SimpleTicks()) do
     colorGFMC = :red
 
     # kpath = ["Γ","X","X'","Γ"]
-    kpath = ["Γ","D","X","X'","Γ"]
+    kpath = ["D","X","X'","Γ","D"]
 
     KPointsNew = Dict([
         "Γ" => SVector(0,0),
         "X" => SVector(pi,0),
         "M" => SVector(pi,pi),
         "X'" => SVector(0,pi),
-        "D" => SVector(pi/2,-0.5pi),
+        "D" => SVector(0,-pi),
         ])
 
     pointlabels,p1 = fetchKPath([KPointsNew[k] for k in kpath],100)
@@ -332,7 +331,6 @@ with_theme(theme_SimpleTicks()) do
     Sqcut = [Sq(x,y) for (x,y) in p1_points]
     Sqerrcut = [Sqerr(x,y) for (x,y) in p1_points]
     SqFT = [AsymFieldTheory(q,fittingCoefs) for q in p1_points]
-
     # SqFT = [AsymFieldTheory(q,1,10) for q in qpoints]
     scatter!(ax,p1_points,marker = '∘' ,color = colorGFMC,markersize = 15)
     scatterlines!(axFT,p1_points,color = colorFT,linestyle = :dash,marker = '●',markersize = 2)
@@ -340,8 +338,11 @@ with_theme(theme_SimpleTicks()) do
     scatterlines!(axPath,tRange,SqFT,color = colorFT,linestyle = :dash,marker = '●',markersize = 8)
     for point in kpath
         P = KPointsNew[point]
-        text!(axFT,Point(P),text=point,color = :white,align = (:center,:center))
+        text!(ax,Point(P),text=point,color = :white,align = (:center,:center))
     end
+    A_fit, r_fit, p_fit = strd.(fittingCoefs )
+
+    text!(axPath,Point(0.7,0.85),text = L"A = %$(A_fit),\ r = %$(r_fit)\ p = %$(p_fit)",align = (:bottom,:right),space = :relative,color = :black,fontsize = 16)
 
     scatter!(axPath,tRange,Sqcut,
     marker = '∘',markersize = 18,color = colorGFMC)
@@ -349,10 +350,10 @@ with_theme(theme_SimpleTicks()) do
 
     rowsize!(fig.layout,1,Relative(0.5))
     # text!(axFT,Point(pi,1.4pi),text=L"r = %$(strd(fittingCoefs[2]))",color = :white,align = (:center,:center))
-    # Label(fig[1,1, TopLeft()],L"a)$$",padding = (-30,0,-10,0))
-    # Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-10,0))
-    # Label(fig[2,1, TopLeft()],L"c)$$",padding = (-30,0,-10,0))
+    Label(fig[1,1, TopLeft()],L"a)$$",padding = (-60,0,-20,0))
+    Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-20,0))
+    Label(fig[2,1, TopLeft()],L"c)$$",padding = (-60,0,-10,0))
     # Label(fig[3,1, TopLeft()],L"d)$$",padding = (-30,0,-10,0))
-
+    save("../../figs/PaperFigs/StairCaseSpin1_Sq_FT.pdf", fig)
     fig
 end
