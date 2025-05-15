@@ -15,6 +15,18 @@ end
 photonDispersion(k) = photonDispersion(k[1],k[2])
 
 ##
+function pretty_scientific(x;kwargs...)
+    if x == 0
+        return L"0"
+    end
+    spl = split(string(x), "e")
+    if length(spl) == 1
+        return strd(x;kwargs...)
+    end
+    expo = floor(Int,log10(abs(x)))
+    base = strd(x/(10. ^expo);kwargs...)
+    return "$base×10^{$(expo)}"
+end
 function file_format(filename)
     allkeys_1 = ["energies","mu","tau","SqsGFMC","p_Sq"]
     allkeys_2 = ["Energy","mu","τ","StructureFactor"]
@@ -355,8 +367,12 @@ with_theme(theme_PiTicks()) do
     qyPhot = trueMomenta(-0.5pi,1.5pi,250)
     # hm_B = surface!(ax_BCorr,qxPhot,qyPhot,photonDispersion,colormap = Makie.cgrad(:thermal,rev=false))
     hm_B = surface!(ax_BCorr,qxPhot,qyPhot,photonDispersion,colormap = Makie.cgrad(:inferno,rev=false))
+    
+    qx1,qy1 = qxPhot[1:15:end], qyPhot[1:15:end]
+    # wireframe!(ax_BCorr,qx1,qy1,photonDispersion.(Iterators.product(qx1,qy1)),color = :black,linewidth = 0.5,overdraw = false)
+    
     save("../../figs/PaperFigs/photonDispersion.png",fig)
-    # fig
+    fig
     # text!(ax_BCorr,Point(pi/2,pi/2),text="TODO!",color = :black,align = (:center,:center),fontsize = 40)
 end
 ##
@@ -381,7 +397,7 @@ function plotRandomCuts!(fig,resRandConfs)
     colors = Makie.Colors.distinguishable_colors(length(combs),parse.(Makie.Colors.RGB,[:black,:red,:blue,:orange]))
     
 
-    labelpoints = [Point(0.6,0),Point(0.78,0.55),Point(0.8,0.74)]
+    labelpoints = [Point(0.6,0),Point(0.77,0.55),Point(0.8,0.74)]
     for (i,(Randsector,mu)) in enumerate(combs)
     # for (Randsector,mu) in Iterators.product(1:5,(0.7,0.8,0.9,0.95))
         SqsGFMC = SW.expand_Sq.(getSq(resRandConfs[Randsector],tau=20,mu=mu,L=36)) 
@@ -397,7 +413,7 @@ function plotRandomCuts!(fig,resRandConfs)
 
         fittingCoefs = optimizeCoeffs(SqMat)
         
-        A_fit,r_fit = strd.(fittingCoefs)
+        A_fit,r_fit = pretty_scientific.(fittingCoefs,sigdigits=3)
 
         text!(axPath_Random,labelpoints[i],text = L"A = %$(A_fit),\ r = %$(r_fit)",align = (:bottom,:right),space = :relative,color = colors[i],fontsize = 16)
 
@@ -483,8 +499,9 @@ with_theme(theme_SimpleTicks()) do
         fittingCoefs = optimizeCoeffs(SqMat[end])
         SqFT(qx,qy) = SqFieldTheory(qx, qy, fittingCoefs...)
 
-        A_fit,r_fit = strd.(fittingCoefs,sigdigits = 3)
-        rinv = strd(1/fittingCoefs[2],sigdigits = 3)
+        # A_fit,r_fit = pretty_scientific.(fittingCoefs,sigdigits = 3)
+        # rinv = strd(1/fittingCoefs[2],sigdigits = 3)
+        # rinv = pretty_scientific(1/fittingCoefs[2])
         # ax_FT = Axis(FSS_Plot[1,1],width=Relative(0.3),height =Relative(0.3),halign = 0.9,valign = 0.9;aspect=1,title = L"$A = %$(A_fit),\ r = %$(r_fit)$",xlabel = L"q_x",ylabel = L"q_y",PiTicksArgs...,xlabelpadding=-5.)
         # ax_FT = Axis(FT_Plot[1,1];aspect=1,title = L"$A = %$(A_fit),\ r = %$(r_fit)$",xlabel = L"q_x",ylabel = L"q_y",PiTicksArgs...,xlabelpadding=-5.)
         # ax_FT = Axis(FT_Plot[1,1];aspect=1,title = L"$A = %$(A_fit),\ r^{-1} = %$(rinv)$",xlabel = L"q_x",ylabel = L"q_y",PiTicksArgs...,xlabelpadding=-5.,spinewidth,spinecolors(framecolors[3])...)
@@ -532,11 +549,12 @@ with_theme(theme_SimpleTicks()) do
             fittingCoefs = optimizeCoeffs(SqMat)
 
             begin
-                A,r = strd.(fittingCoefs,sigdigits = 3)
-                rinv = strd(1/fittingCoefs[2],sigdigits = 3)
+                A,r = pretty_scientific.(fittingCoefs,sigdigits = 3)
+                # rinv = strd(1/fittingCoefs[2],sigdigits = 3)
+                # rinv = pretty_scientific(1/fittingCoefs[2])
                 text!(ax, Point(0.95,0.98), text = L"A = %$(A)", align = (:right,:top),space = :relative,color = framecolors[i],fontsize = 16)
-                text!(ax, Point(0.95,0.88), text = L"r^{-1} = %$(rinv)", align = (:right,:top),space = :relative,color = framecolors[i],fontsize = 16)
-                # text!(ax, Point(0.6,0.75), text = L"r = %$(r)", align = (:top,:right),space = :relative,color = framecolors[i],fontsize = 16)
+                # text!(ax, Point(0.95,0.88), text = L"r^{-1} = %$(rinv)", align = (:right,:top),space = :relative,color = framecolors[i],fontsize = 16)
+                text!(ax, Point(0.95,0.88), text = L"r = %$(r)", align = (:right,:top),space = :relative,color = framecolors[i],fontsize = 16)
             end
 
 
