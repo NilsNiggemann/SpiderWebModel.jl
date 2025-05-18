@@ -113,6 +113,9 @@ filter!(x->!(x.mu ∈ res2.mu && x.L ∈ res2.L),res)
 res = vcat(res,res2)
 filter!(x->x.mu >=0.0,res)
 sort!(res, [:mu, :L])
+
+conf_6x6 = SW.periodicState6x6Condensate(30)
+conf_6x6MF = copy(conf_6x6) .= h5read(ENV["MYSCRATCH"]*"Spiderweb/MaxFlip/6x6Condensate/L=30/Spin1GFMC_L=30_1.h5","maxConf")
 # res = getRes(ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/S0*_longprop/")
 ##
 
@@ -403,7 +406,7 @@ function plotRandomCuts!(fig,resRandConfs)
     colors = Makie.Colors.distinguishable_colors(length(combs),parse.(Makie.Colors.RGB,[:black,:red,:blue,:orange]))
     
 
-    labelpoints = [Point(0.65,0.25),Point(0.77,0.55),Point(0.8,0.74)]
+    labelpoints = [Point(0.5,0.15),Point(0.77,0.55),Point(0.85,0.8)]
     for (i,(Randsector,mu)) in enumerate(combs)
     # for (Randsector,mu) in Iterators.product(1:5,(0.7,0.8,0.9,0.95))
         SqsGFMC = SW.expand_Sq.(getSq(resRandConfs[Randsector],tau=20,mu=mu,L=36)) 
@@ -421,7 +424,9 @@ function plotRandomCuts!(fig,resRandConfs)
         
         A_fit,r_fit = pretty_scientific.(fittingCoefs,sigdigits=3)
 
-        text!(axPath_Random,labelpoints[i],text = L"A = %$(A_fit),\ r = %$(r_fit)",align = (:bottom,:right),space = :relative,color = colors[i],fontsize = 16)
+        # text!(axPath_Random,labelpoints[i],text = L"A = %$(A_fit),\ r = %$(r_fit)",align = (:bottom,:right),space = :relative,color = colors[i],fontsize = 16)
+        text!(axPath_Random,labelpoints[i],text = L"A = %$(A_fit)",align = (:bottom,:right),space = :relative,color = colors[i],fontsize = 16)
+        text!(axPath_Random,labelpoints[i].-(0,0.1),text = L"r = %$(r_fit)",align = (:bottom,:right),space = :relative,color = colors[i],fontsize = 16)
 
         SqFT = [SqFieldTheory(q, fittingCoefs) for q in p1_points] .+ offset
         # return display(heatmap(qx,qy,(x,y) -> SqFieldTheory(SA[x,y],fittingCoefs)))
@@ -443,33 +448,39 @@ end
 using CairoMakie.FileIO
 with_theme(theme_SimpleTicks()) do 
 
-    fig = Figure(fontsize = 22,size = 400 .*(2,3))
+    fig = Figure(fontsize = 22,size = 550 .*(3,1))
     
-    fig[1:2,1:3] = SqPanels  = GridLayout()
-    fig[1:2,4] = FTPanels = GridLayout()
-    fig[3,1:4] = ThirdRow = GridLayout()
-    fig[4,1:4] = FourthRow = GridLayout()
+    fig[1:2,1] = ConfPanels  = GridLayout()
+    fig[1:2,2:4] = SqPanels  = GridLayout()
+    fig[1:2,5] = FTPanels = GridLayout()
+    fig[1,6:8] = ThirdCol = GridLayout()
+    fig[2,6:8] = FourthCol = GridLayout()
     
-    boxSq = Box(fig[1:2, 1:3], linestyle = :solid,alignmode = Mixed(left = -70, right = -12, top = -8, bottom = -35),color = (:grey,0.1),strokecolor = :black,cornerradius = 10)
-    boxFT = Box(fig[1:2, 4], linestyle = :solid,alignmode = Mixed(left = -40, right = -12, top = -8, bottom = -35),color = (:grey,0.1),strokecolor = :black,cornerradius = 10)
+    # boxSq = Box(fig[1:2, 1:3], linestyle = :solid,alignmode = Mixed(left = -70, right = -12, top = -8, bottom = -35),color = (:grey,0.1),strokecolor = :black,cornerradius = 10)
+    # boxFT = Box(fig[1:2, 4], linestyle = :solid,alignmode = Mixed(left = -40, right = -12, top = -8, bottom = -35),color = (:grey,0.1),strokecolor = :black,cornerradius = 10)
 
-    boxScal = Box(fig[3, 1:4], linestyle = :solid,alignmode = Mixed(left = -70, right = -12, top = -12, bottom = -60),color = (:grey,0.1),strokecolor = :black,cornerradius = 10)
-    boxRand = Box(fig[4, 1:4], linestyle = :solid,alignmode = Mixed(left = -70, right = -12, top = -35, bottom = -60),color = (:grey,0.1),strokecolor = :black,cornerradius = 10)
+    # boxScal = Box(fig[3, 1:4], linestyle = :solid,alignmode = Mixed(left = -70, right = -12, top = -12, bottom = -60),color = (:grey,0.1),strokecolor = :black,cornerradius = 10)
+    # boxRand = Box(fig[4, 1:4], linestyle = :solid,alignmode = Mixed(left = -70, right = -12, top = -35, bottom = -60),color = (:grey,0.1),strokecolor = :black,cornerradius = 10)
 
-    Makie.translate!(boxSq.blockscene, 0, 0, -100)
-    Makie.translate!(boxFT.blockscene, 0, 0, -100)
-    Makie.translate!(boxScal.blockscene, 0, 0, -100)
-    Makie.translate!(boxRand.blockscene, 0, 0, -100)
+    # Makie.translate!(boxSq.blockscene, 0, 0, -100)
+    # Makie.translate!(boxFT.blockscene, 0, 0, -100)
+    # Makie.translate!(boxScal.blockscene, 0, 0, -100)
+    # Makie.translate!(boxRand.blockscene, 0, 0, -100)
     # Makie.translate!(box2.blockscene, 0, 0, -100)
 
     SqPanels[1,1:3] = Sq_Heatmaps = GridLayout()
     FTPanels[1,1] = FT_DispFig = GridLayout()
     SqPanels[2,1:3] = SqCuts = GridLayout()
     FTPanels[2,1] = FT_SqFig = GridLayout()
-    ThirdRow[1,1] = FSS_Plot = GridLayout()
-    FourthRow[1,1] = SqRandomCuts = GridLayout()
+    ThirdCol[1,1] = FSS_Plot = GridLayout()
+    FourthCol[1,1] = SqRandomCuts = GridLayout()
 
 
+    ax_conf1 = Axis(ConfPanels[1,1];SW.getConfigAxis(conf_6x6)...,xticks = [10,20,30],yticks = [10,20,30],xminorgridwidth = 0.1, xticklabelsvisible=false,yminorgridwidth = 0.1)
+    ax_conf2 = Axis(ConfPanels[2,1];SW.getConfigAxis(conf_6x6MF)...,xticks = [10,20,30],yticks = [10,20,30],xminorgridwidth = 0.1, yminorgridwidth = 0.1)
+    linkxaxes!(ax_conf1,ax_conf2)
+    SW.plotSpinConfig!(ax_conf1,conf_6x6,constraintkwargs = (;markersize = 7))
+    SW.plotSpinConfig!(ax_conf2,conf_6x6MF,constraintkwargs = (;markersize = 7))
     PiTicksArgs = (;xticks = PiTicks([0,pi]), yticks = PiTicks([0,pi]))
 
     L_Plot = 36
@@ -587,7 +598,7 @@ with_theme(theme_SimpleTicks()) do
     end
 
     axPathsRandom = SqRandomCuts[1,1] = plotRandomCuts!(fig, resRandConfs)
-    Legend(fig[4,:,Top()],axPathsRandom,merge=true,nbanks=3,padding= (10,10,2,2),tellheight=false,margin = (0,0,60,30),labelsize=22)
+    Legend(SqRandomCuts[1,:,Top()],axPathsRandom,merge=true,nbanks=3,padding= (10,10,2,2),tellheight=false,margin = (0,0,60,30),labelsize=22)
 
     with_theme(theme_PiTicks()) do 
         FT_DispFig[1,1] = ax_disp = Axis(fig,
@@ -680,37 +691,42 @@ with_theme(theme_SimpleTicks()) do
     # ylims!(ax_scal,nothing,1.6ylim_max)
     axislegend(ax_scal,position = :rt,merge=true)
     
-    
-    rowsize!(fig.layout,1,Relative(0.22))
-    rowsize!(fig.layout,2,Relative(0.37))
-    rowsize!(fig.layout,3,Relative(0.22))
-    rowsize!(fig.layout,4,Relative(0.2))
-    rowsize!(SqCuts,1,Relative(0.8))
-    rowgap!(Sq_Heatmaps,1,5)
-    rowgap!(SqPanels,1,-10)
-
-    colsize!(fig.layout,4,Relative(0.4))
-
     rowsize!(SqPanels,1,Relative(0.6))
-    rowsize!(SqPanels,2,Relative(0.5))
-    rowsize!(FTPanels,1,Relative(0.6))
-    rowsize!(FTPanels,2,Relative(0.34))
-    colgap!(Sq_Heatmaps,1,5)
-    colgap!(Sq_Heatmaps,2,5)
-    colgap!(SqCuts,1,5)
-    colgap!(SqCuts,2,5)
+    rowsize!(SqPanels,2,Relative(0.4))
+    rowsize!(fig.layout,1,Relative(0.6))
+    rowsize!(fig.layout,2,Relative(0.4))
+    colsize!(fig.layout,1,Relative(0.2))
+    # rowsize!(fig.layout,1,Relative(0.22))
+    # rowsize!(fig.layout,2,Relative(0.37))
+    # rowsize!(fig.layout,3,Relative(0.22))
+    # rowsize!(fig.layout,4,Relative(0.2))
+    # rowsize!(SqCuts,1,Relative(0.8))
+    # rowgap!(Sq_Heatmaps,1,5)
+    # rowgap!(SqPanels,1,-10)
+
+    # colsize!(fig.layout,4,Relative(0.4))
+
+    # rowsize!(SqPanels,1,Relative(0.6))
+    # rowsize!(SqPanels,2,Relative(0.5))
+    # rowsize!(FTPanels,1,Relative(0.6))
+    # rowsize!(FTPanels,2,Relative(0.34))
+    # colgap!(Sq_Heatmaps,1,5)
+    # colgap!(Sq_Heatmaps,2,5)
+    # colgap!(SqCuts,1,5)
+    # colgap!(SqCuts,2,5)
+    # rowgap!(fig.layout,1,-300)
+    # rowgap!(fig.layout,2,10)
+    # rowgap!(fig.layout,3,50)
 
     ax_scal.alignmode = Mixed(right = 87)
+
     ax_scal2.alignmode = Mixed(right = 0)
-    rowgap!(fig.layout,1,-300)
-    rowgap!(fig.layout,2,10)
-    rowgap!(fig.layout,3,50)
-    Label(fig[1,1,TopLeft()],L"(a)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,30,-20,0))
-    Label(SqCuts[1,1,TopLeft()],L"(b)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,30,0,0))
-    Label(fig[1,4,TopLeft()],L"(c)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,0,-20,0))
-    Label(FT_SqFig[1,1,TopLeft()],L"(d)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,0,0,0))
-    Label(fig[3,1,TopLeft()],L"(e)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,30,-10,0))
-    Label(fig[4,1,TopLeft()],L"(f)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,30,30,0))
+    # Label(fig[1,1,TopLeft()],L"(a)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,30,-20,0))
+    # Label(SqCuts[1,1,TopLeft()],L"(b)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,30,0,0))
+    # Label(fig[1,4,TopLeft()],L"(c)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,0,-20,0))
+    # Label(FT_SqFig[1,1,TopLeft()],L"(d)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,0,0,0))
+    # Label(fig[3,1,TopLeft()],L"(e)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,30,-10,0))
+    # Label(fig[4,1,TopLeft()],L"(f)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,30,30,0))
     save("../../figs/SqFieldTheoryComparison.pdf",fig)
     fig
     
