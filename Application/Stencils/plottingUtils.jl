@@ -16,6 +16,18 @@ _getkwargs(m::SW.ContinuousTimeMethod) = (;xlabel = L"\tau")
 _getscaling(m::SW.DiscreteTimeMethod) = m.nBranch
 _getscaling(i::Integer) = i
 _getscaling(m::SW.ContinuousTimeMethod) = m.τ
+
+function err_heatmap!(ax::Makie.Axis,x,y,z,zerr;markersize = 30,kwargs...)
+    points = [Point(x,y) for x in x for y in y]
+    relerr_alpha = reshape(zerr ./ maximum(abs,z),length(points))
+    hm = heatmap!(ax,x,y,z;kwargs...)
+
+    scatter!(ax,points;color = tuple.(:red,relerr_alpha), markersize,marker = :rect)
+    # scatter!(ax,points;color = [(:white,e) for e in relerr_alpha], markersize)
+    return hm
+end
+err_heatmap!(ax::Makie.Axis,x,y,z::Function,zerr;kwargs...) = err_heatmap!(ax,x,y,[z(x,y) for x in x,y in y],zerr;kwargs...)
+err_heatmap!(x,y,z,zerr;kwargs...) = err_heatmap!(current_axis(),x,y,z,zerr;kwargs...)
 function trueMomenta(kmin,kmax,L)
     nmin = floor(Int,L*kmin/(2pi))
     nmax = ceil(Int,L*kmax/(2pi))

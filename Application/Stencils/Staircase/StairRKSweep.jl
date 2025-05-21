@@ -69,9 +69,9 @@ function getRes_2(folder)
         fileformats = file_format.(filesunsrt)
         invalid_files = findall(iszero,fileformats)
         if !isempty(invalid_files)
-            rm.(filesunsrt[invalid_files])
-            println("invalid files:")
-            println(filesunsrt[invalid_files])
+            # rm.(filesunsrt[invalid_files])
+            # println("invalid files:")
+            # println(filesunsrt[invalid_files])
         end
         filesunsrt = [f for (f,i) in zip(filesunsrt,fileformats) if i == 2]
         mus = [h5read(file,"mu") for file in filesunsrt]
@@ -89,17 +89,18 @@ function getRes_2(folder)
     sort!(res,[:mu,:L])
 end
 ##
-res = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase/")
-res2 = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase_2/")
-res3 = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase_3/")
-res2fine = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase_fine_2/")
+res = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase_merge/")
+# res2 = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase_2/")
+# res3 = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase_3/")
+# res2fine = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase_fine_2/")
 # res2fine_2 = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase_fine/")
-filter!(x->!(x.mu in res2.mu && x.L in res2.L),res)
-filter!(x->!(x.mu in res3.mu && x.L in res3.L),res)
-res = vcat(res,res2,res2fine,res3)
+# filter!(x->!(x.mu in res2.mu && x.L in res2.L),res)
+# filter!(x->!(x.mu in res3.mu && x.L in res3.L),res)
+# res = vcat(res,res2,res2fine,res3)
 # filter!(x->!(x.mu ==0.8 && x.L==36 && x.NWalkers <20000),res)
-filter!(x->x.mu>=0.6,res)
+# filter!(x->x.mu>=0.6,res)
 sort!(res,[:mu,:L])
+
 ##
 with_theme(theme_SimpleTicks()) do
     L = 36
@@ -159,7 +160,7 @@ end
 ##
 with_theme(theme_SimpleTicks()) do
     L = 36
-    resL = get_res(res,mu=0.83,L=L)
+    resL = get_res(res,mu=0.81,L=L)
 
     SqsGFMC = resL.Sq
 
@@ -266,6 +267,20 @@ with_theme(theme_PiTicks()) do
     fig
 end
 ##
+
+function errorBarLegend(size = 0.5;linekwargs = (;),markerkwargs = (;),kwargs...)
+    center = 0.5
+    ymin = center - size/2
+    ymax = center + size/2
+
+    errorbar = [Point2f(center, ymin), Point2f(center, ymax)]
+    [
+        LineElement(linepoints = errorbar;kwargs...,linekwargs...),
+        MarkerElement(points = errorbar, marker = :hline, markersize = 10;kwargs...,linekwargs...),
+        MarkerElement(points = [Point2f(center, center),], marker = '●', markersize = 7;kwargs...,markerkwargs...)
+    ]
+end
+
 with_theme(theme_SimpleTicks()) do 
     mu = 0.9
     L = 36
@@ -277,7 +292,7 @@ with_theme(theme_SimpleTicks()) do
     # SqErr = dropstd(SqsGFMC,dims=4)[:,:,end,:]
     fittingCoefs = optimizeCoeffsAsym(SqMat)
     μ = mu
-    fig = Figure(size = 120 .* (4,4),fontsize = 22)
+    fig = Figure(size = 140 .* (4,4),fontsize = 22)
 
     xticks = yticks = PiTicks()
     ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
@@ -301,8 +316,8 @@ with_theme(theme_SimpleTicks()) do
     colors = (:red,:blue,:magenta)
     
 
-    colorFT = :black
-    colorGFMC = :red
+    colorFT = :red
+    colorGFMC = :black
 
     # kpath = ["Γ","X","X'","Γ"]
     kpath = ["D","X","X'","Γ","D"]
@@ -321,7 +336,7 @@ with_theme(theme_SimpleTicks()) do
     xygrid = [(x,y) for x in qx, y in qy]
 
     
-    axPath = Axis(fig[2,1:2],ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
+    axPath = Axis(fig[2,1:2],ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),yticks = [0,0.5,1,1.5],
     )
     tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
     
@@ -332,26 +347,42 @@ with_theme(theme_SimpleTicks()) do
     Sqerrcut = [Sqerr(x,y) for (x,y) in p1_points]
     SqFT = [AsymFieldTheory(q,fittingCoefs) for q in p1_points]
     # SqFT = [AsymFieldTheory(q,1,10) for q in qpoints]
-    scatter!(ax,p1_points,marker = '∘' ,color = colorGFMC,markersize = 15)
-    scatterlines!(axFT,p1_points,color = colorFT,linestyle = :dash,marker = '●',markersize = 2)
+    lines!(axFT,p1_points,color = colorFT,linestyle = :dash,linewidth = 3)
+    # scatterlines!(axFT,p1_points,color = colorFT,linestyle = :dash,marker = '●',markersize = 2)
     # tRange = SW.norm.(p1).^2
-    scatterlines!(axPath,tRange,SqFT,color = colorFT,linestyle = :dash,marker = '●',markersize = 8)
+    lines!(axPath,tRange,SqFT,color = colorFT,linestyle = :dash,label = L"field theory$$",linewidth = 2)
     for point in kpath
         P = KPointsNew[point]
-        text!(ax,Point(P),text=point,color = :white,align = (:center,:center))
+
+        align = (:center,:center)
+        if point == "D"
+            align = (:center,:bottom)
+        end
+        text!(axFT,Point(P);text=Makie.latexstring(point),align,strokecolor=(:black,0.3),strokewidth=4)
+        text!(axFT,Point(P);text=Makie.latexstring(point),align,color = :white,)
     end
     A_fit, r_fit, p_fit = strd.(fittingCoefs )
 
-    text!(axPath,Point(0.7,0.85),text = L"A = %$(A_fit),\ r = %$(r_fit)\ p = %$(p_fit)",align = (:bottom,:right),space = :relative,color = :black,fontsize = 16)
-
+    # text!(axPath,Point(0.7,0.85),text = L"A = %$(A_fit),\ r = %$(r_fit)\ p = %$(p_fit)",align = (:bottom,:right),space = :relative,color = :black,fontsize = 16)
+    markersizeGFMC = 23
     scatter!(axPath,tRange,Sqcut,
-    marker = '∘',markersize = 18,color = colorGFMC)
-    errorbars!(axPath,tRange,Sqcut,Sqerrcut,color = colorGFMC,whiskerwidth = 6,linewidth=0.5)
-
+    marker = '∘',markersize = markersizeGFMC,color = colorGFMC,label = L"GFMC$$")
+    errorbars!(axPath,tRange,Sqcut,Sqerrcut,color = colorGFMC,whiskerwidth = 6,linewidth=0.5,label = L"GFMC$$")
+    
+    Legend(fig[2, 2], [
+        [
+        errorBarLegend(0.6,;color = colorGFMC,markerkwargs = (;marker='∘',markersize = markersizeGFMC)),
+    ],  
+    [LineElement(linepoints = [Point2f(0., 0.5), Point2f(1, 0.5)],color = colorFT,linestyle = :dash,linewidth = 2)
+    ]], [L"GFMC$$",L"$A = %$(A_fit),\ r = %$(r_fit)\ p = %$(p_fit)$"], tellheight = false, tellwidth = false,halign = :right, valign = :top,margin = (0,0,0,0),labelsize = 20,
+    )
+    ylims!(axPath,0,1.75)
+    # axislegend(axPath,position = :lt,merge = true)
     rowsize!(fig.layout,1,Relative(0.5))
+    rowgap!(fig.layout,1,-10)
     # text!(axFT,Point(pi,1.4pi),text=L"r = %$(strd(fittingCoefs[2]))",color = :white,align = (:center,:center))
     Label(fig[1,1, TopLeft()],L"a)$$",padding = (-60,0,-20,0))
-    Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-20,0))
+    Label(fig[1,2, TopLeft()],L"b)$$",padding = (-20,0,-20,0))
     Label(fig[2,1, TopLeft()],L"c)$$",padding = (-60,0,-10,0))
     # Label(fig[3,1, TopLeft()],L"d)$$",padding = (-30,0,-10,0))
     save("../../figs/PaperFigs/StairCaseSpin1_Sq_FT.pdf", fig)
