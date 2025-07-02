@@ -407,15 +407,11 @@ SqFieldTheory(q::AbstractVector,coefs::AbstractVector) = SqFieldTheory(q[1],q[2]
 SqFieldTheory(q::Tuple,coefs::AbstractVector) = SqFieldTheory(q[1],q[2],coefs[1],coefs[2])
 
 function AsymFieldTheory_full(qx::Real, qy::Real, K::Real, W::Real, U::Real, p::Real)
-    qx,qy = SA[
-        cos(pi/2) sin(pi/2); 
-        -sin(pi/2) cos(pi/2)
-    ] * SVector(qx,qy)
     cx = cos(qx)
     cy = cos(qy)
     sx = sin(qx)
     sy = sin(qy)
-    cxy = cos(qx+qy)
+    cxy = cos(qx-qy)
 
     numerator = sqrt(K)*(cx - cy + 2 * sx * sy)^2
     denominator1 = sqrt(U/4*(1+2p*(1+cxy)) + W*( (cx-cy)^2+4*sx^2*sy^2))

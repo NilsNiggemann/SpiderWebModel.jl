@@ -1,4 +1,4 @@
-CONSTRAINT_SIGNS = (1, 1, -1, -1, 1, 1, -1, -1)
+const CONSTRAINT_SIGNS = (1, 1, -1, -1, 1, 1, -1, -1)
 constraintSigns() = CONSTRAINT_SIGNS
 
 function getSitesFromPlaquette(P::AbstractSpinConfig)

@@ -80,17 +80,21 @@ function reconstructTiling!(P, tilingHistory, PlaquetteList, path)
     return P
 end
 
+function _getSpinFromPlaquetteList(PlaquetteList)
+    return maximum(y -> maximum(x->isnan(x) ? 0 : abs(x), y), PlaquetteList)
+end
 function reconstructTiling(tilingHistory, PlaquetteList, path)
     Lx = maximum(p[1] for p in path) + 1
     Ly = maximum(p[2] for p in path) + 1
-
-    P = SpinConfig(fill(NaN, Lx, Ly), 1 / 2)
+    Spin = _getSpinFromPlaquetteList(PlaquetteList)
+    P = SpinConfig(fill(NaN, Lx, Ly), Spin)
     path = correctPath(path, P)
     reconstructTiling!(P, tilingHistory, PlaquetteList, path)
 end
 
 function reconstructTiling_xDirec(Lx::Int, Ly::Int, tilingHistory, PlaquetteList)
-    P = SpinConfig(fill(NaN, Lx, Ly), 1 / 2)
+    Spin = _getSpinFromPlaquetteList(PlaquetteList)
+    P = SpinConfig(fill(NaN, Lx, Ly), Spin)
     LPx = cld(Lx, 2)
     LPy = cld(Ly, 2)
     path = correctPath!(xdirecPath(LPx, LPy), P)

@@ -115,7 +115,7 @@ filter!(x->x.mu >=0.0,res)
 sort!(res, [:mu, :L])
 
 conf_6x6 = SW.periodicState6x6Condensate(30)
-conf_6x6MF = copy(conf_6x6) .= h5read(ENV["MYSCRATCH"]*"Spiderweb/MaxFlip/6x6Condensate/L=30/Spin1GFMC_L=30_1.h5","maxConf")
+conf_6x6MF = SW.stencilConfig(zeros(30,30),1) .= h5read(ENV["MYSCRATCH"]*"Spiderweb/MaxFlip/6x6Condensate/L=30/Spin1GFMC_L=30_1.h5","maxConf")
 # res = getRes(ENV["MYSCRATCH"]*"/Spiderweb/DataS1_CT_RK_equil/S0*_longprop/")
 ##
 
@@ -392,7 +392,7 @@ function plotRandomCuts!(fig,resRandConfs)
 
     (;qx,qy,xygrid,p1_discrete,xticks,tRange_new,kpath,p1_points) = get_q_Cuts(L_Plot;numPoints=100)
 
-    axPath_Random = Axis(fig,ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = xticks,yticks = SimpleTicks()
+    axPath_Random = Axis(fig,ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = xticks,yticks = SimpleTicks(),xlabelpadding = -10,
     )
 
     combs = [
@@ -406,7 +406,7 @@ function plotRandomCuts!(fig,resRandConfs)
     colors = Makie.Colors.distinguishable_colors(length(combs),parse.(Makie.Colors.RGB,[:black,:red,:blue,:orange]))
     
 
-    labelpoints = [Point(0.5,0.15),Point(0.77,0.55),Point(0.85,0.8)]
+    labelpoints = [Point(0.25,0.12),Point(0.6,0.25),Point(0.85,0.8)]
     for (i,(Randsector,mu)) in enumerate(combs)
     # for (Randsector,mu) in Iterators.product(1:5,(0.7,0.8,0.9,0.95))
         SqsGFMC = SW.expand_Sq.(getSq(resRandConfs[Randsector],tau=20,mu=mu,L=36)) 
@@ -448,20 +448,23 @@ end
 using CairoMakie.FileIO
 with_theme(theme_SimpleTicks()) do 
 
-    fig = Figure(fontsize = 22,size = 550 .*(3,1))
+    fig = Figure(fontsize = 22,size = 550 .*(2.6,1))
     
-    fig[1:2,1] = ConfPanels  = GridLayout()
-    fig[1:2,2:4] = SqPanels  = GridLayout()
-    fig[1:2,5] = FTPanels = GridLayout()
-    fig[1,6:8] = ThirdCol = GridLayout()
-    fig[2,6:8] = FourthCol = GridLayout()
+    # fig[1:2,1] = ConfPanels  = GridLayout()
+    fig[1:2,1:3] = SqPanels  = GridLayout()
+    fig[1:2,4] = FTPanels = GridLayout()
+    fig[1,5:7] = ThirdCol = GridLayout()
+    fig[2,5:7] = FourthCol = GridLayout()
     
-    # boxSq = Box(fig[1:2, 1:3], linestyle = :solid,alignmode = Mixed(left = -70, right = -12, top = -8, bottom = -35),color = (:grey,0.1),strokecolor = :black,cornerradius = 10)
-    # boxFT = Box(fig[1:2, 4], linestyle = :solid,alignmode = Mixed(left = -40, right = -12, top = -8, bottom = -35),color = (:grey,0.1),strokecolor = :black,cornerradius = 10)
+    boxOuter = Box(fig[1:2, 1:7], linestyle = :solid,alignmode = Mixed(left = -78, right = -15, top = -15, bottom = -58),color = (:grey,0.8),strokecolor = :black,strokewidth = 3,cornerradius = 8)
 
-    # boxScal = Box(fig[3, 1:4], linestyle = :solid,alignmode = Mixed(left = -70, right = -12, top = -12, bottom = -60),color = (:grey,0.1),strokecolor = :black,cornerradius = 10)
-    # boxRand = Box(fig[4, 1:4], linestyle = :solid,alignmode = Mixed(left = -70, right = -12, top = -35, bottom = -60),color = (:grey,0.1),strokecolor = :black,cornerradius = 10)
+    boxSq = Box(fig[1:2, 1:3], linestyle = :solid,alignmode = Mixed(left = -70, right = -12, top = -8, bottom = -52),color = (:white,1.),strokecolor = :black,strokewidth = 3,cornerradius = 10)
+    boxFT = Box(fig[1:2, 4], linestyle = :solid,alignmode = Mixed(left = -42, right = -13, top = -8, bottom = -52),color = (:white,1.),strokecolor = :black,strokewidth = 3,cornerradius = 10)
 
+    boxScal = Box(fig[1, 5:7], linestyle = :solid,alignmode = Mixed(left = -70, right = -9, top = -8, bottom = -52),color = (:white,1.),strokecolor = :black,strokewidth = 3,cornerradius = 10)
+    boxRand = Box(fig[2, 5:7], linestyle = :solid,alignmode = Mixed(left = -70, right = -9, top = -35, bottom = -52),color = (:white,1.),strokecolor = :black,strokewidth = 3,cornerradius = 10)
+
+    Makie.translate!(boxOuter.blockscene, 0, 0, -520)
     # Makie.translate!(boxSq.blockscene, 0, 0, -100)
     # Makie.translate!(boxFT.blockscene, 0, 0, -100)
     # Makie.translate!(boxScal.blockscene, 0, 0, -100)
@@ -476,18 +479,18 @@ with_theme(theme_SimpleTicks()) do
     FourthCol[1,1] = SqRandomCuts = GridLayout()
 
 
-    ax_conf1 = Axis(ConfPanels[1,1];SW.getConfigAxis(conf_6x6)...,xticks = [10,20,30],yticks = [10,20,30],xminorgridwidth = 0.1, xticklabelsvisible=false,yminorgridwidth = 0.1)
-    ax_conf2 = Axis(ConfPanels[2,1];SW.getConfigAxis(conf_6x6MF)...,xticks = [10,20,30],yticks = [10,20,30],xminorgridwidth = 0.1, yminorgridwidth = 0.1)
-    linkxaxes!(ax_conf1,ax_conf2)
-    SW.plotSpinConfig!(ax_conf1,conf_6x6,constraintkwargs = (;markersize = 7))
-    SW.plotSpinConfig!(ax_conf2,conf_6x6MF,constraintkwargs = (;markersize = 7))
+    # ax_conf1 = Axis(ConfPanels[1,1];SW.getConfigAxis(conf_6x6)...,xticks = [10,20,30],yticks = [10,20,30],xminorgridwidth = 0.1, xticklabelsvisible=false,yminorgridwidth = 0.1)
+    # ax_conf2 = Axis(ConfPanels[2,1];SW.getConfigAxis(conf_6x6MF)...,xticks = [10,20,30],yticks = [10,20,30],xminorgridwidth = 0.1, yminorgridwidth = 0.1)
+    # linkxaxes!(ax_conf1,ax_conf2)
+    # SW.plotSpinConfig!(ax_conf1,conf_6x6,constraintkwargs = (;markersize = 7))
+    # SW.plotSpinConfig!(ax_conf2,conf_6x6MF,constraintkwargs = (;markersize = 7))
     PiTicksArgs = (;xticks = PiTicks([0,pi]), yticks = PiTicks([0,pi]))
 
     L_Plot = 36
 
     (;qx,qy,xygrid,p1_discrete,xticks,tRange_new,kpath,p1_points) = get_q_Cuts(L_Plot)
 
-    FSS_Plot[1,1] = ax_scal = Axis(fig,xlabel = L"μ",ylabel = L"\textrm{max}(\mathcal{S}(\mathbf{q}))")
+    FSS_Plot[1,1] = ax_scal = Axis(fig,xlabel = L"μ",ylabel = L"\textrm{max}(\mathcal{S}(\mathbf{q}))",xlabelpadding = -5)
     # FSS_Plot[1,1] = ax_scal = Axis(fig,xlabel = L"μ",ylabel = L"\textrm{max}_\Delta \mathcal{S}(\mathbf{q})")
     FSS_Plot[1,1] = ax_scal2 = Axis(fig,yaxisposition = :right,ylabel = L"$\delta \mathcal{S}(\mathbf{q})$ (dashed)",yticklabelcolor = :gray20,ylabelcolor = :gray20,xgridvisible = false,ygridvisible = false,xticklabelsvisible = false)
     # ylims!(ax_scal,1.15,1.4)
@@ -530,7 +533,10 @@ with_theme(theme_SimpleTicks()) do
         # ax_FT = Axis(FSS_Plot[1,1],width=Relative(0.3),height =Relative(0.3),halign = 0.9,valign = 0.9;aspect=1,title = L"$A = %$(A_fit),\ r = %$(r_fit)$",xlabel = L"q_x",ylabel = L"q_y",PiTicksArgs...,xlabelpadding=-5.)
         # ax_FT = Axis(FT_SqFig[1,1];aspect=1,title = L"$A = %$(A_fit),\ r = %$(r_fit)$",xlabel = L"q_x",ylabel = L"q_y",PiTicksArgs...,xlabelpadding=-5.)
         # ax_FT = Axis(FT_SqFig[1,1];aspect=1,title = L"$A = %$(A_fit),\ r^{-1} = %$(rinv)$",xlabel = L"q_x",ylabel = L"q_y",PiTicksArgs...,xlabelpadding=-5.,spinewidth,spinecolors(framecolors[3])...)
-        ax_FT = Axis(FT_SqFig[1,1];aspect=1,xlabel = L"q_x",ylabel = L"q_y",PiTicksArgs...,xlabelpadding=-8,ylabelpadding=-3,spinewidth,spinecolors(framecolors[3])...)
+        ax_FT = Axis(FT_SqFig[1,1];aspect=1,xlabel = L"q_x",ylabel = L"q_y",PiTicksArgs...,
+        # xlabelpadding=-8,
+        ylabelpadding=-3,spinewidth,spinecolors(framecolors[3])...)
+        ax_FT.alignmode = Mixed(bottom = -90)
         hmFT = heatmap!(ax_FT, qx, qy, SqFT;colorrange)
 
         linepoints = getindex.(Ref(KPoints), kpath)
@@ -570,6 +576,9 @@ with_theme(theme_SimpleTicks()) do
         )
         linkyaxes!(axPath1,axPath2,axPath3)
 
+        axPath1.alignmode = Mixed(bottom = -30)
+        axPath2.alignmode = Mixed(bottom = -30)
+        axPath3.alignmode = Mixed(bottom = -30)
         for (i,ax,SqMat,SqErr) in zip(eachindex(SqsGFMC), (axPath1, axPath2, axPath3), SqMat, SqErr)
             SqFunc = SW.getSqCont(SqMat)
             SqErrFunc = SW.getSqCont(SqErr)
@@ -696,6 +705,10 @@ with_theme(theme_SimpleTicks()) do
     rowsize!(fig.layout,1,Relative(0.6))
     rowsize!(fig.layout,2,Relative(0.4))
     colsize!(fig.layout,1,Relative(0.2))
+    colsize!(fig.layout,4,Relative(0.15))
+    colsize!(fig.layout,5,Relative(0.2))
+    colgap!(fig.layout,4,25)
+    rowgap!(fig.layout,1,45)
     # rowsize!(fig.layout,1,Relative(0.22))
     # rowsize!(fig.layout,2,Relative(0.37))
     # rowsize!(fig.layout,3,Relative(0.22))
@@ -721,13 +734,35 @@ with_theme(theme_SimpleTicks()) do
     ax_scal.alignmode = Mixed(right = 87)
 
     ax_scal2.alignmode = Mixed(right = 0)
-    # Label(fig[1,1,TopLeft()],L"(a)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,30,-20,0))
-    # Label(SqCuts[1,1,TopLeft()],L"(b)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,30,0,0))
-    # Label(fig[1,4,TopLeft()],L"(c)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,0,-20,0))
-    # Label(FT_SqFig[1,1,TopLeft()],L"(d)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,0,0,0))
-    # Label(fig[3,1,TopLeft()],L"(e)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,30,-10,0))
-    # Label(fig[4,1,TopLeft()],L"(f)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,30,30,0))
+
+    Label(fig[1,1,TopLeft()],L"(a)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,30,-20,0))
+    Label(fig[2,1,TopLeft()],L"(b)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,30,40,0))
+    Label(fig[1,4,TopLeft()],L"(c)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,0,-20,0))
+    Label(fig[2,4,TopLeft()],L"(d)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,0,40,0))
+    Label(fig[1,5,TopLeft()],L"(e)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,40,-20,0))
+    Label(fig[2,5,TopLeft()],L"(f)$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,40,30,0))
     save("../../figs/SqFieldTheoryComparison.pdf",fig)
     fig
+    
+end
+##
+
+let 
+
+    fig = Figure(fontsize = 22, size = 200 .* (3.6, 2))
+    axConf = Axis(fig[1, 1], xlabel = L"x", ylabel = L"y"; aspect = 1,SW.getConfigAxis(conf_6x6MF)...,xticks = SimpleTicks([10,20,30]), yticks = SimpleTicks([10,20,30]))
+    axFT = Axis(fig[1, 2], xlabel = L"q_x", ylabel = L"q_y", aspect = 1,xticks = PiTicks([0,pi]), yticks = PiTicks([0,pi]),)
+
+    SW.plotApplPlaquettes!(axConf, conf_6x6MF,markersize = 0)
+    SqFT = abs2.(SW.FFTW.fft(parent(conf_6x6MF)))
+    SqCont = SW.getSqCont(SqFT)
+    qx = qy = trueMomenta(-0.5pi,1.5pi,size(SqFT,1)-1)
+    heatmap!(axFT,qx,qy,SqCont)
+    Label(fig[1, 1, TopLeft()], L"(a)$$", fontsize = 24, tellheight = false, tellwidth = false, padding = (0, 30, -1, 0))
+    Label(fig[1, 2, TopLeft()], L"(b)$$", fontsize = 24, tellheight = false, tellwidth = false, padding = (0, 30, -1, 0))
+    # Label(fig[1, 2, Top
+    # heatmap!(axFT,SqFT)
+    fig
+
     
 end

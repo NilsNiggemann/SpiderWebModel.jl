@@ -195,7 +195,7 @@ res.xi = xis
 res.Sqmax = Sqmax
 
 with_theme(theme_PiTicks()) do
-    L = 36
+    LPlot = 36
     # muPlot = [0.8,0.9,0.9,1.0]
     muPlot = [0.8,0.81,0.9,1.0]
     
@@ -241,9 +241,9 @@ with_theme(theme_PiTicks()) do
 
     for (idx, mu) in enumerate(muPlot)
         i, j = divrem(idx - 1, 2) .+ 1
-        SqMat = SW.expand_Sq(mean(getSq(res, tau=12., L=L, mu=mu)))
+        SqMat = SW.expand_Sq(mean(getSq(res, tau=12., L=LPlot, mu=mu)))
 
-        kx = ky = trueMomenta(-pi/2, 1.5pi, L)
+        kx = ky = trueMomenta(-pi/2, 1.5pi, LPlot)
 
         SqFunc = SW.getSqCont(SqMat)
         Sqpl = SqFunc.(Iterators.product(kx, ky))
@@ -260,8 +260,8 @@ with_theme(theme_PiTicks()) do
     # rowgap!(fig.layout, 1, 5)
     colsize!(fig_SQ, 2, Relative(0.05))
     colsize!(fig_SQ, 4, Relative(0.05))
-    Label(fig_xi[1, 1, TopLeft()], L"a)$$", padding = (-30, 0, -10, 0))
-    Label(fig_SQ[1, 1, TopLeft()], L"b)$$", padding = (-30, 0, -10, 0))
+    Label(fig[1, 1, TopLeft()], L"(a)$$", padding = (-60, 0, -10, 0))
+    Label(fig[2, 1, TopLeft()], L"(b)$$", padding = (-60, 0, -10, 0))
     # colgap!(fig.layout, 2, 0)
     save("../../figs/PaperFigs/StairCaseSpin1Overview.pdf", fig)
     fig
@@ -291,6 +291,7 @@ with_theme(theme_SimpleTicks()) do
     
     # SqErr = dropstd(SqsGFMC,dims=4)[:,:,end,:]
     fittingCoefs = optimizeCoeffsAsym(SqMat)
+    # fittingCoefs = [1,2,3.]
     μ = mu
     fig = Figure(size = 140 .* (4,4),fontsize = 22)
 
@@ -381,10 +382,11 @@ with_theme(theme_SimpleTicks()) do
     rowsize!(fig.layout,1,Relative(0.5))
     rowgap!(fig.layout,1,-10)
     # text!(axFT,Point(pi,1.4pi),text=L"r = %$(strd(fittingCoefs[2]))",color = :white,align = (:center,:center))
-    Label(fig[1,1, TopLeft()],L"a)$$",padding = (-60,0,-20,0))
-    Label(fig[1,2, TopLeft()],L"b)$$",padding = (-20,0,-20,0))
-    Label(fig[2,1, TopLeft()],L"c)$$",padding = (-60,0,-10,0))
+    Label(fig[1,1, TopLeft()],L"(a)$$",padding = (-60,0,-20,0))
+    Label(fig[1,2, TopLeft()],L"(b)$$",padding = (-20,0,-20,0))
+    Label(fig[2,1, TopLeft()],L"(c)$$",padding = (-60,0,-10,0))
     # Label(fig[3,1, TopLeft()],L"d)$$",padding = (-30,0,-10,0))
     save("../../figs/PaperFigs/StairCaseSpin1_Sq_FT.pdf", fig)
     fig
 end
+
