@@ -129,8 +129,9 @@ with_theme(theme_SimpleTicks()) do
         32 => (;marker = '▼', markersize = 10),
         36 => (;marker = '▲', markersize = 10),
     )
-    inset_En = Axis(fig[1,1],width = Relative(0.3),height = Relative(0.5),halign=0.2, valign=0.85)
-
+    inset_En = Axis(fig[1,1],width = Relative(0.3),height = Relative(0.5),halign=0.2, valign=0.85, xticklabelsize= 16,yticklabelsize= 16)
+    translate!(inset_En.blockscene,0,0,100)
+    colors = Dict(28 => :blue, 32 => :red, 36 => :black)
     for (L, linestyle) in zip((28,32,36), Linestyles)
         resL = get_res(res, L=L)
         filter!(x->x.mu<=0.9,resL)
@@ -140,12 +141,12 @@ with_theme(theme_SimpleTicks()) do
         enmean = mean.(energies) ./ L^2  ./ (1 .-mus)
         enstd = std.(energies) ./ L^2  ./ (1 .-mus)
 
-        scatterlines!(ax, mus, enmean, label=L"L=%$L"; linestyle, scatterkwargs[L]...)
-        errorbars!(ax, mus, enmean, enstd, whiskerwidth=5)
+        scatterlines!(ax, mus, enmean, label=L"L=%$L"; linestyle, scatterkwargs[L]...,color = colors[L],)
+        errorbars!(ax, mus, enmean, enstd, whiskerwidth=5,color = colors[L],)
 
         mufilter = findall(x -> 0.85 >= x>= 0.78 ,mus)
-        scatterlines!(inset_En, mus[mufilter], enmean[mufilter], label=L"L=%$L"; linestyle, scatterkwargs[L]...)
-        errorbars!(inset_En, mus[mufilter], enmean[mufilter], enstd[mufilter], whiskerwidth=5)
+        scatterlines!(inset_En, mus[mufilter], enmean[mufilter], label=L"L=%$L"; linestyle, scatterkwargs[L]...,color = colors[L],)
+        errorbars!(inset_En, mus[mufilter], enmean[mufilter], enstd[mufilter], whiskerwidth=5,color = colors[L])
     end
 
     # inset_En2 = Axis(fig[1,1],width = Relative(0.3),height = Relative(0.3),halign=0.8, valign=0.2)
@@ -199,13 +200,16 @@ with_theme(theme_PiTicks()) do
     # muPlot = [0.8,0.9,0.9,1.0]
     muPlot = [0.8,0.81,0.9,1.0]
     
-    fig = Figure(fontsize = 22,size = 300 .*(2,2.5))
+    fig = Figure(fontsize = 22,size = 300 .*(2,2.7))
 
     fig_xi = GridLayout()
     fig.layout[1,1:2] = fig_xi
     
     # axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\xi/L",xticks = SimpleTicks(),yticks = SimpleTicks())
-    axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\mathcal{S}(\frac{\pi}{2},\frac{\pi}{2})",xticks = SimpleTicks(),yticks = SimpleTicks())
+    # axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\mathcal{S}(\frac{\pi}{2},\frac{\pi}{2})",xticks = SimpleTicks(),yticks = SimpleTicks())
+    axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\mathcal{S}(\pi/2,\ \pi/2)",xticks = SimpleTicks(),yticks = SimpleTicks())
+
+    colors = Dict(28 => :blue, 32 => :red, 36 => :black)
 
     for L in filter!(<(40), unique(res.L))
         resFilt = filter(x->x.L==L,res)
@@ -218,9 +222,9 @@ with_theme(theme_PiTicks()) do
         end
         xi = getindex.(data,1)
         xierr = getindex.(data,2)
-        mu = getindex.(data,3)
-        scatterlines!(axis,mu,xi,marker = '×',markersize = 10,label = "L = $L")
-        errorbars!(axis,mu,xi,xierr,whiskerwidth = 6,linewidth=0.5)
+        mu = getindex.(data,3) 
+        scatterlines!(axis,mu,xi,marker = '•' ,markersize = 16,label = "L = $L", color = colors[L], )
+        errorbars!(axis,mu,xi,xierr,whiskerwidth = 6,linewidth=0.5, color = colors[L], )
     end
     # xlims!(axis,0.6,1)
     # ylims!(axis,0.0,70)
@@ -234,11 +238,11 @@ with_theme(theme_PiTicks()) do
     axInds = [(i,(2j-1)) for (i, j) in Iterators.product(1:2, 1:2)]
     ColbarInds = [(i,j+1) for (i, j) in axInds]
 
-    axes = [Axis(fig_SQ[i, j], aspect=1,
+    axes = [Axis(fig_SQ[i, j], aspect=1, xminorticks = IntervalsBetween(2), xminorticksvisible = true,
+    yminorticks = IntervalsBetween(2), yminorticksvisible = true,
     yticklabelsvisible=j==1, xticks=ticks, yticks=ticks, xlabel=L"q_x", ylabel=L"q_y", ylabelvisible=j==1,xticklabelsvisible= i==2, xlabelvisible = i==2) 
     for (i, j) in axInds]
     
-
     for (idx, mu) in enumerate(muPlot)
         i, j = divrem(idx - 1, 2) .+ 1
         SqMat = SW.expand_Sq(mean(getSq(res, tau=12., L=LPlot, mu=mu)))
@@ -248,7 +252,13 @@ with_theme(theme_PiTicks()) do
         SqFunc = SW.getSqCont(SqMat)
         Sqpl = SqFunc.(Iterators.product(kx, ky))
         hm = heatmap!(axes[i, j], kx, ky, Sqpl, colormap=:viridis)
-        Colorbar(fig_SQ[ColbarInds[idx]...], hm, ticks=SimpleTicks(), vertical=true, flipaxis=true, label=L"\mathcal{S}(\mathbf{q})", width=Relative(0.5),labelvisible=ColbarInds[idx][2] == 4)
+
+        Colorbar(fig_SQ[ColbarInds[idx]...], hm, 
+        ticks=SimpleTicks(), vertical=true, flipaxis=true, 
+        # label=L"\mathcal{S}(\mathbf{q})",
+        halign = :left,
+        width=Relative(0.5),
+        labelvisible=ColbarInds[idx][2] == 4)
         
         text!(axes[i, j], Point(0.5,0.99), text=L"\mu = %$(mu)", align=(:center, :top),space = :relative, strokecolor = (:black,0.3), strokewidth = 4)
         text!(axes[i, j], Point(0.5,0.99), text=L"\mu = %$(mu)", align=(:center, :top),space = :relative,color = :white)
@@ -256,12 +266,16 @@ with_theme(theme_PiTicks()) do
         # band!(axes[i, j], [-0.5pi, 0.5pi], [1.1pi, 1.1pi], [1.5pi, 1.5pi], color=(:black, 0.5))
         # text!(axes[i, j], Point(0, 1.3pi), text=L"μ = %$mu", color=:white, align=(:center, :center))
     end
-    rowsize!(fig.layout, 1, Relative(0.4))
+    rowsize!(fig.layout, 1, Relative(0.35))
     # rowgap!(fig.layout, 1, 5)
     colsize!(fig_SQ, 2, Relative(0.05))
     colsize!(fig_SQ, 4, Relative(0.05))
-    Label(fig[1, 1, TopLeft()], L"(a)$$", padding = (-60, 0, -10, 0))
-    Label(fig[2, 1, TopLeft()], L"(b)$$", padding = (-60, 0, -10, 0))
+    colgap!(fig_SQ, 1, 2)
+    colgap!(fig_SQ, 2, 2)
+    colgap!(fig_SQ, 3, 2)
+    Label(fig[1, 1, TopLeft()], L"(a)$$", padding = (-20, 0, -10, 0))
+    Label(fig[2, 1, TopLeft()], L"(b)$$", padding = (-20, 0, -10, 0))
+    Label(fig[2, 1:2, Top()], L"\mathcal{S}(\mathbf{q})", padding = (0, 0, 10, 0))
     # colgap!(fig.layout, 2, 0)
     save("../../figs/PaperFigs/StairCaseSpin1Overview.pdf", fig)
     fig
@@ -293,12 +307,12 @@ with_theme(theme_SimpleTicks()) do
     fittingCoefs = optimizeCoeffsAsym(SqMat)
     # fittingCoefs = [1,2,3.]
     μ = mu
-    fig = Figure(size = 140 .* (4,4),fontsize = 22)
+    fig = Figure(size = 140 .* (4,4.5),fontsize = 22)
 
     xticks = yticks = PiTicks()
-    ax = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
+    ax = Axis(fig[2,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
 
-    axFT = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,ylabelvisible = false,yticklabelsvisible = false)
+    axFT = Axis(fig[2,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,ylabelvisible = false,yticklabelsvisible = false)
 
     # ax2 = Axis(fig[2,1:2],xlabel = L"|\mathbf{q}|^2",ylabel = L"\mathcal{S}(\mathbf{q})",title = L"μ= %$μ")
     Sq = SW.getSqCont(SqMat)
@@ -306,11 +320,11 @@ with_theme(theme_SimpleTicks()) do
     qx = qy = trueMomenta(-pi,2pi,size(SqMat,1)-1)
     Sq_q = collect(Iterators.product(qx,qy))
     Sq_q = Sq.(Iterators.product(qx,qy))
-    heatmap!(ax,qx,qy,Sq_q)
+    hm = heatmap!(ax,qx,qy,Sq_q)
     
     SqFT = [AsymFieldTheory(x,y,fittingCoefs...) for x in qx, y in qy]
 
-    heatmap!(axFT,qx,qy,SqFT)
+    heatmap!(axFT,qx,qy,SqFT,colorrange = extrema(Sq_q),colormap = :viridis)
     q_path(r,phi) = (r*cos(phi),r*sin(phi))
     qr = LinRange(0,.35pi,100)
     
@@ -337,7 +351,7 @@ with_theme(theme_SimpleTicks()) do
     xygrid = [(x,y) for x in qx, y in qy]
 
     
-    axPath = Axis(fig[2,1:2],ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),yticks = [0,0.5,1,1.5],
+    axPath = Axis(fig[3,:],ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),yticks = [0,0.5,1,1.5],
     )
     tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
     
@@ -370,21 +384,32 @@ with_theme(theme_SimpleTicks()) do
     marker = '∘',markersize = markersizeGFMC,color = colorGFMC,label = L"GFMC$$")
     errorbars!(axPath,tRange,Sqcut,Sqerrcut,color = colorGFMC,whiskerwidth = 6,linewidth=0.5,label = L"GFMC$$")
     
-    Legend(fig[2, 2], [
+    Legend(fig[3, end], [
         [
         errorBarLegend(0.6,;color = colorGFMC,markerkwargs = (;marker='∘',markersize = markersizeGFMC)),
     ],  
     [LineElement(linepoints = [Point2f(0., 0.5), Point2f(1, 0.5)],color = colorFT,linestyle = :dash,linewidth = 2)
-    ]], [L"GFMC$$",L"$A = %$(A_fit),\ r = %$(r_fit)\ p = %$(p_fit)$"], tellheight = false, tellwidth = false,halign = :right, valign = :top,margin = (0,0,0,0),labelsize = 20,
+    ]], [L"GFMC$$",L"$A = %$(A_fit),\ r = %$(r_fit)\ p = %$(p_fit)$"], tellheight = false, tellwidth = false,halign = :right, valign = :top,margin = (0,0,0,0),padding = (5,5,2,2),labelsize = 20,
     )
     ylims!(axPath,0,1.75)
     # axislegend(axPath,position = :lt,merge = true)
-    rowsize!(fig.layout,1,Relative(0.5))
-    rowgap!(fig.layout,1,-10)
+    rowsize!(fig.layout,2,Relative(0.5))
+    rowsize!(fig.layout,3,Relative(0.45))
+    rowgap!(fig.layout,1,30)
     # text!(axFT,Point(pi,1.4pi),text=L"r = %$(strd(fittingCoefs[2]))",color = :white,align = (:center,:center))
-    Label(fig[1,1, TopLeft()],L"(a)$$",padding = (-60,0,-20,0))
-    Label(fig[1,2, TopLeft()],L"(b)$$",padding = (-20,0,-20,0))
-    Label(fig[2,1, TopLeft()],L"(c)$$",padding = (-60,0,-10,0))
+    
+    textpos = Point(-pi,2pi)
+    text!(ax, textpos ,text = L"(a)$$",color = (:white,0.),strokecolor = (:black,0.3),strokewidth=5,align = (:left,:top),fontsize = 22)
+    text!(ax, textpos ,text = L"(a)$$",color = :white,align = (:left,:top),fontsize = 22)
+    text!(axFT, textpos ,text = L"(b)$$",color = (:white,0.),strokecolor = (:black,0.3),strokewidth=5,align = (:left,:top),fontsize = 22)
+    text!(axFT, textpos ,text = L"(b)$$",color = :white,align = (:left,:top),fontsize = 22)
+    text!(axPath, Point(0.01,0.98) ,text = L"(c)$$",color = :black,align = (:left,:top),fontsize = 22,space = :relative)
+    Colorbar(fig[1,1:end], hm, label = L"\mathcal{S}(\mathbf{q})", ticks = SimpleTicks(), vertical = false, flipaxis = true, halign = :left, width = Relative(0.99),height = Relative(0.5),labelpadding = -9)
+    # colsize!(fig.layout,3,Relative(0.06))
+    rowgap!(fig.layout,1,0.1)
+    # Label(fig[1,1, TopLeft()],L"(a)$$",padding = (-60,0,-20,0))
+    # Label(fig[1,2, TopLeft()],L"(b)$$",padding = (-20,0,-20,0))
+    # Label(fig[2,1, TopLeft()],L"(c)$$",padding = (-60,0,-10,0))
     # Label(fig[3,1, TopLeft()],L"d)$$",padding = (-30,0,-10,0))
     save("../../figs/PaperFigs/StairCaseSpin1_Sq_FT.pdf", fig)
     fig

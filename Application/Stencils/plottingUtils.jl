@@ -378,6 +378,12 @@ function getLastSlice(arr::AbstractArray{T,N}) where {T,N}
 end
 
 function SqLargeN(qx,qy)
+    qx_pr,qy_pr = rem2pi.(SA[qx,qy],RoundDown)
+
+    if hypot(qx_pr,qy_pr) < 1e-8 || hypot(qx_pr-pi,qy_pr-pi)< 1e-8 || hypot(qx_pr-2pi,qy_pr-2pi) < 1e-8
+        qx += 1e-3
+        # qy += 1e-3
+    end
     cx = cos(qx)
     cy = cos(qy)
     sx = sin(qx)

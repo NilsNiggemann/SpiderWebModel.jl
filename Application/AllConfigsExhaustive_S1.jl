@@ -41,7 +41,7 @@ function checkAllTilings_periodic(states,bufferConfig_template,check_1=nothing,c
     @assert iseven(Lx)
     
     counters = zeros(Int, length(states))
-    Threads.@threads for i in eachindex(states)
+    for i in eachindex(states)
     # for i in eachindex(states)
         bufferConfig = copy(bufferConfig_template)
 
@@ -64,7 +64,12 @@ function checkAllTilings_periodic(states,bufferConfig_template,check_1=nothing,c
                 end
             end
         end
-        println("i = $i, counter = $(counters[i])")
+        if i % 1000 == 0
+            println("i = $i, counter = $(counters[i])")
+            flush(stdout)
+        end
+        # println("i = $i, counter = $(counters[i])")
+        # flush(stdout)
     end
     return sum(counters)
     # for i in 1:length(states)
@@ -99,7 +104,15 @@ check3 = setdiff!(check3, [(2,2), (3,3), (2,6) , (3,7), (6,2) , (7,3), (6,6), (7
 # scatter!(Point.(check3), color = :red, markersize = 14)
 # current_figure()
 ##
+checkAllTilings_periodic(rand(a_rec,1000),bufferConfig,check1,check2,check3)
+times = Float64[]
+lens = [1000,2000,2500,3000,3500,3750,4000,5000]
+for len in lens
+    confs = rand(a_rec, len)
+    time = @elapsed checkAllTilings_periodic(confs,bufferConfig,check1,check2,check3)
+    println("Number of tilings: $numTil")   
+    push!(times, time)
+end
 
-
-@time numTil = checkAllTilings_periodic(a_rec,bufferConfig,check1,check2,check3)
-println("Number of tilings: $numTil")
+##
+scatterlines(lens, times .^0.25,  color = :blue)

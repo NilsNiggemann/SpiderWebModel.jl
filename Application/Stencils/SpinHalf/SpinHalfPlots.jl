@@ -168,7 +168,7 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     stairCase_state = SW.stencilConfig(SW.getStairCase(12),0.5,boundaryCondition = :periodic)
 
     axkwargs = (;xminorticksvisible=true,yminorticksvisible=true,xtickwidth = 2,ytickwidth = 2,xminortickwidth = 1.8,yminortickwidth = 1.8,xticksize=9,yticksize=9,xminorticksize=6,yminorticksize=6,xminortickalign =1,yminortickalign =1,xtickalign =1,xticksmirrored =true,yticksmirrored=true,ytickalign=1,
-    xlabelpadding = -5,
+    xlabelpadding = -10,
     xtickcolor = :white,
     xminortickcolor = :white,
     ytickcolor = :white,
@@ -177,12 +177,12 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     )
 
 
-    SpinConf_Fig[1, 1] = ax_generic_conf = Axis(fig; SW.getConfigAxis(exemplaryConfig)...,xticklabelsvisible = false,yticklabelsvisible = false
+    SpinConf_Fig[1, 1] = ax_generic_conf = Axis(fig; SW.getConfigAxis(exemplaryConfig)...,xticklabelsvisible = false,yticklabelsvisible = false,xticksvisible = false,yticksvisible = false,
     )
 
     SW.plotApplPlaquettes!(ax_generic_conf,exemplaryConfig,markersize = 8)
 
-    SpinConf_Fig[1, 2] = ax_staircase_conf = Axis(fig; SW.getConfigAxis(stairCase_state)...,xticklabelsvisible = false,yticklabelsvisible = false,spinecolors(:blue)...,spinewidth = 3
+    SpinConf_Fig[1, 2] = ax_staircase_conf = Axis(fig; SW.getConfigAxis(stairCase_state)...,xticklabelsvisible = false,yticklabelsvisible = false,spinecolors(:blue)...,spinewidth = 3,xticksvisible = false,yticksvisible = false,
     )
 
     SW.plotApplPlaquettes!(ax_staircase_conf,stairCase_state,markersize = 8)
@@ -198,15 +198,15 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     end
 
     StrucFac_Top[1, 1] = ax = Axis(fig, aspect = 1,xticks = ticks,yticks = ticks,xminorticksvisible = true ,xlabel = L"q_x",ylabel = L"q_y",yminorticksvisible = true,
-    xlabelvisible=false,xticklabelsvisible=false;
-    axkwargs...
+    xlabelvisible=false,xticklabelsvisible=false;    axkwargs...,
+    xlabelpadding = -15,
     )
 
     StrucFac_Top[1, 2] = ax2 = Axis(fig, aspect = 1,yticklabelsvisible=false,xminorticksvisible = true ,xlabel = L"q_x",yminorticksvisible = true,
     xlabelvisible=false,xticklabelsvisible=false,xticks = ticks,yticks = ticks,
-    # title = L"class. spin-$1/2$"
+    # title = L"class. spin-$1/2$",
     ;
-    axkwargs...
+    axkwargs...,
     )
 
     SqFunc = SW.getSqCont(real(Sq_Classical.Sq))
@@ -229,7 +229,7 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
 
     # hm = halfhalfheatmap!(ax,kx,ky,SqFunc,SqLargeN,x->-x+3pi,normalize = true)
     EN_Plot[1,1] = ax_sector_energies = with_theme(theme_SimpleTicks()) do 
-        Axis(fig[1,2],xlabel = L"\mu",ylabel = L"E/L^2")
+        Axis(fig[1,2],xlabel = L"\mu",ylabel = L"E/(J'N_\textrm{sites})")
     end
     StrucFac_Bot[1, 1] = axmu0 = Axis(fig, xlabel = L"q_x", ylabel = L"q_y", aspect = 1,xminorticksvisible = true, yminorticksvisible = true,xticks = ticks, yticks = ticks;
     axkwargs...,
@@ -277,7 +277,7 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     )
 
     
-    Label(StrucFac_Top[2,1, Left()],L"\mathcal{S}(q)",padding = (-10,0,-10,0))
+    Label(StrucFac_Top[2,1, Left()],L"\mathcal{S}(\mathbf{q})",padding = (-10,0,-10,0))
     # Label(StrucFac_Top[2,1:2, Top()],L"\textrm{Classical }\mathcal{S}(q)",padding = (0,0,20,0))
     # Label(StrucFac_Bot[0,1:2, Top()],L"\textrm{Quantum }\mathcal{S}(q)",padding = (0,0,-80,0))
 
@@ -306,15 +306,15 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     
     
     sub_fig_labelsize = 22
-    text!(ax, textpos ,text = L"a)",color = :black,align = (:left,:top),fontsize = sub_fig_labelsize)
-    text!(ax2, textpos ,text = L"b)",color = :black,align = (:left,:top),fontsize = sub_fig_labelsize)
+    text!(ax, textpos ,text = L"(a)$$",color = :black,align = (:left,:top),fontsize = sub_fig_labelsize)
+    text!(ax2, textpos ,text = L"(b)$$",color = :black,align = (:left,:top),fontsize = sub_fig_labelsize)
 
-    Label(SpinConf_Fig[1, 1, TopLeft()], L"c)", padding = (-30, 0, -20, 0),fontsize = sub_fig_labelsize)
-    Label(SpinConf_Fig[1, 2, TopLeft()], L"d)", padding = (-30, 0, -20, 0),fontsize = sub_fig_labelsize)
-    Label(EN_Plot[1, 1, TopLeft()], L"g)", padding = (-30, 0, -20, 0),fontsize = sub_fig_labelsize)
+    Label(SpinConf_Fig[1, 1, TopLeft()], L"(c)$$", padding = (-30, 0, -20, 0),fontsize = sub_fig_labelsize)
+    Label(SpinConf_Fig[1, 2, TopLeft()], L"(d)$$", padding = (-10, 0, -20, 0),fontsize = sub_fig_labelsize)
+    Label(EN_Plot[1, 1, TopLeft()], L"(g)$$", padding = (-10, 0, -20, 0),fontsize = sub_fig_labelsize)
 
-    text!(axmu0, textpos ,text = L"e)",color = :white,align = (:left,:top),fontsize = sub_fig_labelsize)
-    text!(axRK, textpos ,text = L"f)",color = :white,align = (:left,:top),fontsize = sub_fig_labelsize)
+    text!(axmu0, textpos ,text = L"(e)$$",color = :white,align = (:left,:top),fontsize = sub_fig_labelsize)
+    text!(axRK, textpos ,text = L"(f)$$",color = :white,align = (:left,:top),fontsize = sub_fig_labelsize)
     if L40RescalingFactor != 1
         text!(axmu0, Point(pi,3pi/2) ,text = L"\times \frac{1}{%$(L40RescalingFactor)}",color = :white,align = (:left,:top),fontsize = sub_fig_labelsize)
     end
@@ -324,5 +324,4 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     # Colorbar(fig[1, 2], hm)
     fig
 end
-##
 makeSqPlot(SqClassical,dropmean(Sqs_mu0,dims=4)[:,:,end],Sq_RK)

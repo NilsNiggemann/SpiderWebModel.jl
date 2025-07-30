@@ -55,17 +55,21 @@ magEx = SW.getMagnetization(HConfs, v0)
 ##
 # S = SW.stencilConfig(parent(SW.getStairCase(12)),1/2)
 # ψG = SW.PlaquetteNumberGuidingFunction(0.197)
+# ψG = SW.PlaquetteNumberGuidingFunction(0.197)
 ψG = SW.PlaquetteNumberGuidingFunction(0.197)
 # ψG = SW.fullVariationalFunction(S,0.197)
 
 nThermal = 500
 # results = [SW.startManyWalkerGFMC(S,2,55_000,3,nThermal,SW.ConstructVaritationalFunc(0.197,S),0) for _ in 1:35]
-nBra = 3
+nBra = 5
 ##
 SW.Random.seed!(1234)
 DT = SW.DiscreteTimeMethod(0.,nBra,-E0)
-@time resultsDT1 = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,1,200000,ψG,equilibration_steps=nThermal) for i in 1:18])
-@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,10000,ψG,equilibration_steps=nThermal) for i in 1:18])
+CT = SW.ContinuousTimeMethod(0.1,E0,SW.Hxx_zero())
+@time resultsDT1 = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,1,200000,SW.RKFunction(),equilibration_steps=nThermal) for i in 1:18])
+@time resultsDT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,20,10000,SW.RKFunction(),equilibration_steps=nThermal) for i in 1:18])
+@time resultsCT1 = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,1,200000,SW.RKFunction(),equilibration_steps=nThermal) for i in 1:18])
+@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,20,10000,SW.RKFunction(),equilibration_steps=nThermal) for i in 1:18])
 ##
 # SW.Random.seed!(1234)
 # CT = SW.ContinuousTimeMethod(0.01,10,14.,SW.Hxx_zero())
@@ -79,6 +83,8 @@ DT = SW.DiscreteTimeMethod(0.,nBra,-E0)
 
 plotEnergies(resultsDT1,DT.nBranch,color =:grey,Emin=NaN,Emax=NaN,p=250,normalize=false,label = L"N_w=1",legend=false)
 plotEnergies!(resultsDT,DT.nBranch,color =:black,E0,Emin=NaN,Emax=NaN,p=250,normalize=false,label = L"N_w=20")
+plotEnergies!(resultsCT,CT,color =:black,E0,Emin=NaN,Emax=NaN,p=250,normalize=false,label = L"N_w=20")
+plotEnergies!(resultsCT1,CT,color =:grey,E0,Emin=NaN,Emax=NaN,p=250,normalize=false,label = L"N_w=1")
 # plotEnergies!(resultsCT,CT.nBranch,E0,Emin=NaN,Emax=NaN,p=150,)
 current_figure()
 
@@ -88,11 +94,16 @@ current_figure()
 # rm(outfile;recursive=true,force=true)
 # mkpath(outfile)
 # @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,16,50000÷nBra,nBra,ψG,1;equilibration_steps=nThermal,outfile =string(outfile,i,".h5")) for i in 1:8])
-@time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,1000,500,SW.RKFunction();equilibration_steps=nThermal) for i in 1:12])
+# @time results = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,1000,500,SW.RKFunction();equilibration_steps=nThermal) for i in 1:12])
+# @time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,DT,1000,500,SW.RKFunction();equilibration_steps=nThermal) for i in 1:12])
 # @time SW.startManyWalkerGFMC(S,16,nThermal+500_00÷nBra,nBra,ψG,1;outfile = string(outfile,1,".h5"))
 ##
 #___________Observables_______________________
 ##
+SW.Random.seed!(1234)
+@time resultsCT1 = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,1,1000000,SW.RKFunction(),equilibration_steps=nThermal) for i in 1:18])
+@time resultsCT = fetch.([Threads.@spawn SW.startManyWalkerGFMC(S,CT,20,50000,SW.RKFunction(),equilibration_steps=nThermal) for i in 1:18])
+
 # getAvgMag(Conf) = sum(Conf) ./ (2*length(Conf))
 function getMag(results,pmax,I)
     # I = CartesianIndex(I)
@@ -128,12 +139,13 @@ end
 ##
 # results = resultsDT
 nBra = DT.nBranch
-mags1 = getMag(results,150÷nBra,CartesianIndex(3,3)) 
-mags2 = getMag(results,150÷nBra,CartesianIndex(4,1)) 
-mags3 = getMag(results,150÷nBra,CartesianIndex(2,3)) 
+Is = ((3,3),(10,3))
+
+mags1 = getMag(resultsCT,round(Int,5 ÷ CT.τ),CartesianIndex(Is[1])) 
+mags3 = getMag(resultsCT,round(Int,5 ÷ CT.τ),CartesianIndex(Is[2])) 
 ##
-IJ_SS = (CartesianIndex(3,4),CartesianIndex(4,2))
-SiSj = getSiSj(results,150÷nBra,IJ_SS[1],IJ_SS[2]) 
+IJ_SS = (CartesianIndex(2,7),CartesianIndex(10,11))
+SiSj = getSiSj(resultsCT,round(Int,5 ÷ CT.τ),IJ_SS[1],IJ_SS[2]) 
 SiSjex = SW.getSij(HConfs,v0,IJ_SS[1],IJ_SS[2])
 ##
 
@@ -156,69 +168,89 @@ with_theme(theme_SimpleTicks()) do
     xminorticksvisible=false,
     xticklabelsvisible=false,
     yminorticksvisible=true,
-    ylabel = L"E_0/N_\textrm{sites}",
-    xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
+    ylabel = L"E_0/(J' \times N_\textrm{sites})",
+    xminorticks=IntervalsBetween(4),yminorticks = IntervalsBetween(4))
 
     ax = Axis(fig[2,1],
-    xlabel = L"projection order $\mathcal{P}$",
+    xlabel = L"imaginary time $τ$",
     xminorticksvisible=true,
     yminorticksvisible=true,
     ylabel = L"\langle \mathcal{O} \rangle",
-    xminorticks=IntervalsBetween(5),yminorticks = IntervalsBetween(5))
+    xminorticks=IntervalsBetween(4),yminorticks = IntervalsBetween(4))
 
     linkxaxes!(ax,axenergy)
-    plotEnergies!(axenergy,resultsDT1,DT.nBranch,p=150,color = :grey,legend = false,label = L"N_w = 1",marker = :rect,markersize = 6 )
-    plotEnergies!(axenergy,resultsDT,DT.nBranch,E0,p=150,label = L"N_w = 20",legend = false)
-    ylims!(axenergy,1.001*E0/length(S),mean(resultsDT1[1].energies)/length(S))
+    # plotEnergies!(axenergy,resultsDT1,DT.nBranch,p=50,color = :grey,legend = false,label = L"N_w = 1",marker = :rect,markersize = 6 )
+    # plotEnergies!(axenergy,resultsDT,DT.nBranch,E0,p=50,label = L"N_w = 20",legend = false)
+    plotEnergies!(axenergy,resultsCT1,CT,NaN,τ = 5,label = L"N_w = 1",legend = false,color = :grey)
+    plotEnergies!(axenergy,resultsCT,CT,NaN,τ = 5,label = L"N_w = 20",legend = false,color = :blue)
+    hlines!(axenergy,[E0/length(S)],color = :black,label = L"exact$$",linestyle = :dash)
+    ylims!(axenergy,1.001*E0/length(S)-0.001,mean(resultsDT1[1].energies)/length(S)+0.001)
 
-    proj = nBra .*(eachindex(mags1).-1)
+    axislegend(axenergy,merge=true,position = :rt,unique=true)
+
+    axConf = Axis(fig[2,1];halign = 0.3, valign = 0.7,height = Relative(0.4),width = Relative(0.4),SW.getConfigAxis(S)...,xticklabelsvisible = false,yticklabelsvisible = false,xticksvisible=false,yticksvisible=false, 
+            xminorgridwidth= 0.2,
+            yminorgridwidth= 0.2,
+    )
+    SW.plotSpinConfig!(axConf,S,plotConstraints = false)
+
+    # colsize!(fig.layout,2,Relative(0.7))
+    proj = CT.τ .*(eachindex(mags1).-1)
+
+    
     Cols = (:blue,:green,:orange)
-    Is = ((3,3),(2,3))
+    # xlims!(ax,0,1.5maximum(proj))
     # Is = ((3,3),(4,1),(2,3))
     # for (i,mags) in enumerate((mags1,mags2,mags3))
     for (i,mags) in enumerate((mags1,mags3))
         mExact = magEx[Is[i]...]
 
+        scatter!(axConf,Point(Is[i]...),color = Cols[i],marker = '●')
         sgn = sign(mExact)
         m =  sgn .* mean.(mags)
-        scatter!(ax,proj,m,label = L"GFMC$$",color = Cols[i], marker = '●',markersize = 5)
+        # scatter!(ax,proj,m,label = L"GFMC$$",color = Cols[i], marker = '●',markersize = 5)
         err =std.(mags)
-        errorbars!(ax,proj,m,err,whiskerwidth = 3.5,color = Cols[i])
+        errlines!(ax,proj[1:end],m[1:end],err[1:end],color = Cols[i])
         
-        hlines!([sgn * mExact],color = Cols[i],label = L"exact $$")
+        hlines!(ax,[sgn * mExact],color = Cols[i],label = L"exact $$")
         sgstring = sgn > 0 ? "" : "-"
-        text!(ax,Point2(last(proj),mExact-0.005),color = Cols[i],text = L"%$sgstring \langle S^z_{%$(Is[i])}\rangle",align = (:right,:top))
+        # text!(ax,Point2(last(proj),mExact-0.005),color = Cols[i],text = L"%$sgstring \langle S^z_{%$(Is[i])}\rangle",align = (:right,:top))
+        text!(ax,Point2(last(proj),mExact-0.005),color = Cols[i],text = L"%$sgstring \langle S^z_{•}\rangle",align = (:right,:top))
     end
     chi = mean.(SiSj)
 
-    chiScale = -4
-    scatter!(ax,proj,chiScale .*chi,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
+    chiScale = 1
+    # scatter!(ax,proj,chiScale .*chi,label = L"GFMC$$",color = :black, marker = '●',markersize = 5)
     err =sqrt.(var.(SiSj))
-    errorbars!(ax,proj,chiScale .*chi,chiScale .*err,whiskerwidth = 3.5,color =  :black)
-    hlines!([chiScale*SiSjex],color = :black,label = L"exact $$")
+    errlines!(ax,proj,chiScale .*chi,chiScale .*err,color =  :red)
+    hlines!(ax,[chiScale*SiSjex],color = :red,label = L"exact $$")
 
     i,j = Tuple.(IJ_SS)
-    text!(ax,Point2(last(proj),chiScale*SiSjex+0.01),color = :black,text = L"%$chiScale \times \langle S^z_{%$i} S^z_{%$j}\rangle",align = (:right,:bottom))
+    scatterlines!(axConf,[Point(i),Point(j)],color = :red,marker = ['●', '◼'])
 
-    # return fig
-
-    Legend(fig[1, 1], [
-        [
-        errorBarLegend(0.6,;color = :grey,markerkwargs = (;marker=:rect)),
-    ],  [
-        errorBarLegend(0.6),
-    ],
-    [LineElement(linepoints = [Point2f(0., 0.5), Point2f(1, 0.5)]),
-    ]], [L"$N_w=1$",L"$N_w=20$",L"exact $$"], tellheight = false, tellwidth = false,halign = :right, valign = :center,margin = (10,10,120,10))
-
-    Label(fig[1,1, TopLeft()],L"a)$$",padding =(-80,20,-20,0))
-    Label(fig[2,1, TopLeft()],L"b)$$",padding =(-80,20,-20,0))
-
+    
+    if chiScale == 1
+        text!(ax,Point2(last(proj),chiScale*SiSjex+0.01),color = :red,text = L"\langle S^z_{•} S^z_{◼}\rangle",align = (:right,:bottom))
+    else
+        text!(ax,Point2(last(proj),chiScale*SiSjex+0.01),color = :red,text = L"%$chiScale \times \langle S^z_{•} S^z_{◼}\rangle",align = (:right,:bottom))
+    end
+        # return fig
+    # Legend(fig[1, 1], [
+    #     [
+    #     errorBarLegend(0.6,;color = :grey,markerkwargs = (;marker=:rect)),
+    # ],  [
+    #     errorBarLegend(0.6),
+    # ],
+    # [LineElement(linepoints = [Point2f(0., 0.5), Point2f(1, 0.5)]),
+    # ]], [L"$N_w=1$",L"$N_w=20$",L"exact $$"], tellheight = false, tellwidth = false,halign = :right, valign = :center,margin = (10,10,120,10))
+    Label(fig[1,1, TopLeft()],L"(a)$$",padding =(-80,20,-20,0))
+    Label(fig[2,1, TopLeft()],L"(b)$$",padding =(-80,20,-20,0))
+    # ylims!(ax,0.25,0.6)
     # axislegend(ax,merge=true,position = :rc,unique=true)
     # xlims!(ax,0.5,last(proj))
     # ylims!(ax,E0-1e-2,E0+3e-2)
     # ylims!(ax,-1,2)
-    save("Application/figs/PaperFigs/GFMCdemo.pdf",fig)
+    save("../../Application/figs/PaperFigs/GFMCdemo.pdf",fig)
     fig
 end
 ##
