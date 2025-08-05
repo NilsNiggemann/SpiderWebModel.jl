@@ -48,7 +48,7 @@ with_theme(theme_SimpleTicks()) do
         L"M_{\mathbf{\diagdown}} = \sum_{i ∈ □} {S^z_{i}}"
         ]
         
-    colors = [:red,:blue,:green,:orange]
+    colors = [:red,:blue,:lime,:orange]
     ax = Axis(fig[1,1];
     SW.getConfigAxis(M)...,
     backgroundcolor=:transparent,
@@ -69,11 +69,11 @@ with_theme(theme_SimpleTicks()) do
     SW.plotSpinConfig!(ax2,M)
 
     bound_points = 0.5*[
-        Point(-1,-1),
-        Point(1,-1),
-        Point(1,1),
-        Point(-1,1),
-        Point(-1,-1),
+        0.999999*Point2f(-1,-1),
+        0.999999*Point2f(1,-1),
+        0.999999*Point2f(1,1),
+        0.999999*Point2f(-1,1),
+        0.999999*Point2f(-1,-1),
     ]
 
 
@@ -96,7 +96,6 @@ with_theme(theme_SimpleTicks()) do
             SW.plotSiteHighlight!(ax2,Tuple(s);color = (colors[i],col_alpha))
         end
     end
-
     # elem_1 = [MarkerElement(color = :black, marker = '◼', markersize = 30,strokecolor = :black,strokewidth=2)]
     # elem_2 = [MarkerElement(color = :grey, marker = '◼', markersize = 30,strokecolor = :black,strokewidth=2)]
     # elem_3 = [MarkerElement(color = :white, marker = '◼', markersize = 30,strokecolor = :black,strokewidth=2)]

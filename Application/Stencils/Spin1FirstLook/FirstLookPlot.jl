@@ -245,8 +245,8 @@ function plot_overview(results_df,results_df_others)
     zoom_lines!(ax,inset_En)
     zoom_lines!(ax,inset_En2)
 
-    leftzoom = (-0.1,0.15)
-    rightzoom = (0.8,0.92)
+    leftzoom = (-0.09,0.12)
+    rightzoom = (0.8,0.916)
 
     # for (i, sector) in enumerate(reverse(sectors))
     for i in reverse(eachindex(sectors))
@@ -263,12 +263,13 @@ function plot_overview(results_df,results_df_others)
         # if i == 1
         #     translate!(tline,(0,0,10))
         # end
-        zoominds = findall(x->x>leftzoom[1]&&x<leftzoom[2], mus)
+        zoominds = findall(x->x>=leftzoom[1]&&x<=leftzoom[2], mus)
 
         tline = errlines!(inset_En, mus[zoominds], mean_energies[zoominds], std_energies[zoominds]; label=L"%$i", markersize=0.0, color = colors[i], linewidth = 3)
-        zoominds = findall(x->x>rightzoom[1]&&x<rightzoom[2], mus)
+        zoominds = findall(x->x>=rightzoom[1]&&x<=rightzoom[2], mus)
 
         tline = errlines!(inset_En2, mus[zoominds], mean_energies[zoominds], std_energies[zoominds]; label=L"%$i", markersize=0.0, color = colors[i], linewidth = 2)
+        xlims!(inset_En2, rightzoom...)
     end
 
     colors = colors[length(sectors)+1:end]
@@ -309,14 +310,14 @@ function plot_overview(results_df,results_df_others)
         
         # println(i," ", sector, " ", mean_energies)
         # tline = errlines!(ax, mus, mean_energies, std_energies, label=L"%$i", markersize=10, color = (colors[i],0.9), linewidth = 1.5)
-        tline = scatter!(ax, mus, mean_energies, std_energies, label=L"%$i", markersize=30, color = (colors[i],0.9),marker =  '×')
-        zoominds = findall(x->x>leftzoom[1]&&x<leftzoom[2], mus)
-        tline = scatter!(inset_En, mus[zoominds], mean_energies[zoominds], std_energies[zoominds], label=L"%$i", markersize=40, color = (colors[i],0.9),marker =  '×')
-        zoominds = findall(x->x>rightzoom[1]&&x<rightzoom[2], mus)
+        tline = scatter!(ax, mus, mean_energies, std_energies, label=L"%$i", markersize=50-7i, color = (colors[i],1),marker =  '×') 
+        zoominds = findall(x->x>=leftzoom[1]&&x<=leftzoom[2], mus)
+        tline = scatter!(inset_En, mus[zoominds], mean_energies[zoominds], std_energies[zoominds], label=L"%$i", markersize=50-7i, color = (colors[i],1),marker =  '×')
+        zoominds = findall(x->x>=rightzoom[1]&&x<=rightzoom[2], mus)
 
-        tline = scatter!(inset_En2, mus[zoominds], mean_energies[zoominds], std_energies[zoominds], label=L"%$i", markersize=40, color = (colors[i],0.9),marker =  '×')
+        tline = scatter!(inset_En2, mus[zoominds], mean_energies[zoominds], std_energies[zoominds], label=L"%$i", markersize=50-7i, color = (colors[i],1),marker =  '×')
     end
-
+    
     # axislegend(ax, position = :rb, merge = true,nbanks=2)
     elem_1 = [MarkerElement(color = :black, marker = '◼', markersize = 30,strokecolor = :black,strokewidth=2)]
     elem_2 = [MarkerElement(color = :grey, marker = '◼', markersize = 30,strokecolor = :black,strokewidth=2)]
@@ -341,6 +342,8 @@ function plot_overview(results_df,results_df_others)
     # Label(fig[2, 1,TopLeft()], L"(b)$$", fontsize = 22)
     Label(fig[2, 1,TopLeft()], L"(b)$$", fontsize = 22,padding = (0, 50, 0, 0))
     Label(fig[2, 5,TopLeft()], L"(c)$$", fontsize = 22, padding = (0, -12, 10, 0))
+    vlines!(ax, [1], color = :black, linewidth = 1, linestyle = :solid)
+    text!(ax, Point(0.99,-0.2),text=L"RK-point$$", color = :black, fontsize = 16, rotation = pi/2)
     save("../../figs/PaperFigs/EnergyScaling_S1_L20.pdf", fig)
     fig
 end
@@ -348,7 +351,7 @@ end
 # plot_overview(results_df,results_df_others)
 plot_overview(results_df,results_df_others)
 ##
-wL_large = 28
+L_large = 28
 results_df_large = collect_results(ENV["MYSCRATCH"]*"/Spiderweb/4x4Comp/EnergyScaling_S1_L$L_large")
 
 
@@ -380,6 +383,7 @@ let
     for (i,en) in enumerate(results_df_large.Energy)
         # scatter!(ax,i*ones(length(en)), en/L_large^2,color = colors[i], )
     end
+
     # errorbars!(eachindex(meanenergies),meanenergies,std(results_df_large.Energy))
     fig 
 end

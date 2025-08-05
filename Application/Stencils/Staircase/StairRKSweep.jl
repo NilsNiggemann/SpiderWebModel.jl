@@ -121,7 +121,7 @@ end
 with_theme(theme_SimpleTicks()) do
     fig = Figure(fontsize = 22, size = 200 .* (3, 2))
     # ax = Axis(fig[1, 1], xlabel = L"\mu", ylabel = L"E/N_\textrm{sites}", xticks = SimpleTicks(), yticks = SimpleTicks())
-    ax = Axis(fig[1, 1], xlabel = L"\mu", ylabel = L"E/N_\textrm{sites} /(1-\mu)", xticks = SimpleTicks(), yticks = SimpleTicks())
+    ax_en = Axis(fig[1, 1], xlabel = L"\mu", ylabel = L"E/N_\textrm{sites} /(1-\mu)", xticks = SimpleTicks(), yticks = SimpleTicks())
 
     Linestyles = [:dash, :dot, :dashdot, :solid, :solid]
     scatterkwargs = Dict(
@@ -141,8 +141,8 @@ with_theme(theme_SimpleTicks()) do
         enmean = mean.(energies) ./ L^2  ./ (1 .-mus)
         enstd = std.(energies) ./ L^2  ./ (1 .-mus)
 
-        scatterlines!(ax, mus, enmean, label=L"L=%$L"; linestyle, scatterkwargs[L]...,color = colors[L],)
-        errorbars!(ax, mus, enmean, enstd, whiskerwidth=5,color = colors[L],)
+        scatterlines!(ax_en, mus, enmean, label=L"L=%$L"; linestyle, scatterkwargs[L]...,color = colors[L],)
+        errorbars!(ax_en, mus, enmean, enstd, whiskerwidth=5,color = colors[L],)
 
         mufilter = findall(x -> 0.85 >= x>= 0.78 ,mus)
         scatterlines!(inset_En, mus[mufilter], enmean[mufilter], label=L"L=%$L"; linestyle, scatterkwargs[L]...,color = colors[L],)
@@ -153,9 +153,9 @@ with_theme(theme_SimpleTicks()) do
 
     # translate!(inset_En.blockscene,0,0,1000)
     # translate!(inset_En2.blockscene,0,0,1000)
-    zoom_lines!(ax,inset_En)
+    zoom_lines!(ax_en,inset_En)
 
-    axislegend(ax, position=:rb)
+    axislegend(ax_en, position=:rb)
     fig
 end
 ##
@@ -200,14 +200,54 @@ with_theme(theme_PiTicks()) do
     # muPlot = [0.8,0.9,0.9,1.0]
     muPlot = [0.8,0.81,0.9,1.0]
     
-    fig = Figure(fontsize = 22,size = 300 .*(2,2.7))
+    fig = Figure(fontsize = 22,size = 300 .*(2,3))
 
     fig_xi = GridLayout()
-    fig.layout[1,1:2] = fig_xi
-    
+    fig_en = GridLayout()
+    fig.layout[1,1:2] = fig_en
+    fig.layout[2,1:2] = fig_xi
+
+    ax_en = Axis(fig_en[1, 1], xlabel = L"\mu", ylabel = L"E/(J'N_\textrm{sites}(1-\mu) )", xticks = SimpleTicks(), yticks = SimpleTicks(),xticklabelsvisible = false,xlabelvisible = false)
+
+   
+    inset_En = Axis(fig[1,1],width = Relative(0.6),height = Relative(0.45),halign=0.65, valign=0.95, xticklabelsize= 12,yticklabelsize= 12,xticks = SimpleTicks(),yticks = SimpleTicks())
+    translate!(inset_En.blockscene,0,0,100)
+    colors = Dict(28 => (:blue,0.5), 32 => (:red,0.5), 36 => (:black,1.0))
+    for L in (36)
+    # for L in (28,32,36)
+    # for L in (28,36)
+        resL = get_res(res, L=L)
+        filter!(x->x.mu<=0.9,resL)
+        mus = unique(resL.mu)
+        energies = [getEnergy_tau(resL,18;mu) for mu in mus]
+
+        enmean = mean.(energies) ./ L^2  ./ (1 .-mus)
+        enstd = std.(energies) ./ L^2  ./ (1 .-mus)
+
+        scatterlines!(ax_en, mus, enmean, label=L"L=%$L";  color = colors[L],marker = '•',markersize = 20)
+        errorbars!(ax_en, mus, enmean, enstd, whiskerwidth=5,color = colors[L],)
+
+        mufilter = findall(x -> 0.85 >= x>= 0.75 ,mus)
+        # mufilter = findall(x -> 0.85 >= x>= 0.78 ,mus)
+
+        scatterlines!(inset_En, mus[mufilter], enmean[mufilter], label=L"L=%$L";  color = colors[L],marker = '•',markersize = 20)
+        errorbars!(inset_En, mus[mufilter], enmean[mufilter], enstd[mufilter], whiskerwidth=5,color = colors[L])
+    end
+    xlims!(inset_En,0.78,0.83)
+    ylims!(inset_En,-0.218,-0.208)
+    # inset_En2 = Axis(fig[1,1],width = Relative(0.3),height = Relative(0.3),halign=0.8, valign=0.2)
+
+    # translate!(inset_En.blockscene,0,0,1000)
+    # translate!(inset_En2.blockscene,0,0,1000)
+    zoom_lines!(ax_en,inset_En)
+
+    axislegend(ax_en, position=:rb)
+
+
     # axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\xi/L",xticks = SimpleTicks(),yticks = SimpleTicks())
     # axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\mathcal{S}(\frac{\pi}{2},\frac{\pi}{2})",xticks = SimpleTicks(),yticks = SimpleTicks())
     axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\mathcal{S}(\pi/2,\ \pi/2)",xticks = SimpleTicks(),yticks = SimpleTicks())
+    linkxaxes!(ax_en, axis)
 
     colors = Dict(28 => :blue, 32 => :red, 36 => :black)
 
@@ -223,14 +263,14 @@ with_theme(theme_PiTicks()) do
         xi = getindex.(data,1)
         xierr = getindex.(data,2)
         mu = getindex.(data,3) 
-        scatterlines!(axis,mu,xi,marker = '•' ,markersize = 16,label = "L = $L", color = colors[L], )
+        scatterlines!(axis,mu,xi,marker = '•' ,markersize = 20,label = L"L = %$L", color = colors[L], )
         errorbars!(axis,mu,xi,xierr,whiskerwidth = 6,linewidth=0.5, color = colors[L], )
     end
     # xlims!(axis,0.6,1)
     # ylims!(axis,0.0,70)
     axislegend(axis,position = :rt)
     fig_SQ = GridLayout()
-    fig.layout[2,1:2] = fig_SQ
+    fig.layout[3,1:2] = fig_SQ
 
 
     ticks = PiTicks([0, pi])
@@ -266,8 +306,9 @@ with_theme(theme_PiTicks()) do
         # band!(axes[i, j], [-0.5pi, 0.5pi], [1.1pi, 1.1pi], [1.5pi, 1.5pi], color=(:black, 0.5))
         # text!(axes[i, j], Point(0, 1.3pi), text=L"μ = %$mu", color=:white, align=(:center, :center))
     end
-    rowsize!(fig.layout, 1, Relative(0.35))
-    # rowgap!(fig.layout, 1, 5)
+    rowsize!(fig.layout, 1, Relative(0.25))
+    rowsize!(fig.layout, 2, Relative(0.25))
+    rowgap!(fig.layout, 1, -20)
     colsize!(fig_SQ, 2, Relative(0.05))
     colsize!(fig_SQ, 4, Relative(0.05))
     colgap!(fig_SQ, 1, 2)
@@ -275,7 +316,11 @@ with_theme(theme_PiTicks()) do
     colgap!(fig_SQ, 3, 2)
     Label(fig[1, 1, TopLeft()], L"(a)$$", padding = (-20, 0, -10, 0))
     Label(fig[2, 1, TopLeft()], L"(b)$$", padding = (-20, 0, -10, 0))
-    Label(fig[2, 1:2, Top()], L"\mathcal{S}(\mathbf{q})", padding = (0, 0, 10, 0))
+    Label(fig[3, 1, TopLeft()], L"(c)$$", padding = (-20, 0, -10, 0))
+    Label(fig[3, 1:2, Top()], L"\mathcal{S}(\mathbf{q})", padding = (0, 0, 10, 0))
+    vlines!(ax_en,[0.805],color = :grey,linestyle = :dash,linewidth = 2,label = L"\mu_c")
+    vlines!(axis,[0.805],color = :grey,linestyle = :dash,linewidth = 2,label = L"\mu_c")
+    vlines!(inset_En,[0.805],color = :grey,linestyle = :dash,linewidth = 2,label = L"\mu_c")
     # colgap!(fig.layout, 2, 0)
     save("../../figs/PaperFigs/StairCaseSpin1Overview.pdf", fig)
     fig
@@ -399,10 +444,10 @@ with_theme(theme_SimpleTicks()) do
     # text!(axFT,Point(pi,1.4pi),text=L"r = %$(strd(fittingCoefs[2]))",color = :white,align = (:center,:center))
     
     textpos = Point(-pi,2pi)
-    text!(ax, textpos ,text = L"(a)$$",color = (:white,0.),strokecolor = (:black,0.3),strokewidth=5,align = (:left,:top),fontsize = 22)
-    text!(ax, textpos ,text = L"(a)$$",color = :white,align = (:left,:top),fontsize = 22)
-    text!(axFT, textpos ,text = L"(b)$$",color = (:white,0.),strokecolor = (:black,0.3),strokewidth=5,align = (:left,:top),fontsize = 22)
-    text!(axFT, textpos ,text = L"(b)$$",color = :white,align = (:left,:top),fontsize = 22)
+    text!(ax, textpos ,text = L"(a) GFMC$$",color = (:white,0.),strokecolor = (:black,0.4),strokewidth=3,align = (:left,:top),fontsize = 22)
+    text!(ax, textpos ,text = L"(a) GFMC$$",color = :white,align = (:left,:top),fontsize = 22)
+    text!(axFT, textpos ,text = L"(b) Field theory$$",color = (:white,0.),strokecolor = (:black,0.4),strokewidth=3,align = (:left,:top),fontsize = 22)
+    text!(axFT, textpos ,text = L"(b) Field theory$$",color = :white,align = (:left,:top),fontsize = 22)
     text!(axPath, Point(0.01,0.98) ,text = L"(c)$$",color = :black,align = (:left,:top),fontsize = 22,space = :relative)
     Colorbar(fig[1,1:end], hm, label = L"\mathcal{S}(\mathbf{q})", ticks = SimpleTicks(), vertical = false, flipaxis = true, halign = :left, width = Relative(0.99),height = Relative(0.5),labelpadding = -9)
     # colsize!(fig.layout,3,Relative(0.06))

@@ -787,7 +787,7 @@ with_theme(theme_SimpleTicks()) do
     ax_scal2.alignmode = Mixed(right = 0)
 
     Label(fig[1,1:3,Top()],L"Spin model$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,0,50,0))
-    Label(fig[1,4,Top()],L"Gauge theory$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,0,50,0))
+    Label(fig[1,4,Top()],L"Field theory$$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,0,50,0))
     Label(fig[1,4,Top()],L"$\mathcal{S}^\mathrm{FT}(\mathbf{q})$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,0,-50,0))
     # Label(fig[2,4,Top()],L"$\omega(\mathbf q)$", fontsize = 24,tellheight=false,tellwidth=false,padding = (0,0,40,0))
     
@@ -827,3 +827,4 @@ let
 
     
 end
+
