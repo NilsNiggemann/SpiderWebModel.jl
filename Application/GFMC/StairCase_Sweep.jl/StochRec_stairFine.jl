@@ -39,7 +39,7 @@ LinearAlgebra.BLAS.set_num_threads(Threads.nthreads())
 import SpiderWebModel as SW
 using SpiderWebModel.HDF5
 using SpiderWebModel.Statistics
-i_arg = isinteractive() ? 4 : parse(Int, ARGS[1])
+i_arg = isinteractive() ? 1 : parse(Int, ARGS[1])
 
 μs = range(0.81,0.89,length = 5)
 
@@ -120,14 +120,8 @@ Symmetry = SW.TranslationalSymmetry(SW.SA[2,2],SW.SA[-2,2])
 # ψGSymm = SW.getNonSymmetric(ψG)
 SW.rand!(ψGSymm,1e-6)
 
-SRdir = ENV["MYSCRATCH"]*"/Spiderweb/DataStochRec/L=$L/periodic_RK_Full_$(SECTOR_NAME)/$(SW.guidingfunc_name(ψG))/mu=$(μ)/"
-mkpath(SRdir)
-SRoutfiles = readdir(SRdir,join=true)
-
 getOutfilename(i) = joinpath(SRdir,"StochRec_L=$(L)_tau=$(CT_stochRec.τ)_NW=$(NWalkers_stochRec)_mu=$(μ)_$(i).h5")
 
-CT = SW.ContinuousTimeMethod(τ,w_avg_estimate = length(parentState)*(1-μ),Hxx = SW.Hxx_RK(μ))
-CT_stochRec = SW.ContinuousTimeMethod(40τ,w_avg_estimate = CT.w_avg_estimate,Hxx = CT.Hxx)
 ##
 function findNonZeroEn(filename)
     e0 = h5read(filename,"E0")

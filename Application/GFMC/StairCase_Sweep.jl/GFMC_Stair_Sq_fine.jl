@@ -2,7 +2,7 @@
 #=
 #!/bin/bash
 # SBATCH --dependency=afterok:21839386
-#SBATCH --job-name=LmuStair
+#SBATCH --job-name=FLmuStair
 # SBATCH --job-name=tidyup
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
 #SBATCH --nodes=1
@@ -26,7 +26,7 @@ module load lang/JuliaHPC/1.10.1-foss-2022a-CUDA-11.7.0
 julia -O3 -t $SLURM_CPUS_PER_TASK --heap-size-hint=210G /pc2/groups/hpc-prf-pm2frg/niggeni/Jobs/SpiderWebModel.jl/Application/GFMC/StairCase_Sweep.jl/GFMC_Stair_Sq_fine.jl $SLURM_ARRAY_TASK_ID
 exit
 =#
-#29,30,31,32,33,34,35,36,37,38,39,40,41,42,99,100,101,102,103,104,105,106,107,108,109,110,111,112,169,170,171,172,173,174,175,176,177,178,179,180,181,182
+#1,4,5,10,11,12,13,14,15,16,17,18,19
 cd(@__DIR__)
 using Pkg
 Pkg.activate(@__DIR__)
@@ -37,7 +37,7 @@ end
 import SpiderWebModel as SW
 using SpiderWebModel.HDF5
 using SpiderWebModel.Statistics
-i_arg = isinteractive() ? 30 : parse(Int, ARGS[1])
+i_arg = isinteractive() ? 4 : parse(Int, ARGS[1])
 
 # μs = range(0.81,0.89,length = 5)
 μs = (0.78,0.81,0.85)
@@ -126,8 +126,22 @@ parentState = get_S_stair!(
 
 ψG = SW.SimpleJastrowFunction(parentState)
 
-SRdir = ENV["MYSCRATCH"]*"/Spiderweb/DataStochRec/L=$L/periodic_RK_Full_$(SECTOR_NAME)/$(SW.guidingfunc_name(ψG))/mu=$(μ)/"
-mkpath(SRdir)
+SRdir = ENV["MYSCRATCH"]*"/Spiderweb/DataStochRec/L=$L/periodic_RK_Full_$(SECTOR_NAME)/$(SW.guidingfunc_name(ψG))/"
+SRoutfiles = readdir(SRdir,join=true)
+
+mus_SR = [parse(Float64, match(r"mu=([^\s]+)", file).captures[1]) for file in SRoutfiles]
+
+mu_SR = mus_SR[argmin(abs(muS-μ) for muS in mus_SR)]
+
+if mu_SR != μ
+    println("SR mu=$μ not equal GFMC mu!")
+    println("Using mu= $mu_SR for GFMC GWF!")
+    if abs(mu_SR-μ) > 0.1
+        error("SR mu=$mu_SR not close enough to GFMC mu=$μ!")
+    end
+end
+# mkpath(SRdir)
+SRdir = joinpath(SRdir,"mu=$(mu_SR)/")
 SRoutfiles = readdir(SRdir,join=true)
 
 CT = SW.ContinuousTimeMethod(τ,w_avg_estimate = length(parentState)*0.21*(1-μ),Hxx = SW.Hxx_RK(μ))

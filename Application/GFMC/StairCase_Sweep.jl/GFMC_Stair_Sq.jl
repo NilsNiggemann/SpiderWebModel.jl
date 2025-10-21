@@ -2,7 +2,7 @@
 #=
 #!/bin/bash
 # SBATCH --dependency=afterok:20794586
-#SBATCH --job-name=FLmuStair
+#SBATCH --job-name=LmuStair
 # SBATCH --job-name=tidyup
 #SBATCH --mail-user=nils.niggemann@fu-berlin.de
 #SBATCH --nodes=1
