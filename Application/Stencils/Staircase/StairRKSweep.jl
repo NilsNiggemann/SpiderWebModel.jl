@@ -2,10 +2,9 @@ import SpiderWebModel as SW
 using CairoMakie, MakieHelpers,Statistics
 using SpiderWebModel.HDF5
 using DataFrames
-
+using MakieExtra
 include("../plottingUtils.jl")
 include("../FSSUtils.jl")
-
 ##
 
 function file_format(filename)
@@ -53,14 +52,26 @@ function getSq_tau_mean_std(res::DataFrame,tau)
     mean(Sqtau), std(Sqtau)
 end
 
+function getEnergy_tau(res::DataFrame,tau;kwargs...)
+    res = get_res(res;kwargs...)
+    Dtaus = res.tau
+
+    taus = [axes(Energies,1) .* t for (Energies,t) in zip(res.Energy,Dtaus)]
+    tauInds = [findfirst(>=(tau),t) for t in taus]
+
+    # return tauInds
+    return [res.Energy[i][ti] for (i,ti) in enumerate(tauInds)]
+end
+
 function getRes_2(folder)
     files = let
         filesunsrt = [joinpath(root,file) for (root,_,files) in walkdir(folder) for file in files]
         fileformats = file_format.(filesunsrt)
         invalid_files = findall(iszero,fileformats)
         if !isempty(invalid_files)
-            println("invalid files:")
-            println(filesunsrt[invalid_files])
+            # rm.(filesunsrt[invalid_files])
+            # println("invalid files:")
+            # println(filesunsrt[invalid_files])
         end
         filesunsrt = [f for (f,i) in zip(filesunsrt,fileformats) if i == 2]
         mus = [h5read(file,"mu") for file in filesunsrt]
@@ -72,20 +83,30 @@ function getRes_2(folder)
     Energy = [h5read(file,"Energy") for file in files]
     Sq = [h5read(file,"StructureFactor") for file in files]
     tau = [h5read(file,"τ") for file in files]
+    NWalkers = [h5read(file,"NWalkers") for file in files]
 
-    res= DataFrame(;L,mu,Energy,Sq,tau,files)
+    res= DataFrame(;L,mu,Energy,Sq,tau,NWalkers,files)
     sort!(res,[:mu,:L])
 end
 ##
-res = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase/")
-filter!(x->x.mu>=0.6 && x.L>20,res)
+res = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase_merge/")
+# res2 = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase_2/")
+# res3 = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase_3/")
+# res2fine = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase_fine_2/")
+# res2fine_2 = getRes_2(ENV["MYSCRATCH"]*"Spiderweb/DataS1_CT_RK_equil/StairCase_fine/")
+# filter!(x->!(x.mu in res2.mu && x.L in res2.L),res)
+# filter!(x->!(x.mu in res3.mu && x.L in res3.L),res)
+# res = vcat(res,res2,res2fine,res3)
+# filter!(x->!(x.mu ==0.8 && x.L==36 && x.NWalkers <20000),res)
+# filter!(x->x.mu>=0.6,res)
+sort!(res,[:mu,:L])
+
 ##
 with_theme(theme_SimpleTicks()) do
-    ind = 1
-    L = 32
+    L = 36
     resL = get_res(res,L=L,mu=0.8)
 
-    Nsites = length(getSq_tau(res,10.))
+    Nsites = length(getSq_tau(res,8.))
     enmean = mean(resL.Energy)./ Nsites
 
     enstd = std(resL.Energy)./ Nsites
@@ -93,105 +114,72 @@ with_theme(theme_SimpleTicks()) do
     # enstd = std(entest,dims=2)[:,1]
     tau = only(unique(resL.tau)) .* (eachindex(enmean) .-1)
     errlines(tau,enmean,enstd,axis = (;ylabel = L"E/N_\text{sites}",xlabel = L"\tau"))
-    # lines((eachindex(enmean).-1) .*tau,enmean,axis = (;ylabel = L"E/N_\text{sites}",xlabel = L"\tau"))
-    # band!((eachindex(enmean).-1) .*tau,enmean - enstd , enmean + enstd,color = (:black,0.2))
     # current_figure()
 
 end
 ##
-xis = getXiCol(res,(pi/2,pi/2);tau = 10)
-Sqmax = getSqMaxCol(res,(pi/2,pi/2),tau = 10)
-res.xi = xis
-res.Sqmax = Sqmax
-##
-with_theme(theme_PiTicks()) do
-    L = 36
-    # muPlot = [0.1,0.8,0.9,1.0]
-    muPlot = [0.6,0.8,0.9,1.0]
-    
-    fig = Figure(fontsize = 22,size = 300 .*(2,2.5))
+with_theme(theme_SimpleTicks()) do
+    fig = Figure(fontsize = 22, size = 200 .* (3, 2))
+    # ax = Axis(fig[1, 1], xlabel = L"\mu", ylabel = L"E/N_\textrm{sites}", xticks = SimpleTicks(), yticks = SimpleTicks())
+    ax_en = Axis(fig[1, 1], xlabel = L"\mu", ylabel = L"E/N_\textrm{sites} /(1-\mu)", xticks = SimpleTicks(), yticks = SimpleTicks())
 
-    fig_xi = GridLayout()
-    fig.layout[1,1:2] = fig_xi
-    
-    axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\xi/L",xticks = SimpleTicks(),yticks = SimpleTicks())
+    Linestyles = [:dash, :dot, :dashdot, :solid, :solid]
+    scatterkwargs = Dict(
+        28 => (;marker = '●'),
+        32 => (;marker = '▼', markersize = 10),
+        36 => (;marker = '▲', markersize = 10),
+    )
+    inset_En = Axis(fig[1,1],width = Relative(0.3),height = Relative(0.5),halign=0.2, valign=0.85, xticklabelsize= 16,yticklabelsize= 16)
+    translate!(inset_En.blockscene,0,0,100)
+    colors = Dict(28 => :blue, 32 => :red, 36 => :black)
+    for (L, linestyle) in zip((28,32,36), Linestyles)
+        resL = get_res(res, L=L)
+        filter!(x->x.mu<=0.9,resL)
+        mus = unique(resL.mu)
+        energies = [getEnergy_tau(resL,10;mu) for mu in mus]
 
-    for L in filter!(<(40), unique(res.L))
-        resFilt = filter(x->x.L==L,res)
-        unique_mus = unique(resFilt.mu)
-        data = map(unique_mus) do mu
-            resmu = filter(x->x.mu==mu,resFilt)
-            return mean(resmu.xi)/L, std(resmu.xi)/L ,mu
-            # return mean(resmu.Sqmax), std(resmu.Sqmax) ,mu
-        end
-        xi = getindex.(data,1)
-        xierr = getindex.(data,2)
-        mu = getindex.(data,3)
-        scatterlines!(axis,mu,xi,marker = '×',markersize = 10,label = "L = $L")
-        errorbars!(axis,mu,xi,xierr,whiskerwidth = 6,linewidth=0.5)
+        enmean = mean.(energies) ./ L^2  ./ (1 .-mus)
+        enstd = std.(energies) ./ L^2  ./ (1 .-mus)
+
+        scatterlines!(ax_en, mus, enmean, label=L"L=%$L"; linestyle, scatterkwargs[L]...,color = colors[L],)
+        errorbars!(ax_en, mus, enmean, enstd, whiskerwidth=5,color = colors[L],)
+
+        mufilter = findall(x -> 0.85 >= x>= 0.78 ,mus)
+        scatterlines!(inset_En, mus[mufilter], enmean[mufilter], label=L"L=%$L"; linestyle, scatterkwargs[L]...,color = colors[L],)
+        errorbars!(inset_En, mus[mufilter], enmean[mufilter], enstd[mufilter], whiskerwidth=5,color = colors[L])
     end
-    # xlims!(axis,0.6,1)
-    # ylims!(axis,0.0,70)
-    axislegend(axis,position = :rt)
-    fig_SQ = GridLayout()
-    fig.layout[2,1:2] = fig_SQ
 
+    # inset_En2 = Axis(fig[1,1],width = Relative(0.3),height = Relative(0.3),halign=0.8, valign=0.2)
 
-    ticks = PiTicks([0, pi])
+    # translate!(inset_En.blockscene,0,0,1000)
+    # translate!(inset_En2.blockscene,0,0,1000)
+    zoom_lines!(ax_en,inset_En)
 
-    axInds = [(i,(2j-1)) for (i, j) in Iterators.product(1:2, 1:2)]
-    ColbarInds = [(i,j+1) for (i, j) in axInds]
-
-    axes = [Axis(fig_SQ[i, j], aspect=1,
-    yticklabelsvisible=j==1, xticks=ticks, yticks=ticks, xlabel=L"q_x", ylabel=L"q_y", ylabelvisible=j==1,xticklabelsvisible= i==2, xlabelvisible = i==2) 
-    for (i, j) in axInds]
-    
-
-    for (idx, mu) in enumerate(muPlot)
-        i, j = divrem(idx - 1, 2) .+ 1
-        SqMat = SW.expand_Sq(mean(getSq(res, tau=4., L=L, mu=mu)))
-
-        kx = ky = trueMomenta(-pi/2, 1.5pi, L)
-
-        SqFunc = SW.getSqCont(SqMat)
-        Sqpl = SqFunc.(Iterators.product(kx, ky))
-        hm = heatmap!(axes[i, j], kx, ky, Sqpl, colormap=:viridis)
-        Colorbar(fig_SQ[ColbarInds[idx]...], hm, ticks=SimpleTicks(), vertical=true, flipaxis=true, label=L"\mathcal{S}(\mathbf{q})", width=Relative(0.5),labelvisible=ColbarInds[idx][2] == 4)
-        
-        text!(axes[i, j], Point(0.5,0.99), text=L"\mu = %$(mu)", align=(:center, :top),space = :relative, strokecolor = (:black,0.3), strokewidth = 4)
-        text!(axes[i, j], Point(0.5,0.99), text=L"\mu = %$(mu)", align=(:center, :top),space = :relative,color = :white)
-
-        # band!(axes[i, j], [-0.5pi, 0.5pi], [1.1pi, 1.1pi], [1.5pi, 1.5pi], color=(:black, 0.5))
-        # text!(axes[i, j], Point(0, 1.3pi), text=L"μ = %$mu", color=:white, align=(:center, :center))
-    end
-    rowsize!(fig.layout, 1, Relative(0.4))
-    # rowgap!(fig.layout, 1, 5)
-    colsize!(fig_SQ, 2, Relative(0.05))
-    colsize!(fig_SQ, 4, Relative(0.05))
-    Label(fig_xi[1, 1, TopLeft()], L"a)$$", padding = (-30, 0, -10, 0))
-    Label(fig_SQ[1, 1, TopLeft()], L"b)$$", padding = (-30, 0, -10, 0))
-    # colgap!(fig.layout, 2, 0)
-    save("../../figs/PaperFigs/StairCaseSpin1Overview.pdf", fig)
+    axislegend(ax_en, position=:rb)
     fig
 end
-
 ##
 with_theme(theme_SimpleTicks()) do
-    L = 28
-    muIndex = findfirst(>=(0.2),res[L].mus)
-    SqsGFMC = res[L].Sqs[:,:,:,:,muIndex]./ 4
-    SqMat = dropmean(SqsGFMC,dims=4)
-    SqErr = dropstd(SqsGFMC,dims=4)
+    L = 36
+    resL = get_res(res,mu=0.81,L=L)
+
+    SqsGFMC = resL.Sq
+
+    SqMat = mean(SqsGFMC)
+    SqErr = std(SqsGFMC)
+
     fig = Figure(size = 120 .* (4,4))
     ax = Axis(fig[1,1],xlabel = L"τ",ylabel = L"\mathcal{S}(\mathbf{q})")
-    p_Sq = res[L].p_Sq[:,muIndex]
-    dTau = res[L].taus[muIndex]
-    tau = p_Sq .*dTau
+
+    dTau = only(unique(resL.tau))
+    tau = (axes(SqMat,3).-1) .*dTau
     # return heatmap(SqMat[:,:,20])
     Sq_examp = SqMat[:,:,10]
     inds = sort(collect(CartesianIndices(Sq_examp))[:],by = x->Sq_examp[x],rev=true)
-    # for I in ((5,5),(7,7),(10,3),(5,9))
-    for I in inds[[1,5,15,12,20,50]]
+    for I in ((2,1),(7,7),(10,3),(5,9),inds[1])
+    # for I in inds[end-100:2:end-80]
+    # for I in inds[[1,5,15,12,20,50,end÷4]]
+    # for I in inds
         i,j = Tuple(I)
         range = 1:120
         # scatterlines!(ax,tau[range],SqMat[i,j,range],marker = '×')
@@ -200,391 +188,215 @@ with_theme(theme_SimpleTicks()) do
     end
     fig
 end
+
 ##
-with_theme(theme_SimpleTicks()) do 
-    L = 24
-    muIndex = findfirst(>=(0.7),res[L].mus)
-    SqsGFMC = res[L].Sqs[:,:,100,:,muIndex]./ 4
-    SqMat = dropmean(SqsGFMC,dims=3)
-    SqErr = dropstd(SqsGFMC,dims=3)
-    fittingCoefs = optimizeCoeffs(SqMat)
+xis = getXiCol(res,(pi/2,pi/2);tau = 3)
+Sqmax = getSqMaxCol(res,(pi/2,pi/2),tau = 3)
+res.xi = xis
+res.Sqmax = Sqmax
 
-    μ = res[L].mus[muIndex]
-    fig = Figure(size = 120 .* (4,4))
-
-    axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1,xticks = PiTicks(), yticks = PiTicks())
-
-    ax = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1,xticks = PiTicks(), yticks = PiTicks(),ylabelvisible = false,yticklabelsvisible = false)
-
-    # ax2 = Axis(fig[2,1:2],xlabel = L"|\mathbf{q}|^2",ylabel = L"\mathcal{S}(\mathbf{q})",title = L"μ= %$μ")
-    Sq = SW.getSqCont(SqMat)
-    Sqerr = SW.getSqCont(SqErr)
-    qx = qy = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
-    Sq_q = collect(Iterators.product(qx,qy))
-    Sq_q = Sq.(Iterators.product(qx,qy))
-    heatmap!(ax,qx,qy,Sq_q)
+with_theme(theme_PiTicks()) do
+    LPlot = 36
+    # muPlot = [0.8,0.9,0.9,1.0]
+    muPlot = [0.8,0.81,0.9,1.0]
     
-    SqFT = [SqFieldTheory(x,y,fittingCoefs...) for x in qx, y in qy]
-    heatmap!(axFT,qx,qy,SqFT)
+    fig = Figure(fontsize = 22,size = 300 .*(2,3))
 
-    q_path(r,phi) = (r*cos(phi),r*sin(phi))
-    qr = LinRange(0,.35pi,100)
-    
-    colors = (:red,:blue,:magenta)
-    
+    fig_xi = GridLayout()
+    fig_en = GridLayout()
+    fig.layout[1,1:2] = fig_en
+    fig.layout[2,1:2] = fig_xi
 
+    ax_en = Axis(fig_en[1, 1], xlabel = L"\mu", ylabel = L"E/(J'N_\textrm{sites}(1-\mu) )", xticks = SimpleTicks(), yticks = SimpleTicks(),xticklabelsvisible = false,xlabelvisible = false)
 
-    let color = :black
+   
+    inset_En = Axis(fig[1,1],width = Relative(0.6),height = Relative(0.45),halign=0.65, valign=0.95, xticklabelsize= 12,yticklabelsize= 12,xticks = SimpleTicks(),yticks = SimpleTicks())
+    translate!(inset_En.blockscene,0,0,100)
+    colors = Dict(28 => (:blue,0.5), 32 => (:red,0.5), 36 => (:black,1.0))
+    for L in (36)
+    # for L in (28,32,36)
+    # for L in (28,36)
+        resL = get_res(res, L=L)
+        filter!(x->x.mu<=0.9,resL)
+        mus = unique(resL.mu)
+        energies = [getEnergy_tau(resL,18;mu) for mu in mus]
 
-        KPoints = Dict([
-            "Γ" => SVector(0,0),
-            "X" => SVector(pi,0),
-            "M" => SVector(pi,pi),
-            "X'" => SVector(0,pi)
-            ])
-        kpath = ["Γ","X","X'","Γ"]
-        pointlabels,p1 = fetchKPath([KPoints[k] for k in kpath],500)
-        kpointlabels = Makie.latexstring.(kpath)
-        tRange = eachindex(p1)
-        xygrid = [(x,y) for x in qx, y in qy]
-    
-        
-        axPath = Axis(fig[2,1:2],ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
-        )
-        tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
-        
-    
-        p1_points = xygrid[p1_discrete]
+        enmean = mean.(energies) ./ L^2  ./ (1 .-mus)
+        enstd = std.(energies) ./ L^2  ./ (1 .-mus)
 
-        Sqcut = [Sq(x,y) for (x,y) in p1_points]
-        Sqerrcut = [Sqerr(x,y) for (x,y) in p1_points]
-        SqFT = [SqFieldTheory(q,fittingCoefs) for q in p1_points]
+        scatterlines!(ax_en, mus, enmean, label=L"L=%$L";  color = colors[L],marker = '•',markersize = 20)
+        errorbars!(ax_en, mus, enmean, enstd, whiskerwidth=5,color = colors[L],)
 
-        # SqFT = [SqFieldTheory(q,1,10) for q in qpoints]
-        scatter!(ax,p1_points,marker = '∘' ,color = color,markersize = 10)
-        scatterlines!(axFT,p1_points,color = color,linestyle = :dash,marker = '●',markersize = 2)
-        # tRange = SW.norm.(p1).^2
-        scatter!(axPath,tRange,Sqcut,
-        marker = '∘',markersize = 15,color = color)
-        errorbars!(axPath,tRange,Sqcut,Sqerrcut,color = color,whiskerwidth = 6,linewidth=0.5)
-        scatterlines!(axPath,tRange,SqFT,color = color,linestyle = :dash,marker = '●',markersize = 4)
-        
-        text!(axFT,Point(0,0),text="Γ",color = :white,align = (:center,:center))
-        text!(axFT,Point(pi,0),text="X",color = :white,align = (:center,:center))
-        text!(axFT,Point(0,pi),text="X'",color = :white,align = (:center,:center))
+        mufilter = findall(x -> 0.85 >= x>= 0.75 ,mus)
+        # mufilter = findall(x -> 0.85 >= x>= 0.78 ,mus)
+
+        scatterlines!(inset_En, mus[mufilter], enmean[mufilter], label=L"L=%$L";  color = colors[L],marker = '•',markersize = 20)
+        errorbars!(inset_En, mus[mufilter], enmean[mufilter], enstd[mufilter], whiskerwidth=5,color = colors[L])
     end
+    xlims!(inset_En,0.78,0.83)
+    ylims!(inset_En,-0.218,-0.208)
+    # inset_En2 = Axis(fig[1,1],width = Relative(0.3),height = Relative(0.3),halign=0.8, valign=0.2)
 
-    # for (phi,color) in zip([0,pi/4],colors)
-    #     qpoints_raw = q_path.(qr,phi)
-    #     qpoints = sort!(unique!(roundToTrueMomenta.(qpoints_raw,size(SqMat,1)-1)), by = SW.norm)
+    # translate!(inset_En.blockscene,0,0,1000)
+    # translate!(inset_En2.blockscene,0,0,1000)
+    zoom_lines!(ax_en,inset_En)
 
-    #     Sqcut = Sq.(qpoints)
-    #     Sqerrcut = Sqerr.(qpoints)
-        
-    #     # SqFT = [SqFieldTheory(q,1,10) for q in qpoints]
-    #     SqFT = [SqFieldTheory(q,fittingCoefs...) for q in qpoints]
-    #     scatter!(ax,qpoints,marker = '×' ,color = color)
-    #     scatterlines!(axFT,Point.(qpoints),color = color,linestyle = :dash,marker = '●',markersize = 4)
-    #     qnorms_sq = SW.norm.(qpoints).^2
-    #     scatter!(ax2,qnorms_sq,Sqcut,
-    #     marker = '×',markersize = 15,color = color)
-    #     errorbars!(ax2,qnorms_sq,Sqcut,Sqerrcut,color = color,whiskerwidth = 6,linewidth=0.5)
-    #     scatterlines!(ax2,qnorms_sq,SqFT,color = color,linestyle = :dash,marker = '●',markersize = 4)
-    # end
-    rowsize!(fig.layout,1,Relative(0.5))
-
-    Label(fig[1,1, TopLeft()],L"a)$$",padding = (-30,0,-10,0))
-    Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-10,0))
-    Label(fig[2,1, TopLeft()],L"c)$$",padding = (-30,0,-10,0))
-    # Label(fig[3,1, TopLeft()],L"d)$$",padding = (-30,0,-10,0))
-
-    fig
-end
-
-with_theme(theme_PiTicks()) do 
-    mu = 0.7
-    fig = Figure(fontsize = 22,size = 400 .*(1.4,2.4))
-    ticks = PiTicks([0,pi])
-    axes = [
-        Axis(fig[1,1],aspect = 1,xlabel = L"q_x",ylabel = L"q_y",xticks = ticks,yticks = ticks,title = L"μ = %$(mu)"),
-        Axis(fig[2,1],aspect = 1,xlabel = L"q_x",ylabel = L"q_y",xticks = ticks,yticks = ticks,title = L"μ = %$(mu)"),
-    ]
-
-    for (i,ax1,L) in zip((1,2),axes,(20,24))
-        # Sq = getSq_tau(res[L],13)
-        mus = res[L].mus
-        
-        muIndex = findfirst(>=(mu),mus)
-        SqsGFMC = res[L].Sqs[:,:,end,:,muIndex]./ 4
-        # SqsGFMC = Sq[:,:,:,muIndex]./ 4
-
-        SqMat = dropdims(mean(SqsGFMC,dims=3),dims=3)
-        SqErr = dropdims(std(SqsGFMC,dims=3),dims=3)
+    axislegend(ax_en, position=:rb)
 
 
-        # ax2 = Axis(fig[1,1],aspect = 1,xlabel = L"q_x",ylabel = L"q_y",xticks = ticks,yticks = ticks,title = L"μ = 0.6")
-        kx = ky = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
+    # axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\xi/L",xticks = SimpleTicks(),yticks = SimpleTicks())
+    # axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\mathcal{S}(\frac{\pi}{2},\frac{\pi}{2})",xticks = SimpleTicks(),yticks = SimpleTicks())
+    axis = Axis(fig_xi[1,1],xlabel = L"μ",ylabel = L"\mathcal{S}(\pi/2,\ \pi/2)",xticks = SimpleTicks(),yticks = SimpleTicks())
+    linkxaxes!(ax_en, axis)
+
+    colors = Dict(28 => :blue, 32 => :red, 36 => :black)
+
+    for L in filter!(<(40), unique(res.L))
+        resFilt = filter(x->x.L==L,res)
+        unique_mus = unique(resFilt.mu)
+        data = map(unique_mus) do mu
+            resmu = filter(x->x.mu==mu,resFilt)
+            # return mean(resmu.xi)/L, std(resmu.xi)/L ,mu
+            # return mean(resmu.Sqmax), std(resmu.Sqmax) ,mu
+            return mean(resmu.Sqmax), std(resmu.Sqmax) ,mu
+        end
+        xi = getindex.(data,1)
+        xierr = getindex.(data,2)
+        mu = getindex.(data,3) 
+        scatterlines!(axis,mu,xi,marker = '•' ,markersize = 20,label = L"L = %$L", color = colors[L], )
+        errorbars!(axis,mu,xi,xierr,whiskerwidth = 6,linewidth=0.5, color = colors[L], )
+    end
+    # xlims!(axis,0.6,1)
+    # ylims!(axis,0.0,70)
+    axislegend(axis,position = :rt)
+    fig_SQ = GridLayout()
+    fig.layout[3,1:2] = fig_SQ
+
+
+    ticks = PiTicks([0, pi])
+
+    axInds = [(i,(2j-1)) for (i, j) in Iterators.product(1:2, 1:2)]
+    ColbarInds = [(i,j+1) for (i, j) in axInds]
+
+    axes = [Axis(fig_SQ[i, j], aspect=1, xminorticks = IntervalsBetween(2), xminorticksvisible = true,
+    yminorticks = IntervalsBetween(2), yminorticksvisible = true,
+    yticklabelsvisible=j==1, xticks=ticks, yticks=ticks, xlabel=L"q_x", ylabel=L"q_y", ylabelvisible=j==1,xticklabelsvisible= i==2, xlabelvisible = i==2) 
+    for (i, j) in axInds]
+    
+    for (idx, mu) in enumerate(muPlot)
+        i, j = divrem(idx - 1, 2) .+ 1
+        SqMat = SW.expand_Sq(mean(getSq(res, tau=12., L=LPlot, mu=mu)))
+
+        kx = ky = trueMomenta(-pi/2, 1.5pi, LPlot)
+
         SqFunc = SW.getSqCont(SqMat)
+        Sqpl = SqFunc.(Iterators.product(kx, ky))
+        hm = heatmap!(axes[i, j], kx, ky, Sqpl, colormap=:viridis)
 
-        # SqFunc = SW.getSqCont(SqMat)
+        Colorbar(fig_SQ[ColbarInds[idx]...], hm, 
+        ticks=SimpleTicks(), vertical=true, flipaxis=true, 
+        # label=L"\mathcal{S}(\mathbf{q})",
+        halign = :left,
+        width=Relative(0.5),
+        labelvisible=ColbarInds[idx][2] == 4)
+        
+        text!(axes[i, j], Point(0.5,0.99), text=L"\mu = %$(mu)", align=(:center, :top),space = :relative, strokecolor = (:black,0.3), strokewidth = 4)
+        text!(axes[i, j], Point(0.5,0.99), text=L"\mu = %$(mu)", align=(:center, :top),space = :relative,color = :white)
 
-        # hm = heatmap!(ax1,kx,ky,SqFunc.(Iterators.product(kx,ky)),colormap = :viridis)
-        hm = heatmap!(ax1,kx,ky,SqFunc.(Iterators.product(kx,ky)),colormap = :viridis)
-        xi = getxi(SqMat)
-        @info "" L maximum(SqMat) /L^2 xi xi/L mus[muIndex]
-        Colorbar(fig[i,2],hm)
+        # band!(axes[i, j], [-0.5pi, 0.5pi], [1.1pi, 1.1pi], [1.5pi, 1.5pi], color=(:black, 0.5))
+        # text!(axes[i, j], Point(0, 1.3pi), text=L"μ = %$mu", color=:white, align=(:center, :center))
     end
+    rowsize!(fig.layout, 1, Relative(0.25))
+    rowsize!(fig.layout, 2, Relative(0.25))
+    rowgap!(fig.layout, 1, -20)
+    colsize!(fig_SQ, 2, Relative(0.05))
+    colsize!(fig_SQ, 4, Relative(0.05))
+    colgap!(fig_SQ, 1, 2)
+    colgap!(fig_SQ, 2, 2)
+    colgap!(fig_SQ, 3, 2)
+    Label(fig[1, 1, TopLeft()], L"(a)$$", padding = (-20, 0, -10, 0))
+    Label(fig[2, 1, TopLeft()], L"(b)$$", padding = (-20, 0, -10, 0))
+    Label(fig[3, 1, TopLeft()], L"(c)$$", padding = (-20, 0, -10, 0))
+    Label(fig[3, 1:2, Top()], L"\mathcal{S}(\mathbf{q})", padding = (0, 0, 10, 0))
+    vlines!(ax_en,[0.805],color = :grey,linestyle = :dash,linewidth = 2,label = L"\mu_c")
+    vlines!(axis,[0.805],color = :grey,linestyle = :dash,linewidth = 2,label = L"\mu_c")
+    vlines!(inset_En,[0.805],color = :grey,linestyle = :dash,linewidth = 2,label = L"\mu_c")
+    # colgap!(fig.layout, 2, 0)
+    save("../../figs/PaperFigs/StairCaseSpin1Overview.pdf", fig)
     fig
 end
-
 ##
-function getXiLs(res,res_36)
-    
-    xis = Dict{Int,Vector{Float64}}()
-    xis_err = Dict{Int,Vector{Float64}}()
-    mus = Dict{Int,Vector{Float64}}()
 
-    let L=36
-        unique_mus = unique(res_36.mu)
-        k = trueMomenta(0,2pi,L)
-        i_k = findfirst(==(pi/2),k)
+function errorBarLegend(size = 0.5;linekwargs = (;),markerkwargs = (;),kwargs...)
+    center = 0.5
+    ymin = center - size/2
+    ymax = center + size/2
 
-        Sq = [getSq(res_36,mu = mu,L = L,tau=10) for mu in unique_mus]
-        xi_L = [getXis(Sq,CartesianIndex(i_k,i_k)) for Sq in Sq]
-        xis[L] = mean.(xi_L) ./ L
-        xis_err[L] = std.(xi_L) ./ L
-        mus[L] = unique_mus
-    end
-
-    for L in (20,24,28)
-        Sqs = eachslice(getSq_tau(res[L],10),dims=(3,4))
-        k = trueMomenta(0,2pi,L)
-        i_k = findfirst(==(pi/2),k)
-        xi_L = [getXis(Sq,CartesianIndex(i_k,i_k)) for Sq in eachslice(Sqs,dims=1)]
-        xis[L] = mean(xi_L) ./ L
-        xis_err[L] = std(xi_L) ./ L
-        mus[L] = res[L].mus
-    end
-
-    return (;xis,xis_err,mus)
+    errorbar = [Point2f(center, ymin), Point2f(center, ymax)]
+    [
+        LineElement(linepoints = errorbar;kwargs...,linekwargs...),
+        MarkerElement(points = errorbar, marker = :hline, markersize = 10;kwargs...,linekwargs...),
+        MarkerElement(points = [Point2f(center, center),], marker = '●', markersize = 7;kwargs...,markerkwargs...)
+    ]
 end
-xi_res = getXiLs(res,res_36)
-
-
-
-xis_intPol = let
-
-    Dict(L=> interpolate((xi_res.mus[L],), xi_res.xis[L], Gridded(Linear())) for L in keys(xi_res.xis))
-end
-crossings = detect_crossings(xis_intPol)
-##
-with_theme(theme_SimpleTicks()) do 
-
-    fig = Figure(fontsize = 22,size = 400 .*(3,2))
-    
-    FSS_Plot = GridLayout()
-    Sq_Heatmaps = GridLayout()
-    SqCuts = GridLayout()
-    SqRandomCuts = GridLayout()
-    BCorrPlot = GridLayout()
-
-    fig.layout[1:2,1:3] = FSS_Plot
-    fig.layout[1,4:7] = Sq_Heatmaps
-    fig.layout[2,4:7] = SqCuts
-    fig.layout[3,1:7-1] = SqRandomCuts
-    fig.layout[3,7] = BCorrPlot
-    
-    PiTicksArgs = (;xticks = PiTicks([0,pi]), yticks = PiTicks([0,pi]))
-
-    
-    L_Plot = 36
-    qx = qy = trueMomenta(-0.5pi,1.5pi,L_Plot)
-    FSS_Plot[1,1] = ax_scal = Axis(fig,xlabel = L"μ",ylabel = L"\xi/L")
-
-    mu_show = (0.,0.3,0.8)
-
-    SqsGFMC = [SW.expand_Sq.(getSq(res_36,tau=15,mu=mu,L=L_Plot)) for mu in mu_show]
-
-    SqMat = mean.(SqsGFMC)
-    SqErr = std.(SqsGFMC)
-    
-
-    with_theme(theme_PiTicks()) do 
-        Sq_Heatmaps[1,1] = ax_mu1 = Axis(fig;xlabel = L"q_x",ylabel = L"q_y",aspect=1,PiTicksArgs...)
-        Sq_Heatmaps[1,3] = ax_mu2 = Axis(fig;xlabel = L"q_x",aspect=1,yticklabelsvisible = false,PiTicksArgs...)
-        Sq_Heatmaps[1,5] = ax_mu3 = Axis(fig;xlabel = L"q_x",aspect=1,yticklabelsvisible = false,PiTicksArgs...)
-
-    
-        linkyaxes!(ax_mu1,ax_mu2,ax_mu3)
-
-
-        colorrange = extrema(stack(SqMat))
-
-        for (i,ax) in enumerate((ax_mu1,ax_mu2,ax_mu3))
-            SqCont = SW.getSqCont(SqMat[i])
-            hm = heatmap!(ax,qx,qy,SqCont.(Iterators.product(qx,qy)),colormap = :viridis;
-            # colorrange
-            )
-            Colorbar(Sq_Heatmaps[1,2i],hm,ticks = SimpleTicks(),width = Relative(0.05),height = Relative(0.8))
-        end
-
-        # rowsize!(Sq_Heatmaps,1,Relative(0.01))
-        # rowsize!(Sq_Heatmaps,2,Relative(0.9999))
-
-    end
-    kpath = ["Γ","X","X'","Γ"]
-    pointlabels,p1 = fetchKPath([KPoints[k] for k in kpath],500)
-    kpointlabels = Makie.latexstring.(kpath)
-    tRange = eachindex(p1)
-
-    xygrid = [(x,y) for x in qx, y in qy]
-
-    
-    
-    with_theme(theme_SimpleTicks()) do 
-        SqCuts[1,1] = axPath1 = Axis(fig,ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
-        )
-        SqCuts[1,2] = axPath2 = Axis(fig,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
-        )
-        SqCuts[1,3] = axPath3 = Axis(fig,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
-        )
-        # linkyaxes!(axPath1,axPath2,axPath3)
-
-        tRange_new,p1_discrete = rasterCurve(p1,xygrid,tRange)
-        for (i,ax,SqMat,SqErr) in zip(eachindex(SqsGFMC), (axPath1, axPath2, axPath3), SqMat, SqErr)
-            SqFunc = SW.getSqCont(SqMat)
-            SqErrFunc = SW.getSqCont(SqErr)
-            Sqcut = [SqFunc(x,y) for (x,y) in xygrid[p1_discrete]]
-            Sqerrcut = [SqErrFunc(x,y) for (x,y) in xygrid[p1_discrete]]
-            scatter!(ax, tRange_new, Sqcut, marker = '∘', markersize = 10, color = :black)
-            errorbars!(ax, tRange_new, Sqcut, Sqerrcut, whiskerwidth = 6, linewidth = 0.5, color = :black)
-            
-            # Add lines corresponding to the best field theory fit
-            fittingCoefs = optimizeCoeffs(SqMat)
-            SqFT = [SqFieldTheory(q, fittingCoefs) for q in xygrid[p1_discrete]]
-            lines!(ax, tRange_new, SqFT, color = :red, linestyle = :dash)
-        end
-        SqRandomCuts[1,1] = axPath_Random = Axis(fig,ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),yticks = SimpleTicks()
-        )
-
-
-        text!(axPath_Random,Point(100,1),text="TODO!",color = :black,align = (:center,:center),fontsize = 40)
-
-    end
-
-    with_theme(theme_PiTicks()) do 
-        BCorrPlot[1,1] = ax_BCorr = Axis(fig;xlabel = L"q_x",ylabel = L"q_y",aspect=1,PiTicksArgs...)
-
-        Bq = [cos(qx-qy)^2 + cos(qx+qy)^2 for qx in qx, qy in qy]
-        hm_B = heatmap!(ax_BCorr,qx,qy,Bq,colormap = Makie.cgrad(:thermal,rev=false))
-
-        text!(ax_BCorr,Point(pi/2,pi/2),text="TODO!",color = :black,align = (:center,:center),fontsize = 40)
-    end
-
-    tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
-        
-
-    # return fig
-    # ax2 = insetAtPoint(fig,ax,(0.6,3.2),(110,60))
-    # ax2 = Axis(fig[2,1],xlabel = L"μ",ylabel = L"\xi/L")
-    # linkaxes!(ax,ax2)
-
-    Linestyles = [:dash,:dot,:solid]
-    # allmus = [musSmall,musMedium,mus]
-    # allxis = [xisSmall,xisMedium,xis]
-    scatterkwargs = Dict(16 => (;marker = '+'),20 => (;marker = '▲'),24 => (;marker = '●' ) ,28 => (;marker = '×',markersize =18),36 => (;marker = '■',markersize =10))
-    for (L,linestyle) in zip((20,24,28),Linestyles)
-    # for (L,linestyle) in zip(keys(res),Linestyles)
-        # Sq = res[L].Sqs[:,:,5,:,:]
-        mus = xi_res.mus[L]
-        muFilter = findall(x->x<=1,mus)
-
-        xiLs = xi_res.xis[L][muFilter]
-        xiLserr = xi_res.xis_err[L][muFilter]
-        musPlot = mus[muFilter]
-        
-        scatterlines!(ax_scal,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
-        errorbars!(ax_scal,musPlot,xiLs,xiLserr,whiskerwidth = 5)
-    end
-
-    let L=36,linestyle = :dashdot
-        musPlot = xi_res.mus[L]
-        xiLs = xi_res.xis[L]
-        xiLserr = xi_res.xis_err[L]
-
-        scatterlines!(ax_scal,musPlot,xiLs,label = L"L=%$L";linestyle,scatterkwargs[L]...)
-        errorbars!(ax_scal,musPlot,xiLs,xiLserr,whiskerwidth = 5)
-
-    end
-
-    inset = insetAtPoint(fig,ax_scal,(0.7,3.8),0.8 .*(110,60),xlabel = L"L",ylabel = L"μ_c")
-    scatterlines!(inset,crossings.L,crossings.crossings)
-
-    ylims!(ax_scal,0,5)
-    # vlines!(ax_scal,[mu_c],color = :grey,linestyle = :dash)
-    # text!(ax_scal,Point(0.22,3.5),text=L"μ_c = %$mu_c",color = :grey,align = (:left,:center))
-    # ylims!(ax2,0.04,1.8)
-    axislegend(ax_scal,position = :lb)
-
-    rowsize!(fig.layout,1,Relative(0.3))
-    rowsize!(fig.layout,2,Relative(0.3))
-    colgap!(Sq_Heatmaps,1,-40)
-    colgap!(Sq_Heatmaps,2,-40)
-    colgap!(Sq_Heatmaps,3,-40)
-    colgap!(Sq_Heatmaps,4,-40)
-    colgap!(Sq_Heatmaps,5,-40)
-
-    fig
-    
-end
-
-##
 
 with_theme(theme_SimpleTicks()) do 
+    mu = 0.9
     L = 36
-    muIndex = findfirst(>=(0.8),res_36.mu)
-
-    μ = res_36.mu[muIndex]
-
-    SqsGFMC = SW.expand_Sq.(getSq(res_36,tau=26,mu=μ,L=L))
+    # SqMat = SW.expand_Sq(mean(getSq(res, tau=12., L=L, mu=mu)))
+    SqsGFMC = SW.expand_Sq.(getSq(res,tau=12,mu=mu,L=L))
     SqMat = mean(SqsGFMC)
     SqErr = std(SqsGFMC)
-    fittingCoefs = optimizeCoeffs(SqMat)
     
-    fig = Figure(size = 120 .* (4,4),fontsize = 22)
+    # SqErr = dropstd(SqsGFMC,dims=4)[:,:,end,:]
+    fittingCoefs = optimizeCoeffsAsym(SqMat)
+    # fittingCoefs = [1,2,3.]
+    μ = mu
+    fig = Figure(size = 140 .* (4,4.5),fontsize = 22)
 
-    xticks = yticks = PiTicks([0,pi])
-    axFT = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
+    xticks = yticks = PiTicks()
+    ax = Axis(fig[2,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
 
-    ax = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,ylabelvisible = false,yticklabelsvisible = false)
+    axFT = Axis(fig[2,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,ylabelvisible = false,yticklabelsvisible = false)
 
     # ax2 = Axis(fig[2,1:2],xlabel = L"|\mathbf{q}|^2",ylabel = L"\mathcal{S}(\mathbf{q})",title = L"μ= %$μ")
     Sq = SW.getSqCont(SqMat)
     Sqerr = SW.getSqCont(SqErr)
-    qx = qy = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
+    qx = qy = trueMomenta(-pi,2pi,size(SqMat,1)-1)
     Sq_q = collect(Iterators.product(qx,qy))
     Sq_q = Sq.(Iterators.product(qx,qy))
-    heatmap!(ax,qx,qy,Sq_q)
+    hm = heatmap!(ax,qx,qy,Sq_q)
     
-    SqFT = [SqFieldTheory(x,y,fittingCoefs...) for x in qx, y in qy]
-    heatmap!(axFT,qx,qy,SqFT)
+    SqFT = [AsymFieldTheory(x,y,fittingCoefs...) for x in qx, y in qy]
+
+    heatmap!(axFT,qx,qy,SqFT,colorrange = extrema(Sq_q),colormap = :viridis)
     q_path(r,phi) = (r*cos(phi),r*sin(phi))
     qr = LinRange(0,.35pi,100)
     
     colors = (:red,:blue,:magenta)
     
 
-    colorFT = :black
-    colorGFMC = :red
+    colorFT = :red
+    colorGFMC = :black
 
-    kpath = ["Γ","X","X'","Γ"]
-    pointlabels,p1 = fetchKPath([KPoints[k] for k in kpath],500)
+    # kpath = ["Γ","X","X'","Γ"]
+    kpath = ["D","X","X'","Γ","D"]
+
+    KPointsNew = Dict([
+        "Γ" => SVector(0,0),
+        "X" => SVector(pi,0),
+        "M" => SVector(pi,pi),
+        "X'" => SVector(0,pi),
+        "D" => SVector(0,-pi),
+        ])
+
+    pointlabels,p1 = fetchKPath([KPointsNew[k] for k in kpath],100)
     kpointlabels = Makie.latexstring.(kpath)
     tRange = eachindex(p1)
     xygrid = [(x,y) for x in qx, y in qy]
 
     
-    axPath = Axis(fig[2,1:2],ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),
+    axPath = Axis(fig[3,:],ylabel = L"\mathcal{S}(\mathbf{q})" ,xlabel = L"\mathbf{q}" , xticks = (tRange[pointlabels],kpointlabels,),yticks = [0,0.5,1,1.5],
     )
     tRange,p1_discrete = rasterCurve(p1,xygrid,tRange)
     
@@ -593,46 +405,58 @@ with_theme(theme_SimpleTicks()) do
 
     Sqcut = [Sq(x,y) for (x,y) in p1_points]
     Sqerrcut = [Sqerr(x,y) for (x,y) in p1_points]
-    SqFT = [SqFieldTheory(q,fittingCoefs) for q in p1_points]
-
-    # SqFT = [SqFieldTheory(q,1,10) for q in qpoints]
-    scatter!(ax,p1_points,marker = '∘' ,color = colorGFMC,markersize = 15)
-    scatterlines!(axFT,p1_points,color = colorFT,linestyle = :dash,marker = '●',markersize = 2)
+    SqFT = [AsymFieldTheory(q,fittingCoefs) for q in p1_points]
+    # SqFT = [AsymFieldTheory(q,1,10) for q in qpoints]
+    lines!(axFT,p1_points,color = colorFT,linestyle = :dash,linewidth = 3)
+    # scatterlines!(axFT,p1_points,color = colorFT,linestyle = :dash,marker = '●',markersize = 2)
     # tRange = SW.norm.(p1).^2
-    scatterlines!(axPath,tRange,SqFT,color = colorFT,linestyle = :dash,marker = '●',markersize = 8)
-    
-    text!(axFT,Point(0,0),text="Γ",color = :white,align = (:center,:center))
-    text!(axFT,Point(pi,0),text="X",color = :white,align = (:center,:center))
-    text!(axFT,Point(0,pi),text="X'",color = :white,align = (:center,:center))
+    lines!(axPath,tRange,SqFT,color = colorFT,linestyle = :dash,label = L"field theory$$",linewidth = 2)
+    for point in kpath
+        P = KPointsNew[point]
 
+        align = (:center,:center)
+        if point == "D"
+            align = (:center,:bottom)
+        end
+        text!(axFT,Point(P);text=Makie.latexstring(point),align,strokecolor=(:black,0.3),strokewidth=4)
+        text!(axFT,Point(P);text=Makie.latexstring(point),align,color = :white,)
+    end
+    A_fit, r_fit, p_fit = strd.(fittingCoefs )
+
+    # text!(axPath,Point(0.7,0.85),text = L"A = %$(A_fit),\ r = %$(r_fit)\ p = %$(p_fit)",align = (:bottom,:right),space = :relative,color = :black,fontsize = 16)
+    markersizeGFMC = 23
     scatter!(axPath,tRange,Sqcut,
-    marker = '∘',markersize = 18,color = colorGFMC)
-    errorbars!(axPath,tRange,Sqcut,Sqerrcut,color = colorGFMC,whiskerwidth = 6,linewidth=0.5)
-
-    # for (phi,color) in zip([0,pi/4],colors)
-    #     qpoints_raw = q_path.(qr,phi)
-    #     qpoints = sort!(unique!(roundToTrueMomenta.(qpoints_raw,size(SqMat,1)-1)), by = SW.norm)
-
-    #     Sqcut = Sq.(qpoints)
-    #     Sqerrcut = Sqerr.(qpoints)
-        
-    #     # SqFT = [SqFieldTheory(q,1,10) for q in qpoints]
-    #     SqFT = [SqFieldTheory(q,fittingCoefs...) for q in qpoints]
-    #     scatter!(ax,qpoints,marker = '×' ,color = color)
-    #     scatterlines!(axFT,Point.(qpoints),color = color,linestyle = :dash,marker = '●',markersize = 4)
-    #     qnorms_sq = SW.norm.(qpoints).^2
-    #     scatter!(ax2,qnorms_sq,Sqcut,
-    #     marker = '×',markersize = 15,color = color)
-    #     errorbars!(ax2,qnorms_sq,Sqcut,Sqerrcut,color = color,whiskerwidth = 6,linewidth=0.5)
-    #     scatterlines!(ax2,qnorms_sq,SqFT,color = color,linestyle = :dash,marker = '●',markersize = 4)
-    # end
-    rowsize!(fig.layout,1,Relative(0.5))
-    text!(axPath,Point(tRange[end-end÷8],1.2),text=L"μ = %$μ",align = (:center,:center))
+    marker = '∘',markersize = markersizeGFMC,color = colorGFMC,label = L"GFMC$$")
+    errorbars!(axPath,tRange,Sqcut,Sqerrcut,color = colorGFMC,whiskerwidth = 6,linewidth=0.5,label = L"GFMC$$")
+    
+    Legend(fig[3, end], [
+        [
+        errorBarLegend(0.6,;color = colorGFMC,markerkwargs = (;marker='∘',markersize = markersizeGFMC)),
+    ],  
+    [LineElement(linepoints = [Point2f(0., 0.5), Point2f(1, 0.5)],color = colorFT,linestyle = :dash,linewidth = 2)
+    ]], [L"GFMC$$",L"$A = %$(A_fit),\ r = %$(r_fit)\ p = %$(p_fit)$"], tellheight = false, tellwidth = false,halign = :right, valign = :top,margin = (0,0,0,0),padding = (5,5,2,2),labelsize = 20,
+    )
+    ylims!(axPath,0,1.75)
+    # axislegend(axPath,position = :lt,merge = true)
+    rowsize!(fig.layout,2,Relative(0.5))
+    rowsize!(fig.layout,3,Relative(0.45))
+    rowgap!(fig.layout,1,30)
     # text!(axFT,Point(pi,1.4pi),text=L"r = %$(strd(fittingCoefs[2]))",color = :white,align = (:center,:center))
-    # Label(fig[1,1, TopLeft()],L"a)$$",padding = (-30,0,-10,0))
-    # Label(fig[1,2, TopLeft()],L"b)$$",padding = (-30,0,-10,0))
-    # Label(fig[2,1, TopLeft()],L"c)$$",padding = (-30,0,-10,0))
+    
+    textpos = Point(-pi,2pi)
+    text!(ax, textpos ,text = L"(a) GFMC$$",color = (:white,0.),strokecolor = (:black,0.4),strokewidth=3,align = (:left,:top),fontsize = 22)
+    text!(ax, textpos ,text = L"(a) GFMC$$",color = :white,align = (:left,:top),fontsize = 22)
+    text!(axFT, textpos ,text = L"(b) Field theory$$",color = (:white,0.),strokecolor = (:black,0.4),strokewidth=3,align = (:left,:top),fontsize = 22)
+    text!(axFT, textpos ,text = L"(b) Field theory$$",color = :white,align = (:left,:top),fontsize = 22)
+    text!(axPath, Point(0.01,0.98) ,text = L"(c)$$",color = :black,align = (:left,:top),fontsize = 22,space = :relative)
+    Colorbar(fig[1,1:end], hm, label = L"\mathcal{S}(\mathbf{q})", ticks = SimpleTicks(), vertical = false, flipaxis = true, halign = :left, width = Relative(0.99),height = Relative(0.5),labelpadding = -9)
+    # colsize!(fig.layout,3,Relative(0.06))
+    rowgap!(fig.layout,1,0.1)
+    # Label(fig[1,1, TopLeft()],L"(a)$$",padding = (-60,0,-20,0))
+    # Label(fig[1,2, TopLeft()],L"(b)$$",padding = (-20,0,-20,0))
+    # Label(fig[2,1, TopLeft()],L"(c)$$",padding = (-60,0,-10,0))
     # Label(fig[3,1, TopLeft()],L"d)$$",padding = (-30,0,-10,0))
-
+    save("../../figs/PaperFigs/StairCaseSpin1_Sq_FT.pdf", fig)
     fig
 end
+

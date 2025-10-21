@@ -9,13 +9,25 @@ dropmean(A; dims=:) = dropdims(mean(A; dims=dims); dims=dims)
 dropstd(A; dims=:) = dropdims(std(A; dims=dims); dims=dims)
 
 spinecolors(color) = (;topspinecolor = color,bottomspinecolor = color,leftspinecolor = color,rightspinecolor = color)
-strd(x;kwargs...) = string(round(x,digits=2;kwargs...))
+strd(x;kwargs...) = string(round(x,sigdigits=2;kwargs...))
 
 _getkwargs(::Any) = (;xlabel = L"projection order $$")
 _getkwargs(m::SW.ContinuousTimeMethod) = (;xlabel = L"\tau")
 _getscaling(m::SW.DiscreteTimeMethod) = m.nBranch
 _getscaling(i::Integer) = i
 _getscaling(m::SW.ContinuousTimeMethod) = m.τ
+
+function err_heatmap!(ax::Makie.Axis,x,y,z,zerr;markersize = 30,kwargs...)
+    points = [Point(x,y) for x in x for y in y]
+    relerr_alpha = reshape(zerr ./ maximum(abs,z),length(points))
+    hm = heatmap!(ax,x,y,z;kwargs...)
+
+    scatter!(ax,points;color = tuple.(:red,relerr_alpha), markersize,marker = :rect)
+    # scatter!(ax,points;color = [(:white,e) for e in relerr_alpha], markersize)
+    return hm
+end
+err_heatmap!(ax::Makie.Axis,x,y,z::Function,zerr;kwargs...) = err_heatmap!(ax,x,y,[z(x,y) for x in x,y in y],zerr;kwargs...)
+err_heatmap!(x,y,z,zerr;kwargs...) = err_heatmap!(current_axis(),x,y,z,zerr;kwargs...)
 function trueMomenta(kmin,kmax,L)
     nmin = floor(Int,L*kmin/(2pi))
     nmax = ceil(Int,L*kmax/(2pi))
@@ -366,6 +378,12 @@ function getLastSlice(arr::AbstractArray{T,N}) where {T,N}
 end
 
 function SqLargeN(qx,qy)
+    qx_pr,qy_pr = rem2pi.(SA[qx,qy],RoundDown)
+
+    if hypot(qx_pr,qy_pr) < 1e-8 || hypot(qx_pr-pi,qy_pr-pi)< 1e-8 || hypot(qx_pr-2pi,qy_pr-2pi) < 1e-8
+        qx += 1e-3
+        # qy += 1e-3
+    end
     cx = cos(qx)
     cy = cos(qy)
     sx = sin(qx)
@@ -395,15 +413,11 @@ SqFieldTheory(q::AbstractVector,coefs::AbstractVector) = SqFieldTheory(q[1],q[2]
 SqFieldTheory(q::Tuple,coefs::AbstractVector) = SqFieldTheory(q[1],q[2],coefs[1],coefs[2])
 
 function AsymFieldTheory_full(qx::Real, qy::Real, K::Real, W::Real, U::Real, p::Real)
-    qx,qy = SA[
-        cos(pi/2) sin(pi/2); 
-        -sin(pi/2) cos(pi/2)
-    ] * SVector(qx,qy)
     cx = cos(qx)
     cy = cos(qy)
     sx = sin(qx)
     sy = sin(qy)
-    cxy = cos(qx+qy)
+    cxy = cos(qx-qy)
 
     numerator = sqrt(K)*(cx - cy + 2 * sx * sy)^2
     denominator1 = sqrt(U/4*(1+2p*(1+cxy)) + W*( (cx-cy)^2+4*sx^2*sy^2))
@@ -426,7 +440,7 @@ function optimizeCoeffs(SqMat,weightfunc=x->one(first(x));verbose=false)
         for (i, qx) in enumerate(q), (j, qy) in enumerate(q)
             l += abs2(SqMat[i, j] - SqFieldTheory(qx, qy, v, w))*weightfunc(SA[qx,qy])
         end
-        return l
+        return l #+ 0.00hypot(v,w)
     end
 
     loss(v) = loss(v[1], v[2])
@@ -503,7 +517,7 @@ KPoints = Dict([
     "Γ" => SVector(0,0),
     "X" => SVector(pi,0),
     "M" => SVector(pi,pi),
-    "X'" => SVector(0,pi)
+    "X'" => SVector(0,pi),
     ])
 
 

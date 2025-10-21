@@ -196,14 +196,14 @@ end
 
 # `Conditional` needs handling for specific boundary conditions.
 # For Wrap we swap the side.
-function get_wrappend_inds(A::Stencils.AbstractStencilArray{S,R}, I::Tuple) where {S,R}
-    sz = Stencils.tuple_contents(S)
-    wrapped_inds = map(I, sz) do i, s
-        i < 1 ? i + s : (i > s ? i - s : i)
-    end
-    return wrapped_inds
-end
-
+# function get_wrappend_inds(A::Stencils.AbstractStencilArray{S,R}, I::Tuple) where {S,R}
+#     sz = Stencils.tuple_contents(S)
+#     wrapped_inds = map(I, sz) do i, s
+#         i < 1 ? i + s : (i > s ? i - s : i)
+#     end
+#     return wrapped_inds
+# end
+@inline get_wrappend_inds(A::Stencils.AbstractStencilArray, I::Tuple) = Stencils.bounded_index(A, I)
 
 """returns a tuple of two booleans, corresponding to the applicability of P and P⁺. M=2S is an integer"""
 @inline Base.@propagate_inbounds function P_applicable(Pij::Union{SVector{8},Stencils.Moore}, M::Integer)

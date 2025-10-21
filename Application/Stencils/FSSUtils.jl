@@ -25,7 +25,15 @@ function getxi(Sq)
 end
 
 function getSq_tau(Sq::Array{T,3},tau::Real,Dtau::Real) where T
-    tauInd = ceil(Int,tau/Dtau)
+    if isinf(tau)
+        for i in reverse(axes(Sq,3))
+            S = @view Sq[:,:,i]
+            any(isnan,S) && continue
+            return S
+        end
+    else
+        tauInd = ceil(Int,tau/Dtau)
+    end
     return @view Sq[:,:,tauInd]
 end
 
@@ -117,6 +125,7 @@ function getXiCol(res::DataFrame,Q = (pi/2,pi/2);tau = 10)
         xi = getxi(Sqtau,CartesianIndex(i_k,j_k))
     end
 end
+
 function getSqMaxCol(res::DataFrame,Q = nothing;tau = 10)
     # return 
     

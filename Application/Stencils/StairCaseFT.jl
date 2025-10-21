@@ -49,8 +49,8 @@ plotEnergies(results,CT,normalize = false)
 SqsGFMC = SW.getSqsGFMC(results,1:20:200)
 ##
 
-
 with_theme(theme_SimpleTicks()) do 
+
     SqMat = dropmean(SqsGFMC,dims=4)[:,:,end,:]
     SqErr = dropstd(SqsGFMC,dims=4)[:,:,end,:]
     fittingCoefs = optimizeCoeffsAsym(SqMat)
