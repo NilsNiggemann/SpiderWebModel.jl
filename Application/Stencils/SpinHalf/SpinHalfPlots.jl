@@ -24,7 +24,7 @@ function getSectorConfig(L,i)
 end
 
 
-function plotSectorEnergies!(fig,ax,ens,configs;inset_scale = 1,top_inset_pos=idx->(0.05 +0.18(idx-1),-0.01),bot_inset_pos=(0.9,-0.09),axkwargs...)
+function plotSectorEnergies!(fig,ax,ens,configs;inset_scale = 1,top_inset_pos=idx->(0.05 +0.19(idx-1),-0.03),bot_inset_pos=(0.9,-0.09),axkwargs...)
     axkwargs = SW.getConfigAxis(getSectorConfig(8,1))
     colors = [:blue,:green,:red,:purple]
 
@@ -198,12 +198,12 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     end
 
     StrucFac_Top[1, 1] = ax = Axis(fig, aspect = 1,xticks = ticks,yticks = ticks,xminorticksvisible = true ,xlabel = L"q_x",ylabel = L"q_y",yminorticksvisible = true,
-    xlabelvisible=false,xticklabelsvisible=false;    axkwargs...,
+    xlabelvisible=true,xticklabelsvisible=true;    axkwargs...,
     xlabelpadding = -15,
     )
 
     StrucFac_Top[1, 2] = ax2 = Axis(fig, aspect = 1,yticklabelsvisible=false,xminorticksvisible = true ,xlabel = L"q_x",yminorticksvisible = true,
-    xlabelvisible=false,xticklabelsvisible=false,xticks = ticks,yticks = ticks,
+    xlabelvisible=true,xticklabelsvisible=true,xticks = ticks,yticks = ticks,
     # title = L"class. spin-$1/2$",
     ;
     axkwargs...,
@@ -229,7 +229,7 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
 
     # hm = halfhalfheatmap!(ax,kx,ky,SqFunc,SqLargeN,x->-x+3pi,normalize = true)
     EN_Plot[1,1] = ax_sector_energies = with_theme(theme_SimpleTicks()) do 
-        Axis(fig[1,2],xlabel = L"\mu",ylabel = L"E/(J'N_\textrm{sites})")
+        Axis(fig[1,2],xlabel = L"\mu/J'",ylabel = L"E/(J'N_\textrm{sites})")
     end
     StrucFac_Bot[1, 1] = axmu0 = Axis(fig, xlabel = L"q_x", ylabel = L"q_y", aspect = 1,xminorticksvisible = true, yminorticksvisible = true,xticks = ticks, yticks = ticks;
     axkwargs...,
@@ -257,21 +257,36 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     Sq_RK_Mat = [real(Sq_RKFunc(x,y)) for x in kxRK, y in kyRK]
 
     colorrange = (0,maximum(maximum.((Sq_RK_Mat,SqMat))))
+    @info "" sumRuleCheck(SqPlot) sumRuleCheck(SqLN) sumRuleCheck(Sq_RK_Mat) sumRuleCheck(Sq_mu0,0)
 
     
-    hm_RK = heatmap!(axRK, kxRK, kxRK, Sq_RK_Mat;colorrange,colormap = :turbo)
+    hm_RK = heatmap!(axRK, kxRK, kxRK, Sq_RK_Mat;colorrange,colormap = :linear_kry_0_97_c73_n256)
 
-    hm_mu0 = heatmap!(axmu0, kx_mu0, ky_mu0, SqMat;colorrange,colormap = :turbo )
+    hm_mu0 = heatmap!(axmu0, kx_mu0, ky_mu0, SqMat;colorrange,colormap = :linear_kry_0_97_c73_n256 )
 
+        # Add a new row for panel (h)
+    StrucFac_Bot[1, 3] = axRK_h = Axis(fig, xlabel = L"q_x", ylabel = L"q_y", aspect = 1, ylabelvisible = false, yticklabelsvisible = false, xminorticksvisible = true, yminorticksvisible = true, xticks = ticks, yticks = ticks;
+        axkwargs...)
+    # Plot the same data as panel (f)
+
+    RKMax = maximum(Sq_RK_Mat)
+    subtr_Part = copy(Sq_RK_Mat)
+    subtr_Part[findall(x->abs(x - RKMax) < 1e-5, subtr_Part)] .= 0
+    
+    hm_2RK = heatmap!(axRK_h, kxRK, kxRK, subtr_Part;  colormap = :linear_kry_0_97_c73_n256)
 
 
     textpos = Point(-pi/2,3pi/2)
 
-    Colorbar(StrucFac_Top[2,1:2], hm2,height = Relative(0.8),width = Relative(0.99),ticks = SimpleTicks([0,0.2,0.4,0.6]),
+    Colorbar(StrucFac_Top[2,1:2], hm2,height = Relative(0.8),width = Relative(1),ticks = SimpleTicks([0,0.2,0.4,0.6]),
     vertical=false,
     # label = L"\mathcal{S}(q)"
     )
-    Colorbar(StrucFac_Bot[0,1:2], hm_RK,height = Relative(0.8),width = Relative(0.99),ticks = SimpleTicks(),
+    Colorbar(StrucFac_Bot[0,1:2], hm_RK,height = Relative(0.8),width = Relative(0.98),halign = :left,ticks = SimpleTicks(),
+    vertical = false, flipaxis = false,
+    # label = L"\mathcal{S}(q)"
+    )   
+    Colorbar(StrucFac_Bot[0,3], hm_2RK,height = Relative(0.8),width = Relative(0.8),halign = :right,ticks = SimpleTicks(),
     vertical = false, flipaxis = false,
     # label = L"\mathcal{S}(q)"
     )
@@ -281,11 +296,13 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     # Label(StrucFac_Top[2,1:2, Top()],L"\textrm{Classical }\mathcal{S}(q)",padding = (0,0,20,0))
     # Label(StrucFac_Bot[0,1:2, Top()],L"\textrm{Quantum }\mathcal{S}(q)",padding = (0,0,-80,0))
 
-    rowsize!(StrucFac_Top,2,Relative(0.06))
+    rowsize!(StrucFac_Top,2,Relative(0.07))
     rowsize!(StrucFac_Bot,0,Relative(0.06))
 
-    colsize!(fig.layout,1,Relative(0.43))
-    rowsize!(Right_Half,1,Relative(0.43))
+    colsize!(fig.layout,1,Relative(0.5))
+    
+    rowsize!(fig.layout,1,Relative(1.05))
+    rowsize!(Right_Half,1,Relative(0.5))
     colgap!(fig.layout,1,5)
 
     rowgap!(Left_Half,1,0)
@@ -294,31 +311,45 @@ function makeSqPlot(Sq_Classical,Sq_mu0,Sq_RK)
     rowgap!(StrucFac_Top,1,0)
 
     colgap!(StrucFac_Bot,1,0)
+    colgap!(StrucFac_Bot,2,0)
     rowgap!(StrucFac_Bot,1,0)
-
+    # rowsize!(StrucFac_Bot,1,Relative(0.8))
     # colgap!(StrucFac_Top,2,3)
     # colgap!(StrucFac_Bot,1,3)
     # colgap!(StrucFac_Bot,2,3)
     
-    plotSectorEnergies!(fig,ax_sector_energies,ens,[2,3,4],inset_scale = 1,
-    top_inset_pos=idx->(0.05 +0.195(idx-1),-0.015),bot_inset_pos=(0.9,-0.085)
+    plotSectorEnergies!(fig,ax_sector_energies,ens,[2,3,4],inset_scale = 1.1,
+    top_inset_pos=idx->(0.08 +0.24(idx-1),0.00),bot_inset_pos=(0.88,-0.08)
     )
     
     
+
     sub_fig_labelsize = 22
     text!(ax, textpos ,text = L"(a)$$",color = :black,align = (:left,:top),fontsize = sub_fig_labelsize)
     text!(ax2, textpos ,text = L"(b)$$",color = :black,align = (:left,:top),fontsize = sub_fig_labelsize)
 
     Label(SpinConf_Fig[1, 1, TopLeft()], L"(c)$$", padding = (-30, 0, -20, 0),fontsize = sub_fig_labelsize)
     Label(SpinConf_Fig[1, 2, TopLeft()], L"(d)$$", padding = (-10, 0, -20, 0),fontsize = sub_fig_labelsize)
-    Label(EN_Plot[1, 1, TopLeft()], L"(g)$$", padding = (-10, 0, -20, 0),fontsize = sub_fig_labelsize)
 
-    text!(axmu0, textpos ,text = L"(e)$$",color = :white,align = (:left,:top),fontsize = sub_fig_labelsize)
-    text!(axRK, textpos ,text = L"(f)$$",color = :white,align = (:left,:top),fontsize = sub_fig_labelsize)
+    Label(EN_Plot[1, 1, TopLeft()], L"(h)$$", padding = (-10, 0, -20, 0),fontsize = sub_fig_labelsize)
+
+    text!(axmu0, textpos ,text = L"(e) $\mu=0$",color = :white,align = (:left,:top),fontsize = sub_fig_labelsize)
+    text!(axRK, textpos ,text = L"(f) $\mu=J'$",color = :white,align = (:left,:top),fontsize = sub_fig_labelsize)
+    text!(axRK_h, textpos ,text = L"(g) $\mu=J'$",color = :white,align = (:left,:top),fontsize = sub_fig_labelsize)
     if L40RescalingFactor != 1
-        text!(axmu0, Point(pi,3pi/2) ,text = L"\times \frac{1}{%$(L40RescalingFactor)}",color = :white,align = (:left,:top),fontsize = sub_fig_labelsize)
+        text!(axmu0, Point(pi,-pi/2) ,text = L"\times \frac{1}{%$(L40RescalingFactor)}",color = :white,align = (:left,:bot),fontsize = sub_fig_labelsize)
     end
-    save("../../figs/SpinHalfOverview.pdf", fig)
+    vlines!(ax_sector_energies, [1], color = :black, linewidth = 1, linestyle = :solid)
+
+    text!(ax_sector_energies, Point(0.99,-0.04),text=L"RK-point$$", color = :black, fontsize = 16, rotation = pi/2)
+
+    # Label(StrucFac_Top[2, 2,BottomRight()], "⤵", fontsize = 25,padding = (0, 10, 30 -105, 0),tellheight = false,tellwidth = false,rotation = 1.8pi)
+    # Label(StrucFac_Top[2, 2,BottomRight()], "⤴", fontsize = 25,padding = (0, 03, 80 , 5),tellheight = false,tellwidth = false,rotation = 0.20pi)
+    # Label(StrucFac_Top[1, 1,BottomRight()], "⬆", fontsize = 30,padding = (0, 03, -20 , 5),tellheight = false,tellwidth = false,rotation = 0.0pi)
+    # Label(StrucFac_Top[1, 1,BottomRight()], "⬇", fontsize = 30,padding = (0, 03, -100, 5),tellheight = false,tellwidth = false,rotation = 0)
+    
+
+    save("../../figs/PaperFigs/SpinHalfOverview.pdf", fig)
 
     # save("../../figs/SpinHalfOverview.png", fig,px_per_unit=4)
     # Colorbar(fig[1, 2], hm)
