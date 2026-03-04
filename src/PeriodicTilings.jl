@@ -1,5 +1,5 @@
 function getPeriodicState(UC, Lx, Ly, offset = 0)
-    Mat = PeriodicMatrix(UC, Lx, Ly, offset) |> Array
+    Mat = PeriodicMatrix(UC, Lx, Ly, offset) #|> Array
     S = SpinConfig(Mat, 1 / 2)
 end
 
@@ -19,7 +19,6 @@ function constructAllConfigs(Lx, Ly, PlaquetteList)
     LPx = cld(Lx, 2)
     LPy = cld(Ly, 2)
     path = xdirecPath(LPx, LPy)
-
     Mat = fill(NaN, Lx, Ly)
 
     El = PlaquetteList[begin]
@@ -153,8 +152,4 @@ end
 function isPeriodicTiling(UC::AbstractMatrix, Lx, Ly, offset = 0)
     State = getPeriodicState(UC, Lx, Ly, offset)
     return fulFillsConstraint_nonStrict(State)
-end
-
-function getAllPeriodicStates(Lx, Ly)
-    AllStates = constructAllConfigs(Lx, Ly, PlaquetteList)
 end

@@ -72,10 +72,10 @@ function test_enlargedUC(conf)
     return c1 == c2
 end
 
-function enlarge_single(Conf,n1,n2)
+function enlarge_single(Conf,n1,n2,S=1/2)
     Lx,Ly = size(Conf)
     UC = SW.PeriodicMatrix(parent(Conf),n1*Lx,n2*Ly)
-    return SC(Matrix(UC))
+    return SC(Matrix(UC),S)
 end
 function squarify_target(Conf,Ltarget)
     Lx,Ly = size(Conf)
@@ -204,11 +204,11 @@ function canonical(X::AbstractArray{T}) where T
     # return reshape(minimum(reps),size(X))
 end
 ##
-function SC(PM)
-    SW.stencilConfig(PM, 1 / 2; boundaryCondition = :periodic)
+function SC(PM,S=1/2)
+    SW.stencilConfig(PM, S; boundaryCondition = :periodic)
 end
-function SC(PM::SW.PeriodicMatrix)
-    SW.stencilConfig(PM.UC, 1 / 2; boundaryCondition = :periodic)
+function SC(PM::SW.PeriodicMatrix,S=1/2)
+    SW.stencilConfig(PM.UC, S; boundaryCondition = :periodic)
 end
 
 using SpiderWebModel.HDF5

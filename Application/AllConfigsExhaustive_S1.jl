@@ -80,8 +80,8 @@ function checkAllTilings_periodic(states,bufferConfig_template,check_1=nothing,c
 
 end
 ##
-Lx = 4
-Ly = 4
+Lx = 6
+Ly = 2
 @time a = SW.constructAllConfigs(Lx, Ly, ALLGS_1)
 
 @time a_rec = SW.stencilConfig.(SW.fillEmptyStates(a, Lx, Ly, ALLGS_1))
