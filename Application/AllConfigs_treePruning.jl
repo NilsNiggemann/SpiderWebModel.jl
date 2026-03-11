@@ -113,9 +113,9 @@ function constraintSolver(C::AbstractMatrix{<:Integer}, domain::AbstractVector{<
     residual = zeros(Int, M)
 
     d = length(domain)
-    subtree = [big(d)^(N-i) for i in 1:N]
+    subtree = [float(d)^(N-i) for i in 1:N]
 
-    total = big(d)^N
+    total = float(d)^N
     explored = Ref(0.0)
     last_print = Ref(0.0)
 
