@@ -157,6 +157,79 @@ function constraintSolver(C::AbstractMatrix{<:Integer}, domain::AbstractVector{<
     return solutions
 end
 
+function dfs_count!(i, first_nz_set::Bool, S, C, domain, residual, remaining_bound, subtree, count, explored, total, last_print, N, M)
+    if i > N
+        explored[] += one(explored[])
+        if all(residual .== 0)
+            count[] += 1
+        end
+        print_progress(explored, total, last_print, count[])
+        return
+    end
+
+    for s in domain
+        if !first_nz_set && s < 0
+            explored[] += Float64(subtree[i])
+            print_progress(explored, total, last_print, count[])
+            continue
+        end
+
+        S[i] = s
+
+        for n in 1:M
+            residual[n] += C[n, i] * s
+        end
+
+        feasible = true
+        for n in 1:M
+            if abs(residual[n]) > remaining_bound[n, i + 1]
+                feasible = false
+                break
+            end
+        end
+
+        if feasible
+            dfs_count!(i + 1, first_nz_set || s != 0, S, C, domain, residual, remaining_bound, subtree, count, explored, total, last_print, N, M)
+        else
+            explored[] += Float64(subtree[i])
+            print_progress(explored, total, last_print, count[])
+        end
+
+        for n in 1:M
+            residual[n] -= C[n, i] * s
+        end
+    end
+end
+
+function countSolutions(C::AbstractMatrix{<:Integer}, domain::AbstractVector{<:Integer}; use_time_reversal::Bool = true)
+    M, N = size(C)
+
+    maxspin = maximum(abs.(domain))
+    absC = abs.(C)
+    remaining_bound = zeros(Int, M, N + 2)
+    for n in 1:M
+        for i in N:-1:1
+            remaining_bound[n, i] = remaining_bound[n, i + 1] + absC[n, i] * maxspin
+        end
+    end
+
+    S = zeros(Int, N)
+    residual = zeros(Int, M)
+    d = length(domain)
+    subtree = [float(d)^(N - i) for i in 1:N]
+    total = float(d)^N
+    count = Ref(0)
+    explored = Ref(0.0)
+    last_print = Ref(0.0)
+
+    dfs_count!(1, !use_time_reversal, S, C, domain, residual, remaining_bound, subtree, count, explored, total, last_print, N, M)
+    print_progress(explored, total, last_print, count[], true)
+
+    nsolutions = use_time_reversal ? 2 * count[] - (all(iszero, zeros(Int, N)) ? 1 : 0) : count[]
+    println("\nTotal solutions: ", nsolutions, use_time_reversal ? " (reconstructed from half-space count)" : "")
+    return nsolutions
+end
+
 # first_nz_set: whether a nonzero spin has been placed by an ancestor.
 # Symmetry breaking: when false, skip s=-1 (first nonzero must be +1).
 function dfs_write_compressed!(i, first_nz_set::Bool, S, C, domain, residual, remaining_bound, subtree, io, found, explored, total, last_print, N, M)
@@ -285,7 +358,7 @@ function print_progress(explored, total, last_print, found_solutions, always_pri
     current_time = time()
     progress = Float32(explored[]) / Float32(total)
 
-    if current_time - last_print[] > 0.5 || progress == 1.0 || always_print
+    if current_time - last_print[] > 60 || always_print
         barlen = 40
         filled = round(Int, progress * barlen)
         bar = repeat("█", filled) * repeat(" ", barlen - filled)
@@ -301,10 +374,11 @@ function print_progress(explored, total, last_print, found_solutions, always_pri
 end
 ##
 ##
-C = setup_constraints(6,6)
+C = setup_constraints(8,8)
 domain = Int8[-1, 0, 1]
-@time solutions = constraintSolver(C, domain)
+# @time solutions = constraintSolver(C, domain)
 ##
-@time sols = constraintSolver_compressed_mmap(C, domain, mmap_path = "compressed_solutions.bin", overwrite = true)
+# @time sols = constraintSolver_compressed_mmap(C, domain, mmap_path = "compressed_solutions.bin", overwrite = true)
+@time sols = countSolutions(C, domain)
 ##
 # newConstraints = add_constraints_to_matrix(C, 4, Dict(:STot => (-1, -1)))
