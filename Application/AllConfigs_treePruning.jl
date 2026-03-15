@@ -471,17 +471,27 @@ function countSolutions_threaded(C::AbstractMatrix{<:Integer}, domain::AbstractV
     end
 
     total_count = sum(counts)
-    nsolutions = use_time_reversal ? 2 * total_count - (all(iszero, zeros(Int, N)) ? 1 : 0) : total_count
-    println("\nTotal solutions: $nsolutions", use_time_reversal ? " (reconstructed from half-space count)" : "")
+    S_zero_state_possible = (0 in domain)
+    nsolutions = use_time_reversal ? 2 * total_count - S_zero_state_possible : total_count
+    println("\nTotal solutions: $nsolutions", use_time_reversal ? " (reconstructed from time reversal of half-space count ($total_count ))" : "")
     return nsolutions
 end
 
 ##
-C = setup_constraints(8,6)
-domain = Int8[-1, 0, 1]
+C = setup_constraints(10,10)
+domain = Int8[-1, 1]
 # @time solutions = constraintSolver(C, domain)
 ##
 # @time sols = constraintSolver_compressed_mmap(C, domain, mmap_path = "compressed_solutions.bin", overwrite = true)
-@time sols = countSolutions_threaded(C, domain; split_depth = 7)
+@time sols = countSolutions_threaded(C, domain; split_depth = 8)
 ##
 # newConstraints = add_constraints_to_matrix(C, 4, Dict(:STot => (-1, -1)))
+
+##
+# Ls = [4, 6, 8, 10]
+# counts = [216, 5912, 350872, 37403668]
+# bs = counts .^ (1 ./(Ls.^2))
+# lines(1 ./Ls, bs)
+# xlims!(0, 1/minimum(Ls) + 0.01)
+# ylims!(1,1.5)
+# current_figure()
