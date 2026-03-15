@@ -1,5 +1,37 @@
 # first_nz_set: whether a nonzero spin has been placed by an ancestor.
 # Symmetry breaking: when false, skip s=-1 (first nonzero must be +1).
+include("constraints.jl")
+function compress_spinconfig(S::AbstractVector{<:Integer}, ::Val{2})
+    len = length(S)
+    @assert iseven(len) "Length of S must be even for Val(2) compression"
+    @assert len <= 78 "Length of S must be at most 78 for Val(2) compression"
+    @assert all(s -> s in -1:1, S) "Spin values must be in the range -1, 0, 1"
+    config1 = 0
+    config2 = 0
+
+    for i in eachindex(S)[1:end÷2]
+        s = S[i]
+        config1 += (s + 1) * Int64(3)^(i - 1)
+        s2 = S[end÷2+i]
+        config2 += (s2 + 1) * Int64(3)^(i - 1)
+    end
+    return (config1, config2)
+end
+
+function decompress_spinconfig(config::Tuple{Int64,Int64}, N::Int)
+    @assert iseven(N) "N must be even for Val(2) decompression"
+    S = Vector{Int8}(undef, N)
+    config1 = config[1]
+    config2 = config[2]
+    for i in 1:N÷2
+        S[i] = (config1 % Int64(3)) - 1
+        config1 ÷= Int64(3)
+        S[end÷2+i] = (config2 % Int64(3)) - 1
+        config2 ÷= Int64(3)
+    end
+    return S
+end
+
 function dfs_write_compressed!(i, first_nz_set::Bool, S, C, domain, residual, remaining_bound, subtree, io, found, explored, total, last_print, N, M)
     if i > N
         explored[] += one(explored[])
@@ -128,33 +160,170 @@ end
 
 ##
 
-function compress_spinconfig(S::AbstractVector{<:Integer}, ::Val{2})
-    len = length(S)
-    @assert iseven(len) "Length of S must be even for Val(2) compression"
-    @assert len <= 78 "Length of S must be at most 78 for Val(2) compression"
-    @assert all(s -> s in -1:1, S) "Spin values must be in the range -1, 0, 1"
-    config1 = 0
-    config2 = 0
+##
+using StaticArrays
+Lx = 4
+Ly = 4
+C = setup_constraints(Lx, Ly)
+domain = Int8[-1, 1]
+# domain = Int8[-1,0, 1]
+# @time solutions = constraintSolver(C, domain)
+local_updates = (
+    2SA[1, -1, -1, 1, 1, -1, -1, 1],
+    2SA[-1, 1, 1, -1, -1, 1, 1, -1],
+)
+function get_clusters(Lx,Ly)
+    CI = CartesianIndices((Lx, Ly))
+    LI = LinearIndices((Lx, Ly))
 
-    for i in eachindex(S)[1:end÷2]
-        s = S[i]
-        config1 += (s + 1) * Int64(3)^(i - 1)
-        s2 = S[end÷2+i]
-        config2 += (s2 + 1) * Int64(3)^(i - 1)
+    idx_wrap(i,j) = LI[mod1(i, Lx), mod1(j, Ly)]
+    idx_wrap(I) = idx_wrap(Tuple(I)...)
+
+    signs = (1,1,-1,-1,1,1,-1,-1)
+    
+    neighborsites(i, j) = SA[
+        (i, j+1),
+        (i-1, j+1),
+        (i-1, j),
+        (i-1, j-1),
+        (i, j-1),
+        (i+1, j-1),
+        (i+1, j),
+        (i+1, j+1),
+    ]
+
+    function neighborsites_linear(i,j)
+        map(neighborsites(i,j)) do (ii,jj)
+            idx_wrap(ii,jj)
+        end
     end
-    return (config1, config2)
+
+    clusters = SVector{8,Int}[]
+
+    for x in 1:Lx, y in 1:Ly
+        isodd(x+y) || continue
+        neighbors = neighborsites_linear(x, y)
+        push!(clusters, neighbors)
+    end
+    return clusters
+end
+# @time sols = constraintSolver_compressed_mmap(C, domain, mmap_path = "compressed_solutions.bin", overwrite = true)
+@time sols = constraintSolver_compressed_mmap(C, domain, mmap_path = "compressed_solutions.bin", overwrite = true)
+##
+import SpiderWebModel as SW
+using CairoMakie
+S = SW.stencilConfig(0.5*ones(Lx,Ly),1/2;
+       boundaryCondition = :periodic
+       )
+
+SW.plotApplPlaquettes(S)
+
+ps = [Point2f(Tuple(I)...) for I in CartesianIndices(S)][:]
+ts = [string(I) for I in LinearIndices(S)][:]
+text!(ps, text=ts)
+clusters = get_clusters(4,4)
+
+affsites = Point.(Tuple.(CartesianIndices((4,4))[[clusters[5]...]]))
+scatter!(affsites, color=[local_updates[1]...], markersize=20,)
+
+
+current_figure()
+##
+using SparseArrays
+
+function build_sparse_adjacency_matrix(Lx, Ly, sols_data, clusters, local_updates, domain)
+    nconfigs = size(sols_data, 2)  # Number of configurations
+    adjacency = spzeros(Int, nconfigs, nconfigs)  # Sparse adjacency matrix
+    Nsites = Lx * Ly
+    # Create a hash set for quick lookup of compressed configurations
+    # compressed_set = Set([(sols_data[1, i], sols_data[2, i]) for i in 1:nconfigs])
+    compressed_dict = Dict([(sols_data[1, i], sols_data[2, i]) => i for i in 1:nconfigs])
+
+    new_config = decompress_spinconfig((sols_data[1, 1], sols_data[2, 1]), Nsites) 
+    for i in 1:nconfigs
+        # Decompress the current configuration
+        config = decompress_spinconfig((sols_data[1, i], sols_data[2, i]), Nsites) 
+
+        for cluster in clusters
+            # Apply the local update
+            new_config .= config  # Start with the original configuration
+            # S_i = config[cluster] 
+
+            S_i_prime = @view new_config[cluster] 
+            for move in local_updates
+                S_i_prime .+= move  # Apply the local update to the cluster
+                
+                if new_config == config
+                    print(stderr, S_i_prime, move)
+                    error("Local update did not change the configuration. Check the local_updates and clusters definitions.")
+                end
+                is_valid_update = all(∈(domain),S_i_prime)
+                if !is_valid_update
+                    S_i_prime .-= move
+                    continue  # Skip invalid configurations
+                end
+
+                # println(i)
+                # Compress the new configuration
+                compressed_new = compress_spinconfig(new_config, Val(2))
+                S_i_prime .-= move  # Revert the change for the next iteration
+                # Check if the new configuration exists in sols_data
+                if haskey(compressed_dict, compressed_new)
+                    # Find the index of the new configuration
+                    j = compressed_dict[compressed_new]
+                    if i == j
+                        S[: ] .= config
+                        display(SW.plotApplPlaquettes(S))
+                        S[:] .= new_config
+                        display(SW.plotApplPlaquettes(S))
+                    end
+                    # Add an edge to the adjacency matrix
+                    adjacency[i, j] = 1
+                end
+            end
+        end
+    end
+
+    return adjacency
 end
 
-function decompress_spinconfig(config::Tuple{Int64,Int64}, N::Int)
-    @assert iseven(N) "N must be even for Val(2) decompression"
-    S = Vector{Int8}(undef, N)
-    config1 = config[1]
-    config2 = config[2]
-    for i in 1:N÷2
-        S[i] = (config1 % Int64(3)) - 1
-        config1 ÷= Int64(3)
-        S[end÷2+i] = (config2 % Int64(3)) - 1
-        config2 ÷= Int64(3)
-    end
-    return S
+##
+H = build_sparse_adjacency_matrix(Lx, Ly, sols.data, clusters, local_updates, domain)
+
+##
+uncompressed_sols = [decompress_spinconfig((sols.data[1, i], sols.data[2, i]), Lx*Ly) for i in 1:sols.nsolutions]
+all_SCs = [ copy(S) .= reshape(sol,size(S)) for sol in uncompressed_sols]
+
+S[:] .= uncompressed_sols[7]
+SW.plotApplPlaquettes(S)
+
+argmax([length(SW.getApplicablePlaquettes(s)) for s in all_SCs])
+##
+S[:] .= uncompressed_sols[33]
+
+SW.plotApplPlaquettes(S)
+
+# S[clusters[1]] .+= 2local_updates[2]
+SW.plotApplPlaquettes(S)
+
+function plotCompr(rep,Lx,Ly)
+    S = SW.stencilConfig(0.5*ones(Lx,Ly),1/2;
+       boundaryCondition = :periodic
+       )
+    S[:] = decompress_spinconfig(rep, Lx*Ly)
+    SW.plotApplPlaquettes(S)
 end
+
+function find_sectors(H::SparseMatrixCSC{Int, Int})
+    sectors = collect(1:size(H, 2))
+    for (i,s) in enumerate(sectors)
+        connected = findnz(H[:, i])[1]
+        for c in connected
+            sectors[c] = s
+        end
+    end
+    return sectors
+end
+sectors = find_sectors(H)
+
+unique_secs = unique(sectors)
