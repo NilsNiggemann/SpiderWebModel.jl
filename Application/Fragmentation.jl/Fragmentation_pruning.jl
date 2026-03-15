@@ -1,6 +1,7 @@
 # first_nz_set: whether a nonzero spin has been placed by an ancestor.
 # Symmetry breaking: when false, skip s=-1 (first nonzero must be +1).
 include("constraints.jl")
+using StaticArrays, SparseArrays
 function compress_spinconfig(S::AbstractVector{<:Integer}, ::Val{2})
     len = length(S)
     @assert iseven(len) "Length of S must be even for Val(2) compression"
@@ -158,20 +159,6 @@ function print_progress(explored, total, last_print, found_solutions, always_pri
     end
 end
 
-##
-
-##
-using StaticArrays
-Lx = 4
-Ly = 4
-C = setup_constraints(Lx, Ly)
-domain = Int8[-1, 1]
-# domain = Int8[-1,0, 1]
-# @time solutions = constraintSolver(C, domain)
-local_updates = (
-    2SA[1, -1, -1, 1, 1, -1, -1, 1],
-    2SA[-1, 1, 1, -1, -1, 1, 1, -1],
-)
 function get_clusters(Lx,Ly)
     CI = CartesianIndices((Lx, Ly))
     LI = LinearIndices((Lx, Ly))
@@ -208,32 +195,12 @@ function get_clusters(Lx,Ly)
     return clusters
 end
 # @time sols = constraintSolver_compressed_mmap(C, domain, mmap_path = "compressed_solutions.bin", overwrite = true)
-@time sols = constraintSolver_compressed_mmap(C, domain, mmap_path = "compressed_solutions.bin", overwrite = true)
-##
-import SpiderWebModel as SW
-using CairoMakie
-S = SW.stencilConfig(0.5*ones(Lx,Ly),1/2;
-       boundaryCondition = :periodic
-       )
-
-SW.plotApplPlaquettes(S)
-
-ps = [Point2f(Tuple(I)...) for I in CartesianIndices(S)][:]
-ts = [string(I) for I in LinearIndices(S)][:]
-text!(ps, text=ts)
-clusters = get_clusters(4,4)
-
-affsites = Point.(Tuple.(CartesianIndices((4,4))[[clusters[5]...]]))
-scatter!(affsites, color=[local_updates[1]...], markersize=20,)
-
-
-current_figure()
-##
-using SparseArrays
 
 function build_sparse_adjacency_matrix(Lx, Ly, sols_data, clusters, local_updates, domain)
     nconfigs = size(sols_data, 2)  # Number of configurations
-    adjacency = spzeros(Int, nconfigs, nconfigs)  # Sparse adjacency matrix
+    # adjacency = spzeros(Int, nconfigs, nconfigs)  # Sparse adjacency matrix
+    adjacency_rows = Int[]
+    adjacency_cols = Int[]
     Nsites = Lx * Ly
     # Create a hash set for quick lookup of compressed configurations
     # compressed_set = Set([(sols_data[1, i], sols_data[2, i]) for i in 1:nconfigs])
@@ -271,47 +238,16 @@ function build_sparse_adjacency_matrix(Lx, Ly, sols_data, clusters, local_update
                 if haskey(compressed_dict, compressed_new)
                     # Find the index of the new configuration
                     j = compressed_dict[compressed_new]
-                    if i == j
-                        S[: ] .= config
-                        display(SW.plotApplPlaquettes(S))
-                        S[:] .= new_config
-                        display(SW.plotApplPlaquettes(S))
-                    end
                     # Add an edge to the adjacency matrix
-                    adjacency[i, j] = 1
+                    # adjacency[i, j] = 1
+                    push!(adjacency_rows, i)
+                    push!(adjacency_cols, j)
                 end
             end
         end
     end
-
+    adjacency = sparse(adjacency_rows, adjacency_cols, ones(Int, length(adjacency_rows)), nconfigs, nconfigs)
     return adjacency
-end
-
-##
-H = build_sparse_adjacency_matrix(Lx, Ly, sols.data, clusters, local_updates, domain)
-
-##
-uncompressed_sols = [decompress_spinconfig((sols.data[1, i], sols.data[2, i]), Lx*Ly) for i in 1:sols.nsolutions]
-all_SCs = [ copy(S) .= reshape(sol,size(S)) for sol in uncompressed_sols]
-
-S[:] .= uncompressed_sols[7]
-SW.plotApplPlaquettes(S)
-
-argmax([length(SW.getApplicablePlaquettes(s)) for s in all_SCs])
-##
-S[:] .= uncompressed_sols[33]
-
-SW.plotApplPlaquettes(S)
-
-# S[clusters[1]] .+= 2local_updates[2]
-SW.plotApplPlaquettes(S)
-
-function plotCompr(rep,Lx,Ly)
-    S = SW.stencilConfig(0.5*ones(Lx,Ly),1/2;
-       boundaryCondition = :periodic
-       )
-    S[:] = decompress_spinconfig(rep, Lx*Ly)
-    SW.plotApplPlaquettes(S)
 end
 
 function find_sectors(H::SparseMatrixCSC{Int, Int})
@@ -319,11 +255,102 @@ function find_sectors(H::SparseMatrixCSC{Int, Int})
     for (i,s) in enumerate(sectors)
         connected = findnz(H[:, i])[1]
         for c in connected
-            sectors[c] = s
+            sectors[c] = min(s,sectors[c])
         end
     end
     return sectors
 end
+
+
+
+function analyze_sectors_and_solutions(domain_list)
+    Ls = [L for (L, S) in domain_list]
+    S_values = [S for (L, S) in domain_list]
+    total_solutions = [0 for _ in domain_list]
+    num_sectors = [0 for _ in domain_list]
+
+    for i in eachindex(domain_list)
+        L = Ls[i]
+        S = S_values[i]
+        # Setup constraints and solve
+        @info "Processing L=$L, S=$(join(S, ","))"
+        C = setup_constraints(L, L)
+        domain = S == 1 ? Int8[-1, 0, 1] : Int8[-1, 1]
+        sols = constraintSolver_compressed_mmap(C, domain, mmap_path = "compressed_solutions.bin", overwrite = true)
+        spin_fac = S == 1 ? 1 : 2  # correct local updates
+        # Build adjacency matrix and find sectors
+        clusters = get_clusters(L, L)
+        local_updates = (
+            spin_fac * SA[1, -1, -1, 1, 1, -1, -1, 1],
+            spin_fac * SA[-1, 1, 1, -1, -1, 1, 1, -1],
+        )
+        H = build_sparse_adjacency_matrix(L, L, sols.data, clusters, local_updates, domain)
+        sectors = find_sectors(H)
+        unique_sectors = unique(sectors)
+        # Determine spin type for formatting
+
+        # Collect results
+
+        total_solutions[i] = length(sectors)
+        num_sectors[i] = length(unique_sectors)
+        
+
+    end
+
+    return (;Ls, S_values, total_solutions, num_sectors)
+end
+
+
+function relative_sector_size(num_solutions,num_sectors)
+    return num_sectors / num_solutions
+end
+##
+using StaticArrays
+Lx = 4
+Ly = 4
+C = setup_constraints(Lx, Ly)
+# domain = Int8[-1, 1]
+domain = Int8[-1,0, 1]
+# @time solutions = constraintSolver(C, domain)
+local_updates = (
+    SA[1, -1, -1, 1, 1, -1, -1, 1],
+    SA[-1, 1, 1, -1, -1, 1, 1, -1],
+)
+
+@time sols = constraintSolver_compressed_mmap(C, domain, mmap_path = "compressed_solutions.bin", overwrite = true)
+
+clusters = get_clusters(Lx, Ly)
+@profview H = build_sparse_adjacency_matrix(Lx, Ly, sols.data, clusters, local_updates, domain)
 sectors = find_sectors(H)
 
 unique_secs = unique(sectors)
+
+##
+# Example usage
+domain_list = [
+    (4, 0.5),
+    (6, 0.5),
+    (8, 0.5),
+    # (10, 0.5),
+    (4, 1),
+    (6, 1),
+    # (8, 0.5),
+]
+results = analyze_sectors_and_solutions(domain_list)
+
+##    println("L   Domain       Unique Sectors   Total Solutions")
+let 
+    (;Ls, S_values, total_solutions, num_sectors) = results
+    # Group results by spin type for relative analysis
+
+    println("L   Spin   Unique Sectors   Total Solutions   Relative (%)")
+    println("-------------------------------------------------------------------------------")
+
+    for (L, S, total, sectors) in zip(Ls, S_values, total_solutions, num_sectors)
+        relative_sectors = round(relative_sector_size(total, sectors) * 100, digits = 2)
+
+
+        println(rpad(string(L), 4), rpad(S == 1 ? "Spin-1" : "Spin-1/2", 12), rpad(string(sectors), 17), rpad(string(total), 17), rpad(relative_sectors, 20))
+    end
+    
+end
