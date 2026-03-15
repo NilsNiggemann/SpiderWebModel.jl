@@ -114,6 +114,7 @@ function find_valid_6x4_stackings(x_boundary_valid_configs::Vector, Lx, Ly, S=1.
         end
     end
     boundary_plaquettes = unique(boundary_plaquettes)
+    boundary_plaquettes = collect(SW.plaquetteIterator(buffer_config, 1))
     
     println("Checking $(length(boundary_plaquettes)) boundary plaquettes")
     
@@ -123,7 +124,7 @@ function find_valid_6x4_stackings(x_boundary_valid_configs::Vector, Lx, Ly, S=1.
     
     n_configs = length(x_boundary_valid_configs)
     println("Testing $(n_configs^2) combinations...")
-    
+
     for (bottom_idx, bottom_layer) in enumerate(x_boundary_valid_configs)
         valid_tops = Int[]
         
@@ -136,16 +137,33 @@ function find_valid_6x4_stackings(x_boundary_valid_configs::Vector, Lx, Ly, S=1.
         
         bottom_to_top_dict[bottom_idx] = valid_tops
         
-        if bottom_idx % 100 == 0
-            println("Progress: $(bottom_idx)/$(n_configs) - Found $(length(valid_tops)) valid tops for bottom $bottom_idx")
+        if bottom_idx % 100 == 0 || bottom_idx == n_configs
+            progress = bottom_idx / n_configs
+            bar_width = 40
+            
+            filled = round(Int, progress * bar_width)
+            # bar = repeat("█", max(filled - 1, 0)) * (filled > 0 ? "▶" : "") * repeat(" ", bar_width - filled)
+            bar = repeat("█", max(filled, 0)) * repeat(" ", bar_width - filled)
+            print("\rProgress: [", bar, "] ", lpad(string(round(progress * 100, digits=1)), 5), "% ",
+                  "($bottom_idx/$n_configs) | valid tops: ", length(valid_tops))
             flush(stdout)
         end
     end
     
+    println()
     println("\nFound $(length(valid_stackings)) valid 6×4 stackings")
     return valid_stackings, bottom_to_top_dict
 end
-
+function make_2_layer!(config,stacking::Tuple{Int,Int}, x_boundary_valid_configs)
+    bottom_idx, top_idx = stacking
+    Lx, Ly = size(x_boundary_valid_configs[1])
+    
+    # Place bottom layer
+    config[:, 1:Ly] .= x_boundary_valid_configs[bottom_idx]
+    
+    # Place top layer
+    config[:, Ly+1:2Ly] .= x_boundary_valid_configs[top_idx]
+end
 """
     check_three_layer_compatibility(layer1, layer2, layer3, buffer_config, boundary_12, boundary_23)
 
@@ -215,7 +233,7 @@ Steps:
 2. Find all valid 6×4 stackings and create lookup dictionary
 3. Iterate through 6×4 stackings and find valid third layers with y-boundary constraints
 """
-function find_all_6x6_configs_layered(; S=1.0, save_output=true, plot_examples=true)
+function find_all_6x6_configs_layered_old(; S=1.0, save_output=true, plot_examples=true)
     println("="^70)
     println("Finding all 6×6 configurations using optimized layered approach")
     println("="^70)
@@ -232,7 +250,7 @@ function find_all_6x6_configs_layered(; S=1.0, save_output=true, plot_examples=t
     # Step 2: Find all valid 6×4 stackings
     println("\nStep 2: Find all valid 6×4 stackings")
     valid_6x4_stackings, bottom_to_top_dict = find_valid_6x4_stackings(x_boundary_valid_configs, Lx, Ly, S)
-    
+    # return valid_6x4_stackings, bottom_to_top_dict, x_boundary_valid_configs
     # Step 3: Build 6×6 configurations by adding third layer
     println("\nStep 3: Building 6×6 configurations with y-boundary constraints")
     
@@ -262,6 +280,9 @@ function find_all_6x6_configs_layered(; S=1.0, save_output=true, plot_examples=t
     boundary_12 = unique(boundary_12)
     boundary_23 = unique(boundary_23)
     
+    boundary_12 = collect(SW.plaquetteIterator(buffer_3layer, 1))  # Plaquettes at y=Ly boundary
+    boundary_23 = collect(SW.plaquetteIterator(buffer_3layer, 2))  # Plaquettes at y=2*Ly boundary
+
     # For y-boundary check: boundary between layer 3 and layer 1 (wrapping)
     # This has the same structure as boundary_12 but checks wrapping
     boundary_y = copy(boundary_12)
@@ -271,12 +292,13 @@ function find_all_6x6_configs_layered(; S=1.0, save_output=true, plot_examples=t
     println("Boundary y-wrap: $(length(boundary_y)) plaquettes")
     
     # Iterate through all valid 6×4 stackings
-    valid_6x6_configs = []
+    valid_6x6_configs = Matrix{Int8}[]
     n_checked = 0
     n_total = length(valid_6x4_stackings)
     
     println("\nIterating through $(n_total) valid 6×4 stackings...")
     
+    S_test = SW.stencilConfig(zeros(Lx, 3*Ly), S, boundaryCondition=:periodic)  # Buffer for 3-layer checks
     for (idx, (bottom_idx, middle_idx)) in enumerate(valid_6x4_stackings)
         layer1 = x_boundary_valid_configs[bottom_idx]
         layer2 = x_boundary_valid_configs[middle_idx]
@@ -289,27 +311,136 @@ function find_all_6x6_configs_layered(; S=1.0, save_output=true, plot_examples=t
             layer3 = x_boundary_valid_configs[top_idx]
             
             # Check if all three layers are compatible (internal boundaries)
-            if check_three_layer_compatibility(layer1, layer2, layer3, 
-                                              buffer_3layer, boundary_12, boundary_23)
+            # if check_three_layer_compatibility(layer1, layer2, layer3, buffer_3layer, boundary_12, boundary_23)
                 # Check y-boundary constraint (layer3 wraps to layer1)
-                if check_y_boundary_constraints(layer1, layer3, buffer_2layer, boundary_y)
+                # if check_y_boundary_constraints(layer1, layer3, buffer_2layer, boundary_y)
                     # Valid configuration found!
-                    full_config = zeros(Lx, 3*Ly)
-                    full_config[:, 1:Ly] .= layer1
-                    full_config[:, Ly+1:2Ly] .= layer2
-                    full_config[:, 2Ly+1:3Ly] .= layer3
-                    push!(valid_6x6_configs, full_config)
+                    # full_config = zeros(Int8, Lx, 3*Ly)
+                S_test[:, 1:Ly] .= layer1
+                S_test[:, Ly+1:2Ly] .= layer2
+                S_test[:, 2Ly+1:3Ly] .= layer3
+                if SW.fulFillsConstraint(S_test)
+                    push!(valid_6x6_configs, copy(parent(S_test)))
                 end
-            end
             
             n_checked += 1
         end
         
-        # Progress reporting
-        if idx % 100 == 0
-            progress = 100 * idx / n_total
-            println("Progress: $(round(progress, digits=1))% - Found $(length(valid_6x6_configs)) valid 6×6 configs")
+        #Progress update
+        if idx % 10 == 0 || idx == n_total
+            progress = idx / n_total
+            bar_width = 40
+            filled = round(Int, progress * bar_width)
+            bar = repeat("█", max(filled, 0)) * repeat(" ", bar_width - filled)
+            print("\rProgress: [", bar, "] ", lpad(string(round(progress * 100, digits=1)), 5), "% ",
+                  "($idx/$n_total) | 6×6 configs found: ", length(valid_6x6_configs))
             flush(stdout)
+        end
+    end
+    
+    # Results
+    println("\n" * "="^70)
+    println("RESULTS")
+    println("="^70)
+    println("Total 6×6 configurations found: $(length(valid_6x6_configs))")
+    println("="^70)
+    return valid_6x6_configs
+    # Save results
+    if save_output && !isempty(valid_6x6_configs)
+        save_configs_to_hdf5(valid_6x6_configs, "all_6x6_configs.h5", Lx, 3*Ly, S)
+    end
+    
+    # Verify and plot
+    if plot_examples && !isempty(valid_6x6_configs)
+        verify_and_plot_configs(valid_6x6_configs, Lx, 3*Ly, S)
+    end
+    
+    return valid_6x6_configs
+end
+
+function find_all_6x2_layers()
+    Lx = 6
+    Ly = 2
+    ALLGS_1 = SW.getAllGS_noMissing(1)
+    
+    # Step 1: Generate all 6×2 configurations with valid x-boundaries
+    all_layer_configs = generate_all_layer_configs(Lx, Ly, ALLGS_1)
+    
+    # S_test = SW.stencilConfig(zeros(Lx, Ly), 1, boundaryCondition=:periodic)
+    # function test_conf(x)
+    #     S_test .= x
+    #     return SW.fulFillsConstraint(S_test)
+    # end
+    # filter!(test_conf, all_layer_configs)
+    return all_layer_configs
+end
+
+function stack_on_top!(buffer_config, layer_bottom, layer_top)
+    Lx, Ly = size(layer_bottom)
+    
+    buffer_config[:, 1:Ly] .= layer_bottom
+    buffer_config[:, Ly+1:2Ly] .= layer_top
+    return buffer_config
+end
+
+function is_valid_stacking!(buffer_config, layer_bottom, layer_top)
+    @assert size(layer_bottom) == size(layer_top)
+    @assert size(buffer_config) == (size(layer_bottom, 1), 2*size(layer_bottom, 2))
+    stack_on_top!(buffer_config, layer_bottom, layer_top)
+
+    boundary_plaquettes = (
+        (1,3),
+        (2,2),
+        (3,3),
+        (4,2),
+        (5,3),
+        (6,2)
+    )
+    for (i, j) in boundary_plaquettes
+        P = SW.getPlaquette(buffer_config, i, j)
+        if SW.constraint(P) ≠ 0
+            return false
+        end
+    end
+    return true
+end
+
+function find_all_6x6_configs_layered(all_layer_configs)
+    
+    buffer_3layer = SW.stencilConfig(zeros(Lx, 3*Ly), S, boundaryCondition=:periodic)
+    
+    
+    valid_6x6_configs = Matrix{Int8}[]
+    n_checked = 0
+    n_total = length(valid_6x4_stackings)
+    
+    println("\nIterating through $(n_total) valid 6×4 stackings...")
+    
+    S_test = SW.stencilConfig(zeros(Lx, 3*Ly), S, boundaryCondition=:periodic)
+    
+    
+    for layer1 in all_layer_configs
+        for layer2 in all_layer_configs
+            for layer3 in all_layer_configs
+                S_test[:, 1:Ly] .= layer1
+                S_test[:, Ly+1:2Ly] .= layer2
+                S_test[:, 2Ly+1:3Ly] .= layer3
+                if SW.fulFillsConstraint(S_test)
+                    push!(valid_6x6_configs, copy(parent(S_test)))
+                end
+                n_checked += 1
+                idx +=1
+                #Progress update
+                if idx % 10 == 0 || idx == n_total
+                    progress = idx / n_total
+                    bar_width = 40
+                    filled = round(Int, progress * bar_width)
+                    bar = repeat("█", max(filled, 0)) * repeat(" ", bar_width - filled)
+                    print("\rProgress: [", bar, "] ", lpad(string(round(progress * 100, digits=1)), 5), "% ",
+                        "($idx/$n_total) | 6×6 configs found: ", length(valid_6x6_configs))
+                    flush(stdout)
+                end
+            end
         end
     end
     
@@ -390,7 +521,12 @@ function verify_and_plot_configs(configs::Vector, Lx, Ly, S; n_plot=3)
 end
 
 # Run the main function
-find_all_6x6_configs_layered()
+a = find_all_6x6_configs_layered()
+##
+S = SW.stencilConfig(zeros(6,6),1;boundaryCondition = :periodic)
+S .= a[15]
+SW.plotFractons(S)
+##
 ##
 import SpiderWebModel as SW
 ALLGS_1 = SW.getAllGS_noMissing(1)
