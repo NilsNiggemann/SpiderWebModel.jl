@@ -322,6 +322,13 @@ function get_domain(S)
     S == 1 || S == 0.5 || error("Spin S must be either 1 or 0.5")
     return S == 1 ? Int8[-1, 0, 1] : Int8[-1, 1]
 end
+function correct_time_reversal(num_solutions, Spin)
+    if Spin == 0.5
+        return 2num_solutions  # Account for time-reversal pairs
+    else
+        return 2num_solutions + 1  # Account for the zero-spin configuration which is its own pair
+    end
+end
 
 function analyze_sectors_and_solutions(domain_list)
     Ls = [L for (L, S) in domain_list]
@@ -362,7 +369,7 @@ function relative_sector_size(num_solutions,num_sectors,L)
     num_sectors<0 && return NaN
     num_solutions<0 && return NaN
 
-    b_rel = (num_solutions/num_sectors)^(1/L^2)
+    b_rel = (num_sectors/num_solutions)^(1/L^2)
     return b_rel
 end
 
@@ -392,13 +399,13 @@ function print_latex_table(results)
     categories = [
         ("Total", :total),
         ("Sectors", :sectors),
-        ("b/b_sec", :relative),
+        ("f", :relative),
         ("avg. connectivity", :mean_conn),
     ]
     allL = sort(unique(Ls))
     println(raw"\begin{tabular}{l|cc||cc||cc||cc}")
     println(raw"  \toprule")
-    println("  \$L\$ & \\multicolumn{2}{c}{Total} & \\multicolumn{2}{c}{Sectors} & \\multicolumn{2}{c}{b/b_{sec}} & \\multicolumn{2}{c}{avg. connectivity} " * "\\\\")
+    println("  \$L\$ & \\multicolumn{2}{c}{Total} & \\multicolumn{2}{c}{Sectors} & \\multicolumn{2}{c}{f} & \\multicolumn{2}{c}{avg. connectivity} " * "\\\\")
     println(raw"  \cmidrule{2-3} \cmidrule{4-5} \cmidrule{6-7} \cmidrule{8-9}")
     spin_headers = [spin_label(0.5), spin_label(1.0), spin_label(0.5), spin_label(1.0), spin_label(0.5), spin_label(1.0), spin_label(0.5), spin_label(1.0)]
     println("  & $(join(spin_headers, " & ")) " * "\\\\")
@@ -448,13 +455,6 @@ push!(appended_results.mean_connectivity, NaN)  #
 
 
 ##    println("L   Domain       Unique Sectors   Total Solutions")
-function correct_time_reversal(num_solutions, Spin)
-    if Spin == 0.5
-        return 2num_solutions  # Account for time-reversal pairs
-    else
-        return 2num_solutions + 1  # Account for the zero-spin configuration which is its own pair
-    end
-end
 
 let 
     (;Ls, S_values, total_solutions, num_sectors, mean_connectivity) = results
@@ -470,7 +470,7 @@ let
     spin_label(s) = s == 1.0 ? "Spin-1" : "Spin-1/2"
     get_val(L, s, field) = haskey(data, (L, s)) ? string(getfield(data[(L, s)], field)) : "—"
 
-    categories = [("Sectors", :sectors), ("Total", :total), ("b/b_sec", :relative), ("MeanConn", :mean_conn)]
+    categories = [("Sectors", :sectors), ("Total", :total), ("f", :relative), ("MeanConn", :mean_conn)]
 
     # Column widths: L col + per-spin col within each category
     lw = 4   # L column
@@ -506,18 +506,9 @@ let
         println(row)
     end
 end
-
 ##
 print_latex_table(appended_results)
-
 ##
-function countmap(v::AbstractVector)
-    m = Dict{eltype(v), Int}()
-    for x in v
-        m[x] = get(m, x, 0) + 1
-    end
-    return m
-end
 
 function sector_analysis(Lx,Ly,S)
     C = setup_constraints(Lx, Ly)
@@ -542,120 +533,6 @@ Ly = 6
 res_05 = sector_analysis(Lx, Ly, 0.5)
 res_1 = sector_analysis(Lx, Ly, 1.0)
 ##
-
-
-##
-using CairoMakie, MakieHelpers
-with_theme(theme_SimpleTicks()) do
-    # sector_counts = countmap(sectors)
-    # unique_sectors = sort(collect(keys(sector_counts)))
-    # counts = [sector_counts[s] for s in unique_sectors]
-
-
-    fig = Figure(size = 0.7 .*(800, 450))
-    ax05 = Axis(fig[1, 1], xlabel="Sector size", ylabel="Count",
-    #  title=L"S=1/2",
-    yscale = log10,xscale = log10,
-    xlabelvisible = false, 
-    xticklabelsvisible = false, 
-    )
-    ax1 = Axis(fig[2, 1], xlabel="Sector size", ylabel="Count", 
-    # title=L"S=1",
-    yscale = log10,xscale = log10
-    )
-    linkxaxes!(ax05, ax1)
-    # unique_sectors_05 =  sort(collect(keys(res_05.sector_sizes)))
-
-    # counts05 = [res_05.sector_sizes[s] for s in unique_sectors_05]
-    # counts1 = [res_1.sector_sizes[s] for s in unique_sectors_05]
-    sector_counts = countmap(res_05.sectors)
-    unique_sectors = sort(collect(keys(sector_counts)))
-    counts = [sector_counts[s] for s in unique_sectors]
-
-
-    hist!(ax05,counts, color=:black,bins=10)
-
-    sector_counts = countmap(res_1.sectors)
-    unique_sectors = sort(collect(keys(sector_counts)))
-    counts = [sector_counts[s] for s in unique_sectors]
-
-    hist!(ax1,counts, color=:black,bins=600)
-
-    text!(ax05, (0.98,0.95), text=L"S=1/2", space = :relative, fontsize = 20, align = (:right, :top) )
-    text!(ax1, (0.98,0.95), text=L"S=1", space = :relative, fontsize = 20, align = (:right, :top) )
-    Label(fig[1, 1,TopLeft()], L"(a)$$", padding = (-40,0,-25, -20),fontsize = 16)
-    Label(fig[2, 1,TopLeft()], L"(b)$$", padding = (-40,0,-25, -20),fontsize = 16)
-    save("Application/figs/PaperFigs/sector_size_histograms.pdf", fig)
-    fig
-end
-##
-
-# Degree histograms (log-log) for scale-free diagnostics
-with_theme(theme_SimpleTicks()) do
-    deg_05 = filter(>(0), get_connectivity(res_05.H))
-    deg_1 = filter(>(0), get_connectivity(res_1.H))
-
-    fig_deg = Figure(size = 0.7 .*(800, 450))
-    ax05_deg = Axis(
-        fig_deg[1, 1],
-        xlabel = "Degree",
-        ylabel = "Count",
-        xscale = log10,
-        yscale = log10,
-        xlabelvisible = false,
-        xticklabelsvisible = false,
-    )
-    ax1_deg = Axis(
-        fig_deg[2, 1],
-        xlabel = "Degree",
-        ylabel = "Count",
-        xscale = log10,
-        yscale = log10,
-    )
-    linkxaxes!(ax05_deg, ax1_deg)
-
-    hist!(ax05_deg, deg_05, bins = 200, color = :black)
-    hist!(ax1_deg, deg_1, bins = 200, color = :black)
-
-    text!(ax05_deg, (0.98, 0.95), text = L"S=1/2", space = :relative, fontsize = 20, align = (:right, :top))
-    text!(ax1_deg, (0.98, 0.95), text = L"S=1", space = :relative, fontsize = 20, align = (:right, :top))
-    Label(fig_deg[1, 1, TopLeft()], L"(a)$$", padding = (-40, 0, -25, -20), fontsize = 16)
-    Label(fig_deg[2, 1, TopLeft()], L"(b)$$", padding = (-40, 0, -25, -20), fontsize = 16)
-
-    save("Application/figs/PaperFigs/degree_histograms.pdf", fig_deg)
-    fig_deg
-end
-##
-
-##
-# decompress_spinconfig.([(x,) for (x,) in zip(sols.data[1, 1:10])], 36)
-import SpiderWebModel as SW
-S = SW.stencilConfig(zeros(Lx, Ly), 1, boundaryCondition = :periodic)
-
-max_size = maximum(values(sector_sizes))
-max_sec_num = 0
-for (k,v) in sector_sizes
-    if v == max_size
-        max_sec_num = k
-        break
-    end
-end
-
-S[:].= decompress_spinconfig((sols.data[:, 5713]...,), Lx*Ly)
-# S .= 0
-# S[1,1] = 1
-# S[4,6] = -1
-SW.plotApplPlaquettes(S)
-
-##
-S_prime = copy(S)
-circshift!(S_prime,S,(1,1))
-SW.plotApplPlaquettes(S_prime)
-Spr_flat = S_prime[:]
-##
-decompressed = decompress_spinconfig.([(sols.data[:, i]...,) for i in 1:size(sols.data, 2)], Lx*Ly)
-shifted_Spr = findfirst(==(Spr_flat),decompressed)
-##
-sectors[shifted_Spr]
-sector_sizes[sectors[shifted_Spr]]
-
+using HDF5
+h5write("Application/Data/Connectivity/sector_analysis_$(Lx)x$(Ly).h5", "sectors_S05", res_05.sectors)
+h5write("Application/Data/Connectivity/sector_analysis_$(Lx)x$(Ly).h5", "sectors_S10", res_1.sectors)
