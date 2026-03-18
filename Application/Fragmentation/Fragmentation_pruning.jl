@@ -419,6 +419,8 @@ function print_latex_table(results)
     println(raw"\end{tabular}")
 end
 ##
+
+##
 # Example usage
 domain_list = [
     (4, 0.5),
@@ -539,7 +541,6 @@ Ly = 6
 
 res_05 = sector_analysis(Lx, Ly, 0.5)
 res_1 = sector_analysis(Lx, Ly, 1.0)
-
 ##
 
 
@@ -587,6 +588,45 @@ with_theme(theme_SimpleTicks()) do
     save("Application/figs/PaperFigs/sector_size_histograms.pdf", fig)
     fig
 end
+##
+
+# Degree histograms (log-log) for scale-free diagnostics
+with_theme(theme_SimpleTicks()) do
+    deg_05 = filter(>(0), get_connectivity(res_05.H))
+    deg_1 = filter(>(0), get_connectivity(res_1.H))
+
+    fig_deg = Figure(size = 0.7 .*(800, 450))
+    ax05_deg = Axis(
+        fig_deg[1, 1],
+        xlabel = "Degree",
+        ylabel = "Count",
+        xscale = log10,
+        yscale = log10,
+        xlabelvisible = false,
+        xticklabelsvisible = false,
+    )
+    ax1_deg = Axis(
+        fig_deg[2, 1],
+        xlabel = "Degree",
+        ylabel = "Count",
+        xscale = log10,
+        yscale = log10,
+    )
+    linkxaxes!(ax05_deg, ax1_deg)
+
+    hist!(ax05_deg, deg_05, bins = 200, color = :black)
+    hist!(ax1_deg, deg_1, bins = 200, color = :black)
+
+    text!(ax05_deg, (0.98, 0.95), text = L"S=1/2", space = :relative, fontsize = 20, align = (:right, :top))
+    text!(ax1_deg, (0.98, 0.95), text = L"S=1", space = :relative, fontsize = 20, align = (:right, :top))
+    Label(fig_deg[1, 1, TopLeft()], L"(a)$$", padding = (-40, 0, -25, -20), fontsize = 16)
+    Label(fig_deg[2, 1, TopLeft()], L"(b)$$", padding = (-40, 0, -25, -20), fontsize = 16)
+
+    save("Application/figs/PaperFigs/degree_histograms.pdf", fig_deg)
+    fig_deg
+end
+##
+
 ##
 # decompress_spinconfig.([(x,) for (x,) in zip(sols.data[1, 1:10])], 36)
 import SpiderWebModel as SW
