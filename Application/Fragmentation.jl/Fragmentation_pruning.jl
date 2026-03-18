@@ -1,7 +1,7 @@
 # first_nz_set: whether a nonzero spin has been placed by an ancestor.
 # Symmetry breaking: when false, skip s=-1 (first nonzero must be +1).
 include("constraints.jl")
-using StaticArrays, SparseArrays
+using StaticArrays, SparseArrays, Statistics
 function compress_spinconfig(S::AbstractVector{<:Integer}, ::Val{N_split}) where {N_split}
     @assert N_split >= 1 "N_split must be at least 1"
     len = length(S)
@@ -310,6 +310,19 @@ function get_connectivity(H::SparseMatrixCSC)
     return connected
 end
 
+function plaquette_updates(S)
+    S == 1 || S == 0.5 || error("Spin S must be either 1 or 0.5")
+    s_fac = S == 1 ? 1 : 2
+    P = s_fac*SA[1, -1, -1, 1, 1, -1, -1, 1]
+
+    return (P, -P)
+end
+
+function get_domain(S)
+    S == 1 || S == 0.5 || error("Spin S must be either 1 or 0.5")
+    return S == 1 ? Int8[-1, 0, 1] : Int8[-1, 1]
+end
+
 function analyze_sectors_and_solutions(domain_list)
     Ls = [L for (L, S) in domain_list]
     S_values = [S for (L, S) in domain_list]
@@ -322,15 +335,12 @@ function analyze_sectors_and_solutions(domain_list)
         # Setup constraints and solve
         @info "Processing L=$L, S=$(join(S, ","))"
         C = setup_constraints(L, L)
-        domain = S == 1 ? Int8[-1, 0, 1] : Int8[-1, 1]
+        domain = get_domain(S)
         sols = constraintSolver_compressed_mmap(C, domain, mmap_path = "compressed_solutions.bin", overwrite = true)
-        spin_fac = S == 1 ? 1 : 2  # correct local updates
         # Build adjacency matrix and find sectors
         clusters = get_clusters(L, L)
-        local_updates = (
-            spin_fac * SA[1, -1, -1, 1, 1, -1, -1, 1],
-            spin_fac * SA[-1, 1, 1, -1, -1, 1, 1, -1],
-        )
+        local_updates = plaquette_updates(S)
+
         H = build_sparse_adjacency_matrix(L, L, sols.data, clusters, local_updates, domain)
         sectors = find_sectors(H)
         unique_sectors = unique(sectors)
@@ -338,8 +348,8 @@ function analyze_sectors_and_solutions(domain_list)
 
         # Collect results
 
-        total_solutions[i] = length(sectors)
-        num_sectors[i] = length(unique_sectors)
+        total_solutions[i] = correct_time_reversal(length(sectors), S_values[i])
+        num_sectors[i] = correct_time_reversal(length(unique_sectors), S_values[i])
         mean_connectivity[i] = mean(get_connectivity(H))
 
     end
@@ -348,92 +358,66 @@ function analyze_sectors_and_solutions(domain_list)
 end
 
 
-function relative_sector_size(num_solutions,num_sectors)
-    return num_sectors / num_solutions
+function relative_sector_size(num_solutions,num_sectors,L)
+    num_sectors<0 && return NaN
+    num_solutions<0 && return NaN
+
+    b_rel = (num_solutions/num_sectors)^(1/L^2)
+    return b_rel
 end
 
 function print_latex_table(results)
     (;Ls, S_values, total_solutions, num_sectors, mean_connectivity) = results
-    total_solutions = correct_time_reversal.(total_solutions, S_values)
-    num_sectors     = correct_time_reversal.(num_sectors, S_values)
 
     data = Dict{Tuple{Int,Float64}, NamedTuple}()
     for (L, S, total, sectors, mean_conn) in zip(Ls, S_values, total_solutions, num_sectors, mean_connectivity)
         data[(L, S)] = (total=total, sectors=sectors,
-                        relative=round(relative_sector_size(total, sectors)*100, digits=2),
+                        relative=round(relative_sector_size(total, sectors, L), digits=3),
                         mean_conn=round(mean_conn, digits=2))
     end
-
-    all_L    = sort(unique(Ls))
-    all_spin = sort(unique(S_values))
-    nspin    = length(all_spin)
+    # delete all values where data[(L, S)]
+    spin_order = [0.5, 1.0]
     spin_label(s) = s == 1.0 ? raw"Spin-1" : raw"Spin-\nicefrac{1}{2}"
-    get_val(L, s, field) = haskey(data, (L, s)) ? string(getfield(data[(L, s)], field)) : raw"\textemdash"
+    function get_val(L, s, field)
+        if !haskey(data, (L, s))
+            return raw"\textemdash"
+        end
+        val = getfield(data[(L, s)], field)
+        if val == -10 || isnan(val)
+            return raw"\textemdash"
+        end
+        return string(val)
+    end
 
-    categories = [("Sectors", :sectors), ("Total", :total), (raw"Rel.\ (\%)", :relative), (raw"\(\bar{z}\)", :mean_conn)]
-    ncats = length(categories)
-
-    # Total data columns = nspin * ncats
-    ncols = nspin * ncats
-
-    # Column spec: l | (c's grouped by category, separated by ||)
-    col_groups = join([join(fill("c", nspin), "") for _ in 1:ncats], "||")
-    println(raw"\begin{table}[htbp]")
-    println(raw"  \centering")
-    println("  \\begin{tabular}{l|$(col_groups)}")
+    categories = [
+        ("Total", :total),
+        ("Sectors", :sectors),
+        ("b/b_sec", :relative),
+        ("avg. connectivity", :mean_conn),
+    ]
+    allL = sort(unique(Ls))
+    println(raw"\begin{tabular}{l|cc||cc||cc||cc}")
     println(raw"  \toprule")
-
-    # Row 1: category multicolumns
-    cat_headers = join(["\\multicolumn{$(nspin)}{c}{$(cat_label)}" for (cat_label, _) in categories], " & ")
-    println("  \$L\$ & $(cat_headers) \\\\")
-
-    # Cmidrules under each category group
-    cmidrules = join(["\\cmidrule(lr){$((k-1)*nspin+2)-$((k-1)*nspin+nspin+1)}" for k in 1:ncats], " ")
-    println("  $(cmidrules)")
-
-    # Row 2: spin sub-headers repeated for each category
-    spin_headers = join(repeat([join([spin_label(s) for s in all_spin], " & ")], ncats), " & ")
-    println("  & $(spin_headers) \\\\")
+    println("  \$L\$ & \\multicolumn{2}{c}{Total} & \\multicolumn{2}{c}{Sectors} & \\multicolumn{2}{c}{b/b_{sec}} & \\multicolumn{2}{c}{avg. connectivity} " * "\\\\")
+    println(raw"  \cmidrule{2-3} \cmidrule{4-5} \cmidrule{6-7} \cmidrule{8-9}")
+    spin_headers = [spin_label(0.5), spin_label(1.0), spin_label(0.5), spin_label(1.0), spin_label(0.5), spin_label(1.0), spin_label(0.5), spin_label(1.0)]
+    println("  & $(join(spin_headers, " & ")) " * "\\\\")
     println(raw"  \midrule")
 
-    # Data rows
-    for L in all_L
+    for L in allL
         vals = String[]
         for (_, field) in categories
-            for s in all_spin
-                push!(vals, get_val(L, s, field))
+            for s in spin_order
+                val = get_val(L, s, field)
+                push!(vals, val)
             end
         end
         println("  \$$(L)\$ & $(join(vals, " & ")) \\\\")
     end
 
     println(raw"  \bottomrule")
-    println("  \\end{tabular}")
-    println("  \\caption{Sector analysis for spin-1/2 and spin-1 on \$L\\times L\$ lattices.}")
-    println(raw"  \label{tab:sectors}")
-    println(raw"\end{table}")
+    println(raw"\end{tabular}")
 end
-##
-using StaticArrays
-Lx = 4
-Ly = 4
-C = setup_constraints(Lx, Ly)
-# domain = Int8[-1, 1]
-domain = Int8[-1,0, 1]
-# @time solutions = constraintSolver(C, domain)
-local_updates = (
-    SA[1, -1, -1, 1, 1, -1, -1, 1],
-    SA[-1, 1, 1, -1, -1, 1, 1, -1],
-)
-
-@time sols = constraintSolver_compressed_mmap(C, domain, mmap_path = "compressed_solutions.bin", overwrite = true)
-
-clusters = get_clusters(Lx, Ly)
-H = build_sparse_adjacency_matrix(Lx, Ly, sols.data, clusters, local_updates, domain)
-sectors = find_sectors(H)
-
-unique_secs = unique(sectors)
-
 ##
 # Example usage
 domain_list = [
@@ -447,6 +431,20 @@ domain_list = [
 ]
 results = analyze_sectors_and_solutions(domain_list)
 
+##
+appended_results = deepcopy(results)
+push!(appended_results.Ls,12)
+push!(appended_results.S_values,0.5)
+push!(appended_results.total_solutions, 10103561614)  # obtained from counting
+push!(appended_results.num_sectors, -10)  # unknown without adjacency analysis
+push!(appended_results.mean_connectivity, NaN)  # 
+push!(appended_results.Ls,8)
+push!(appended_results.S_values,1.0)
+push!(appended_results.total_solutions, 47067992003)
+push!(appended_results.num_sectors, -10)  # unknown without adjacency analysis
+push!(appended_results.mean_connectivity, NaN)  #
+
+
 ##    println("L   Domain       Unique Sectors   Total Solutions")
 function correct_time_reversal(num_solutions, Spin)
     if Spin == 0.5
@@ -458,13 +456,11 @@ end
 
 let 
     (;Ls, S_values, total_solutions, num_sectors, mean_connectivity) = results
-    total_solutions = correct_time_reversal.(total_solutions, S_values)
-    num_sectors = correct_time_reversal.(num_sectors, S_values)
 
     # Index entries by (L, S) for side-by-side lookup
     data = Dict{Tuple{Int,Float64}, NamedTuple}()
     for (L, S, total, sectors, mean_conn) in zip(Ls, S_values, total_solutions, num_sectors, mean_connectivity)
-        data[(L, S)] = (total=total, sectors=sectors, relative=round(relative_sector_size(total, sectors)*100, digits=2), mean_conn=round(mean_conn, digits=2))
+        data[(L, S)] = (total=total, sectors=sectors, relative=round(relative_sector_size(total, sectors, L), digits=2), mean_conn=round(mean_conn, digits=2))
     end
 
     all_L    = sort(unique(Ls))
@@ -472,7 +468,7 @@ let
     spin_label(s) = s == 1.0 ? "Spin-1" : "Spin-1/2"
     get_val(L, s, field) = haskey(data, (L, s)) ? string(getfield(data[(L, s)], field)) : "—"
 
-    categories = [("Sectors", :sectors), ("Total", :total), ("Rel(%)", :relative), ("MeanConn", :mean_conn)]
+    categories = [("Sectors", :sectors), ("Total", :total), ("b/b_sec", :relative), ("MeanConn", :mean_conn)]
 
     # Column widths: L col + per-spin col within each category
     lw = 4   # L column
@@ -510,4 +506,116 @@ let
 end
 
 ##
-print_latex_table(results)
+print_latex_table(appended_results)
+
+##
+function countmap(v::AbstractVector)
+    m = Dict{eltype(v), Int}()
+    for x in v
+        m[x] = get(m, x, 0) + 1
+    end
+    return m
+end
+
+function sector_analysis(Lx,Ly,S)
+    C = setup_constraints(Lx, Ly)
+    domain = get_domain(S)
+    local_updates = plaquette_updates(S)
+    file = "Solutions_$(Lx)x$(Ly)_$(S)"*tempname()
+    mkpath(dirname(file))
+    sols = constraintSolver_compressed_mmap(C, domain, mmap_path = file, overwrite = true)
+    clusters = get_clusters(Lx, Ly)
+    H = build_sparse_adjacency_matrix(Lx, Ly, sols.data, clusters, local_updates, domain)
+    sectors = find_sectors(H)
+
+    sector_sizes = countmap(sectors)
+    sector_sizes_all = [sector_sizes[s] for s in sectors]
+
+    return (;sols, sectors, H, sector_sizes, sector_sizes_all)
+end
+
+Lx = 6
+Ly = 6
+
+res_05 = sector_analysis(Lx, Ly, 0.5)
+res_1 = sector_analysis(Lx, Ly, 1.0)
+
+##
+
+
+##
+using CairoMakie, MakieHelpers
+with_theme(theme_SimpleTicks()) do
+    # sector_counts = countmap(sectors)
+    # unique_sectors = sort(collect(keys(sector_counts)))
+    # counts = [sector_counts[s] for s in unique_sectors]
+
+
+    fig = Figure(size = 0.7 .*(800, 450))
+    ax05 = Axis(fig[1, 1], xlabel="Sector size", ylabel="Count",
+    #  title=L"S=1/2",
+    yscale = log10,xscale = log10,
+    xlabelvisible = false, 
+    xticklabelsvisible = false, 
+    )
+    ax1 = Axis(fig[2, 1], xlabel="Sector size", ylabel="Count", 
+    # title=L"S=1",
+    yscale = log10,xscale = log10
+    )
+    linkxaxes!(ax05, ax1)
+    # unique_sectors_05 =  sort(collect(keys(res_05.sector_sizes)))
+
+    # counts05 = [res_05.sector_sizes[s] for s in unique_sectors_05]
+    # counts1 = [res_1.sector_sizes[s] for s in unique_sectors_05]
+    sector_counts = countmap(res_05.sectors)
+    unique_sectors = sort(collect(keys(sector_counts)))
+    counts = [sector_counts[s] for s in unique_sectors]
+
+
+    hist!(ax05,counts, color=:black,bins=10)
+
+    sector_counts = countmap(res_1.sectors)
+    unique_sectors = sort(collect(keys(sector_counts)))
+    counts = [sector_counts[s] for s in unique_sectors]
+
+    hist!(ax1,counts, color=:black,bins=600)
+
+    text!(ax05, (0.98,0.95), text=L"S=1/2", space = :relative, fontsize = 20, align = (:right, :top) )
+    text!(ax1, (0.98,0.95), text=L"S=1", space = :relative, fontsize = 20, align = (:right, :top) )
+    Label(fig[1, 1,TopLeft()], L"(a)$$", padding = (-40,0,-25, -20),fontsize = 16)
+    Label(fig[2, 1,TopLeft()], L"(b)$$", padding = (-40,0,-25, -20),fontsize = 16)
+    save("Application/figs/PaperFigs/sector_size_histograms.pdf", fig)
+    fig
+end
+##
+# decompress_spinconfig.([(x,) for (x,) in zip(sols.data[1, 1:10])], 36)
+import SpiderWebModel as SW
+S = SW.stencilConfig(zeros(Lx, Ly), 1, boundaryCondition = :periodic)
+
+max_size = maximum(values(sector_sizes))
+max_sec_num = 0
+for (k,v) in sector_sizes
+    if v == max_size
+        max_sec_num = k
+        break
+    end
+end
+
+S[:].= decompress_spinconfig((sols.data[:, 5713]...,), Lx*Ly)
+# S .= 0
+# S[1,1] = 1
+# S[4,6] = -1
+SW.plotApplPlaquettes(S)
+
+##
+S_prime = copy(S)
+circshift!(S_prime,S,(1,1))
+SW.plotApplPlaquettes(S_prime)
+Spr_flat = S_prime[:]
+##
+decompressed = decompress_spinconfig.([(sols.data[:, i]...,) for i in 1:size(sols.data, 2)], Lx*Ly)
+shifted_Spr = findfirst(==(Spr_flat),decompressed)
+##
+sectors[shifted_Spr]
+sector_sizes[sectors[shifted_Spr]]
+
