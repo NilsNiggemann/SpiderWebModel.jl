@@ -3,11 +3,11 @@ using CairoMakie, MakieHelpers, HDF5, StatsBase
 
 sectors_05 = h5read("Application/Data/Connectivity/sector_analysis_6x6.h5", "sectors_S05")
 sectors_1 = h5read("Application/Data/Connectivity/sector_analysis_6x6.h5", "sectors_S10")
-connectivities_05 = h5read("Application/Data/Connectivity/sector_analysis_30x30_staircase.h5", "connectivities_spinhalf")
-connectivities_1 = h5read("Application/Data/Connectivity/sector_analysis_30x30_staircase.h5", "connectivities_spin1")
+connectivities_05 = h5read("Application/Data/Connectivity/sector_analysis_28x28_staircase.h5", "connectivities_spinhalf")
+connectivities_1 = h5read("Application/Data/Connectivity/sector_analysis_28x28_staircase.h5", "connectivities_spin1")
 
-connectivities_05 = connectivities_05./(30*30)
-connectivities_1 = connectivities_1./(30*30)
+connectivities_05 = connectivities_05./(28*28) ./2 # Normalize by number of sites and S(S+1)
+connectivities_1 = connectivities_1./(28*28) ./3 # Normalize by number of sites and S(S+1)
 ##
 with_theme(theme_SimpleTicks()) do
     fig = Figure(size = 0.7 .*(800, 350))
@@ -17,12 +17,12 @@ with_theme(theme_SimpleTicks()) do
     # xlabelvisible = false, 
     # xticklabelsvisible = false, 
     # )
-    ax1 = Axis(fig[1, 1], xlabel="Sector size", ylabel="Count", 
+    ax1 = Axis(fig[1, 1], xlabel=L"Sector size$$", ylabel=L"Count$$", 
     # title=L"S=1",
     yscale = log10,xscale = log10
     )
 
-    ax_prob = Axis(fig[1, 2], xlabel="Connectivity", ylabel="Probability")
+    ax_prob = Axis(fig[1, 2], xlabel=L"Connectivity$/(d_\text{loc}L^2)$", ylabel=L"Probability$$")
 
     # linkxaxes!(ax05, ax1)
 
@@ -45,14 +45,14 @@ with_theme(theme_SimpleTicks()) do
     # text!(ax05, (0.98,0.95), text=L"S=1/2", space = :relative, fontsize = 20, align = (:right, :top) )
     # text!(ax1, (0.98,0.95), text=L"S=1", space = :relative, fontsize = 20, align = (:right, :top) )
 
-    hist!(ax_prob,connectivities_1, color=:black, bins=sort!(unique(connectivities_1)), label=L"S=1",normalization = :probability)
-    hist!(ax_prob,connectivities_05, color=(:red,0.6), bins=sort!(unique(connectivities_05)), label=L"S=1/2",normalization = :probability)
+    hist!(ax_prob,connectivities_1, color=:black, bins=sort!(unique(connectivities_1)), label=L"$S=1$",normalization = :probability)
+    hist!(ax_prob,connectivities_05, color=(:red,0.6), bins=sort!(unique(connectivities_05)), label=L"$S=1/2$",normalization = :probability)
 
     # hist!(ax_prob,connectivities_1, color=:black, bins=45, label=L"S=1",normalization = :probability)
     # hist!(ax_prob,connectivities_05, color=(:red,0.6), bins=45, label=L"S=1/2",normalization = :probability)
 
 
-    axislegend(ax_prob, position = :rt, framevisible = false)
+    axislegend(ax_prob, position = :rt, framevisible = false, labelsize = 13)
     Label(fig[1, 1,TopLeft()], L"(a)$$", padding = (-40,0,-25, -20),fontsize = 16)
     # Label(fig[2, 1,TopLeft()], L"(b)$$", padding = (-40,0,-25, -20),fontsize = 16)
     Label(fig[1, 2,TopLeft()], L"(b)$$", padding = (-40,0,-25, -20),fontsize = 16)
