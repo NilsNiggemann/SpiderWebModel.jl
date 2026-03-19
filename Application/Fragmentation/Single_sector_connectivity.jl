@@ -11,12 +11,6 @@ using Statistics
 using MakieHelpers
 using SpiderWebModel
 
-##
-
-# res = [SW.startManyWalkerGFMC(S,CT,100,9000,ψG;initializer) for _ in 1:6];
-
-# Sqs = [O.StructureFactor for O in ObsRuns[findall(x->minimum(x)>-90,energies)]]
-# energies = [O.Energy for O in ObsRuns[findall(x->minimum(x)>-90,energies)]]
 
 ##
 function connectivity(confs,Spin)
@@ -44,7 +38,7 @@ end
 ##
 Nwalkers = 28*6
 Nconfs = 2000
-L = 28
+L = 30
 # S = SW.stencilConfig(zeros(12,12),1,boundaryCondition= :periodic) .= 2SW.periodicState6x6Condensate(12)
 
 S = SW.get4x4PeriodicSpinConf(L,6)
@@ -71,5 +65,5 @@ conns_spinhalf = Int16.(getAllConnectivities(resHalf.SaveConfigs,0.5))
 
 ##
 using SpiderWebModel.HDF5
-h5write("Application/Data/Connectivity/sector_analysis_28x28_staircase.h5","connectivities_spin1",conns_spin1)
-h5write("Application/Data/Connectivity/sector_analysis_28x28_staircase.h5","connectivities_spinhalf",conns_spinhalf)
+h5write("Application/Data/Connectivity/sector_analysis_$(L)x$(L)_staircase.h5","connectivities_spin1",conns_spin1)
+h5write("Application/Data/Connectivity/sector_analysis_$(L)x$(L)_staircase.h5","connectivities_spinhalf",conns_spinhalf)
