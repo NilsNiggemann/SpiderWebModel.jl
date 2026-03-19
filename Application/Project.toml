@@ -2,6 +2,7 @@
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Cubature = "667455a9-e2ce-5579-9412-b964f529a492"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+FourierTools = "b18b359b-aebc-45ac-a139-9c0ccbb2871e"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 HiGHS = "87dc4568-4c63-4d18-b0c0-bb2238e4078b"
 Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"

@@ -827,4 +827,156 @@ let
 
     
 end
+##
+import FourierTools as FTools
+function plotCircularCuts!(axes,CBarPos,SqsGFMC;     
+    q_max = 0.26pi,
+    q_min = 0.14pi,
+    num_circles = 4,
+    radii = LinRange(q_min, q_max, num_circles),
+    use_scaling = false,
+    up_sampling_factor = 1,
+    )
 
+    ax_GFMC, ax_FT, axCuts = axes
+
+    scaling = if use_scaling
+        (qx,qy) -> (qx-pi)^2+(qy-pi)^2 + 1e-12*(qx ≈ pi && qy ≈ pi) 
+    else
+        (qx,qy) -> 1
+    end
+    # scaling(qx,qy) = 1
+    # resampling_factor = 1
+
+    SqMat = mean(SqsGFMC)
+    SqErr = std(SqsGFMC)
+    fittingCoefs = optimizeCoeffs(SqMat)
+
+    if up_sampling_factor != 1
+        SqMat = FTools.resample(SqMat, up_sampling_factor .* size(SqMat))
+        SqErr = FTools.resample(SqErr, up_sampling_factor .* size(SqErr))
+    end
+
+    SqMat = SW.expand_Sq(SqMat)
+    SqErr = SW.expand_Sq(SqErr)
+    A_fit, r_fit = strd.(fittingCoefs)
+    
+    colors_cuts = cgrad(:brg, length(radii), categorical = true)
+    # Maximum radius to sample
+    phis = LinRange(0, 2pi, 100)
+
+    q_dense = LinRange(-0.5pi, 1.5pi, 200)
+    
+    # qx_true = qy_true = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
+    qx_true = qy_true = trueMomenta(pi-2q_max,pi+2q_max,size(SqMat,1)-1)
+    
+    Sq =  SW.getSqCont(SqMat)
+    Sqerr = SW.getSqCont(SqErr)
+
+
+
+    SqFT_rescaled(qx,qy) = SqFieldTheory((qx,qy),fittingCoefs)/scaling(qx,qy)
+    Sq_rescaled(qx,qy) = Sq(qx,qy)/scaling(qx,qy)
+    Sq_err_rescaled(qx,qy) = Sqerr(qx,qy)/scaling(qx,qy)
+    
+    Sq_resc = [Sq_rescaled(x,y) for x in qx_true, y in qy_true]
+    colorrange = (minimum(Sq_resc), 1)
+    heatmap!(ax_GFMC,qx_true,qy_true,Sq_resc, colormap = :viridis;colorrange, highclip = :white)
+
+    hm = heatmap!(ax_FT,qx_true,qx_true,[SqFT_rescaled(x,y) for x in qx_true, y in qx_true], colormap = :viridis;colorrange, highclip = :white)
+    
+    cbarlabel = use_scaling ? L"\mathcal{S}(\mathbf{q})/|\mathbf{q}-\mathbf{Q}|^2" : L"\mathcal{S}(\mathbf{q})"
+    Colorbar(CBarPos,hm;label = cbarlabel, height = Relative(0.85),ticks = SimpleTicks() )
+    q_default = trueMomenta(0,2pi,size(SqMat,1)-1)
+    q_grid = [(qx,qy) for qx in q_default, qy in q_default]
+    q_map = SW.getSqCont(q_grid)
+
+    for (idx, q_abs) in enumerate(radii)
+        # Generate points along this radial direction
+        path = [ (pi,pi) .+ q_abs .*(cos(phi), sin(phi)) for phi in phis]
+
+        Sq_cut = [Sq_rescaled(qx,qy) for (qx,qy) in path]
+        Sq_err_cut = [Sq_err_rescaled(qx,qy) for (qx,qy) in path]
+        SqFT_cut = [SqFT_rescaled(qx,qy) for (qx,qy) in path]
+
+        lines!(ax_FT, path, color = colors_cuts[idx],linestyle = :solid,linewidth = 1)
+
+        # Plot GFMC data with error bars
+        lines!(axCuts, phis, SqFT_cut, color = colors_cuts[idx],linewidth = 1, linestyle = :dash)
+        sc = scatter!(axCuts, phis, Sq_cut, color = colors_cuts[idx], markersize = 4)
+        translate!(sc, 0, 0, 1)
+        errorbars!(axCuts, phis, Sq_cut, Sq_err_cut, color = colors_cuts[idx], whiskerwidth = 4, linewidth=0.5)
+        lines!(ax_GFMC, path, color = colors_cuts[idx])
+    end
+    # xlims!(axCuts, 0, scalingfunc(q_max))
+    
+    # Add fitting parameters as text
+    text!(ax_FT, Point(0.97, 0.98), 
+          text = L"$A = %$(A_fit),\ r = %$(r_fit)$",
+          align = (:right, :top), fontsize = 16,
+          strokecolor = (:black, 0.5), strokewidth = 3,space = :relative)
+    text!(ax_FT, Point(0.97, 0.98), 
+          text = L"$A = %$(A_fit),\ r = %$(r_fit)$",
+          align = (:right, :top), fontsize = 16, color = :white,space = :relative)   
+          
+    if up_sampling_factor != 1
+        for ax in (ax_GFMC, ax_FT)
+             
+            text!(ax, Point(0.0, 0.0), 
+                text = L"s_\text{up} = L × %$(up_sampling_factor)",
+                align = (:left, :bottom), fontsize = 16,
+                strokecolor = (:black, 0.6), strokewidth = 2,space = :relative)
+            text!(ax, Point(0.0, 0.0), 
+                text = L"s_\text{up} = L × %$(up_sampling_factor)",
+                align = (:left, :bottom), fontsize = 16, color = :white,space = :relative)
+        end
+    end
+end
+##
+with_theme(theme_SimpleTicks()) do 
+    mu = 0.8
+    L = 36
+    q_max = 0.3pi
+    q_min = 0.13pi
+    num_circles = 5
+
+    SqsGFMC = getSq(res,tau=15,mu=mu,L=L)
+
+
+    fig = Figure(size = 100 .* (8,4.3),fontsize = 22)
+
+    xticks = yticks = PiTicks([0.5pi,pi,1.5pi])
+    ax_GFMC = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, title = L"GFMC$$",
+    xlabelvisible = false, xticklabelsvisible = false,
+    )
+    ax_FT = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false, title = L"Field Theory$$",
+    xlabelvisible = false, xticklabelsvisible = false,
+    )
+    axCuts = Axis(fig[1,4],
+    xlabelvisible = false, xticklabelsvisible = false,
+    xlabel = L"\varphi",xticks = PiTicks()
+    )
+
+    plotCircularCuts!((ax_GFMC, ax_FT, axCuts),fig[1,3], SqsGFMC; q_max, q_min, num_circles)
+
+    ax_GFMC = Axis(fig[2,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
+    ax_FT = Axis(fig[2,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false)
+    axCuts = Axis(fig[2,4], 
+    xlabel = L"\varphi",xticks = PiTicks()
+    )
+
+    plotCircularCuts!((ax_GFMC, ax_FT, axCuts),fig[2,3], SqsGFMC; q_max, q_min, num_circles, up_sampling_factor = 16, use_scaling = true)
+
+
+    # colsize!(fig.layout, 3, Relative(0.05))
+    Label(fig[1,1, TopLeft()], L"(a)$$", padding = (-100, -40, -30, -40))
+    Label(fig[2,1, TopLeft()], L"(d)$$", padding = (-100, -40, -30, -40))
+
+    Label(fig[1,2, TopLeft()], L"(b)$$", padding = (-60, -40, -30, -40))
+    Label(fig[2,2, TopLeft()], L"(e)$$", padding = (-60, -40, -30, -40))
+    
+    Label(fig[1,4, TopLeft()], L"(c)$$", padding = (-100, -40, -30, -40))
+    Label(fig[2,4, TopLeft()], L"(f)$$", padding = (-100, -40, -30, -40))
+    # save("../../figs/PaperFigs/StairCaseSpin1_Sq_RadialCuts.pdf", fig)
+    fig
+end
