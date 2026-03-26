@@ -841,7 +841,8 @@ function plotCircularCuts!(axes,CBarPos,SqsGFMC;
     ax_GFMC, ax_FT, axCuts = axes
 
     scaling = if use_scaling
-        (qx,qy) -> (qx-pi)^2+(qy-pi)^2 + 1e-12*(qx ≈ pi && qy ≈ pi) 
+        # (qx,qy) -> (qx-pi)^2+(qy-pi)^2 + 1e-12*(qx ≈ pi && qy ≈ pi) 
+        (qx,qy) -> (qx)^2+(qy)^2 + 1e-12*(qx ≈ 0 && qy ≈ 0) 
     else
         (qx,qy) -> 1
     end
@@ -865,10 +866,8 @@ function plotCircularCuts!(axes,CBarPos,SqsGFMC;
     # Maximum radius to sample
     phis = LinRange(0, 2pi, 100)
 
-    q_dense = LinRange(-0.5pi, 1.5pi, 200)
-    
     # qx_true = qy_true = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
-    qx_true = qy_true = trueMomenta(pi-2q_max,pi+2q_max,size(SqMat,1)-1)
+    qx_true = qy_true = trueMomenta(-0.5pi -0.1q_max,0.5pi + 0.1q_max,size(SqMat,1)-1)
     
     Sq =  SW.getSqCont(SqMat)
     Sqerr = SW.getSqCont(SqErr)
@@ -880,26 +879,28 @@ function plotCircularCuts!(axes,CBarPos,SqsGFMC;
     Sq_err_rescaled(qx,qy) = Sqerr(qx,qy)/scaling(qx,qy)
     
     Sq_resc = [Sq_rescaled(x,y) for x in qx_true, y in qy_true]
+    Sq_FT_resc = [SqFT_rescaled(x,y) for x in qx_true, y in qy_true]
+
     colorrange = (minimum(Sq_resc), 1)
+    if !use_scaling
+        colorrange = extrema([extrema(Sq_resc)..., extrema(Sq_FT_resc)...])
+    end
     heatmap!(ax_GFMC,qx_true,qy_true,Sq_resc, colormap = :viridis;colorrange, highclip = :white)
 
     hm = heatmap!(ax_FT,qx_true,qx_true,[SqFT_rescaled(x,y) for x in qx_true, y in qx_true], colormap = :viridis;colorrange, highclip = :white)
     
-    cbarlabel = use_scaling ? L"\mathcal{S}(\mathbf{q})/|\mathbf{q}-\mathbf{Q}|^2" : L"\mathcal{S}(\mathbf{q})"
+    cbarlabel = use_scaling ? L"\mathcal{S}(\mathbf{q})/q^2" : L"\mathcal{S}(\mathbf{q})"
     Colorbar(CBarPos,hm;label = cbarlabel, height = Relative(0.85),ticks = SimpleTicks() )
-    q_default = trueMomenta(0,2pi,size(SqMat,1)-1)
-    q_grid = [(qx,qy) for qx in q_default, qy in q_default]
-    q_map = SW.getSqCont(q_grid)
 
     for (idx, q_abs) in enumerate(radii)
         # Generate points along this radial direction
-        path = [ (pi,pi) .+ q_abs .*(cos(phi), sin(phi)) for phi in phis]
+        path = [ q_abs .*(cos(phi), sin(phi)) for phi in phis]
 
         Sq_cut = [Sq_rescaled(qx,qy) for (qx,qy) in path]
         Sq_err_cut = [Sq_err_rescaled(qx,qy) for (qx,qy) in path]
         SqFT_cut = [SqFT_rescaled(qx,qy) for (qx,qy) in path]
 
-        lines!(ax_FT, path, color = colors_cuts[idx],linestyle = :solid,linewidth = 1)
+        lines!(ax_FT, path, color = colors_cuts[idx],linewidth = 1,linestyle = :dash)
 
         # Plot GFMC data with error bars
         lines!(axCuts, phis, SqFT_cut, color = colors_cuts[idx],linewidth = 1, linestyle = :dash)
@@ -920,7 +921,7 @@ function plotCircularCuts!(axes,CBarPos,SqsGFMC;
           align = (:right, :top), fontsize = 16, color = :white,space = :relative)   
           
     if up_sampling_factor != 1
-        for ax in (ax_GFMC, ax_FT)
+        for ax in (ax_GFMC, )
              
             text!(ax, Point(0.0, 0.0), 
                 text = L"s_\text{up} = L × %$(up_sampling_factor)",
@@ -936,16 +937,16 @@ end
 with_theme(theme_SimpleTicks()) do 
     mu = 0.8
     L = 36
-    q_max = 0.3pi
-    q_min = 0.13pi
-    num_circles = 5
-
+    q_max = 0.33pi
+    q_min = 0.154pi
+    num_circles = 4
+    up_sampling_factor = 8
     SqsGFMC = getSq(res,tau=15,mu=mu,L=L)
 
 
     fig = Figure(size = 100 .* (8,4.3),fontsize = 22)
 
-    xticks = yticks = PiTicks([0.5pi,pi,1.5pi])
+    xticks = yticks = PiTicks([-0.5pi,0,0.5pi])
     ax_GFMC = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, title = L"GFMC$$",
     xlabelvisible = false, xticklabelsvisible = false,
     )
@@ -965,7 +966,7 @@ with_theme(theme_SimpleTicks()) do
     xlabel = L"\varphi",xticks = PiTicks()
     )
 
-    plotCircularCuts!((ax_GFMC, ax_FT, axCuts),fig[2,3], SqsGFMC; q_max, q_min, num_circles, up_sampling_factor = 16, use_scaling = true)
+    plotCircularCuts!((ax_GFMC, ax_FT, axCuts),fig[2,3], SqsGFMC; q_max, q_min, num_circles, up_sampling_factor = up_sampling_factor, use_scaling = true)
 
 
     # colsize!(fig.layout, 3, Relative(0.05))
@@ -977,6 +978,6 @@ with_theme(theme_SimpleTicks()) do
     
     Label(fig[1,4, TopLeft()], L"(c)$$", padding = (-100, -40, -30, -40))
     Label(fig[2,4, TopLeft()], L"(f)$$", padding = (-100, -40, -30, -40))
-    # save("../../figs/PaperFigs/StairCaseSpin1_Sq_RadialCuts.pdf", fig)
+    save("../../figs/PaperFigs/StairCaseSpin1_Sq_RadialCuts_no_upsampling.pdf", fig)
     fig
 end
