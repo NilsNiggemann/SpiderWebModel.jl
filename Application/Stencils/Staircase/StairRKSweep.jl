@@ -813,13 +813,13 @@ function plotCircularCuts!(axes,CBarPos,SqsGFMC;
     use_scaling = false,
     up_sampling_factor = 1,
     print_params = true,
+    scaling_exp = 2
     )
 
     ax_GFMC, ax_FT, axCuts = axes
 
     scaling = if use_scaling
-        # (qx,qy) -> (qx-pi)^2+(qy-pi)^2 + 1e-12*(qx ≈ pi && qy ≈ pi) 
-        (qx,qy) -> sqrt((qx)^2+(qy)^2)^2 + 1e-12*(qx ≈ 0 && qy ≈ 0) 
+        (qx,qy) -> sqrt((qx)^2+(qy)^2)^scaling_exp + 1e-12*(qx ≈ 0 && qy ≈ 0) 
     else
         (qx,qy) -> 1
     end
@@ -878,7 +878,7 @@ function plotCircularCuts!(axes,CBarPos,SqsGFMC;
 
     hm = heatmap!(ax_FT,qx_true,qx_true,[SqFT_rescaled(x,y) for x in qx_true, y in qx_true]; colormap = :viridis, add_cbar_kwargs...)
     
-    cbarlabel = use_scaling ? L"\mathcal{S}(\mathbf{q})/q^2" : L"\mathcal{S}(\mathbf{q})"
+    cbarlabel = use_scaling ? L"\mathcal{S}(\mathbf{q})/q^{%$(scaling_exp)}" : L"\mathcal{S}(\mathbf{q})"
     Colorbar(CBarPos,hm;label = cbarlabel, height = Relative(0.95),ticks = SimpleTicks() )
 
     for (idx, q_abs) in enumerate(radii)
@@ -1033,5 +1033,79 @@ with_theme(theme_SimpleTicks()) do
     # Label(fig[3,2, TopLeft()], L"(h)$$", padding = (-60, -40, -30, -40))
     # Label(fig[3,4, TopLeft()], L"(i)$$", padding = (-100, -40, -30, -40))
     save("../../figs/PaperFigs/StairCaseSpin1_Sq_RadialCuts.pdf", fig)
+    fig
+end
+
+##
+with_theme(theme_SimpleTicks()) do 
+    mu = 0.6
+    L = 36
+    q_max = 0.33pi
+    q_min = 0.154pi
+    num_circles = 4
+    up_sampling_factor = 8
+    SqsGFMC = getSq(res,tau=13,mu=mu,L=L)
+
+
+    fig = Figure(size = 100 .* (7.5,5.5),fontsize = 22)
+
+    xticks = yticks = PiTicks([-0.5pi,0,0.5pi])
+    ax_GFMC = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, title = L"GFMC$$",
+    xlabelvisible = false, xticklabelsvisible = false,
+    )
+    ax_FT = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false, title = L"Field Theory$$",
+    xlabelvisible = false, xticklabelsvisible = false,
+    )
+    axCuts = Axis(fig[1,4],
+    xlabelvisible = false, xticklabelsvisible = false,
+    xlabel = L"\varphi",xticks = PiTicks()
+    )
+
+    axes_top = (ax_GFMC, ax_FT, axCuts)
+
+    plotCircularCuts!(axes_top,fig[1,3], SqsGFMC; q_max, q_min, num_circles)
+
+    ax_GFMC = Axis(fig[2,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,
+    xlabelvisible = false, xticklabelsvisible = false,
+    )
+    ax_FT = Axis(fig[2,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false,
+    xlabelvisible = false, xticklabelsvisible = false,)
+    axCuts = Axis(fig[2,4], 
+    xlabelvisible = false, xticklabelsvisible = false,
+    xlabel = L"\varphi",xticks = PiTicks()
+    )
+    
+    axes_mid = (ax_GFMC, ax_FT, axCuts)
+
+    plotCircularCuts!(axes_mid,fig[2,3], SqsGFMC; q_max, q_min, num_circles, up_sampling_factor = 8, use_scaling = true, print_params = false,)
+
+    ax_GFMC = Axis(fig[3,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
+    ax_FT = Axis(fig[3,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false)
+    axCuts = Axis(fig[3,4], 
+    xlabel = L"\varphi",xticks = PiTicks()
+    )
+    axes_bot = (ax_GFMC, ax_FT, axCuts)
+
+    plotCircularCuts!(axes_bot,fig[3,3], SqsGFMC; q_max, q_min, num_circles, up_sampling_factor = up_sampling_factor, use_scaling = true, print_params = false,scaling_exp = 2.5)
+
+    # for ax in [axes_top..., axes_mid..., axes_bot...]
+    all_axes = [axes_top..., axes_mid..., axes_bot...]
+    labels = ['a','b','c','d','e','f','g','h','i']
+    colors = repeat([:white, :white, :black], outer = 3)
+    for (i,ax) in enumerate(all_axes)
+        label = labels[i]
+        if colors[i] == :white
+            text_bg!(ax, Point(0.0, 1), text = L"(%$(label))$$", align = (:left, :top),space = :relative, color = :white, )
+        else
+            text!(ax, Point(0.0, 1), text = L"(%$(label))$$", align = (:left, :top),space = :relative, color = colors[i], )
+        end
+    end
+
+    cover_q = LinRange(-3*2pi/L, 3*pi/L, 200)
+    cover_func(q) = q'q < 1*(2pi/L)^2 ? 1 : NaN
+    heatmap!(axes_bot[1], cover_q, cover_q, (qx,qy) -> cover_func([qx,qy]), colormap = :grays, colorrange = (0,1),alpha = 0.8)
+    # scatter!(axes_bot[1], [Point(0,0)], markersize = 50, marker = '⚫', color = :white)
+    colgap!(fig.layout, 2, 4)
+    save("../../figs/PaperFigs/StairCaseSpin1_Sq_RadialCuts_mu06.pdf", fig)
     fig
 end
