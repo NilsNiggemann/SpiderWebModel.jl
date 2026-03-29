@@ -6,8 +6,15 @@ sectors_1 = h5read("Application/Data/Connectivity/sector_analysis_6x6.h5", "sect
 connectivities_05 = h5read("Application/Data/Connectivity/sector_analysis_28x28_staircase.h5", "connectivities_spinhalf")
 connectivities_1 = h5read("Application/Data/Connectivity/sector_analysis_28x28_staircase.h5", "connectivities_spin1")
 
-connectivities_05 = connectivities_05./(28*28) ./2 # Normalize by number of sites and S(S+1)
-connectivities_1 = connectivities_1./(28*28) ./3 # Normalize by number of sites and S(S+1)
+connectivities_05 = connectivities_05./(28*28) # Normalize by number of sites
+connectivities_1 = connectivities_1./(28*28) # Normalize by number of sites
+##
+""" Group the data into unique bins and plot a line of the unique bins and their counts. """
+function hist_lines!(ax, counts,args...;kwargs...)
+    bins = sort!(unique(counts))
+    bin_counts = [sum(counts .== b) for b in bins]
+    scatterlines!(ax, bins, bin_counts,args...;markersize=0,kwargs...)
+end
 ##
 with_theme(theme_SimpleTicks()) do
     fig = Figure(size = 0.7 .*(800, 350))
@@ -19,10 +26,11 @@ with_theme(theme_SimpleTicks()) do
     # )
     ax1 = Axis(fig[1, 1], xlabel=L"Sector size$$", ylabel=L"Count$$", 
     # title=L"S=1",
-    yscale = log10,xscale = log10
+    yscale = log10,
+    xscale = log10
     )
 
-    ax_prob = Axis(fig[1, 2], xlabel=L"Connectivity$/(d_\text{loc}L^2)$", ylabel=L"Probability$$")
+    ax_prob = Axis(fig[1, 2], xlabel=L"Connectivity$/L^2$", ylabel=L"Probability$$")
 
     # linkxaxes!(ax05, ax1)
 
@@ -32,21 +40,27 @@ with_theme(theme_SimpleTicks()) do
     counts = [sector_counts[s] for s in unique_sectors]
     println(maximum(counts))
 
-    hist!(ax1,counts, color=:black,bins=sort!(unique(counts)), label=L"S=1")
-
+    bins = sort!(unique(counts))
+    # bins = logrange(1, maximum(counts), 80)
+    # bins = 80
+    # return sector_counts
+    # hist!(ax1,counts, color=:black,bins=bins, label=L"S=1",gap=0)
+    hist_lines!(ax1,counts, color=:black, label=L"S=1",markersize =3)
+    
     sector_counts = countmap(sectors_05)
     unique_sectors = sort(collect(keys(sector_counts)))
     counts = [sector_counts[s] for s in unique_sectors]
-
-
-    hist!(ax1,counts, color=(:red,0.6),bins=sort!(unique(counts)), label=L"S=1/2")
+    
+    # bins = sort!(unique(counts))[1:10:end]
+    # hist!(ax1,counts, color=(:red,1),bins=bins, label=L"S=1/2",gap=0)
+    hist_lines!(ax1,counts, color=(:red,1), label=L"S=1/2",markersize =5)
     println(maximum(counts))
 
     # text!(ax05, (0.98,0.95), text=L"S=1/2", space = :relative, fontsize = 20, align = (:right, :top) )
     # text!(ax1, (0.98,0.95), text=L"S=1", space = :relative, fontsize = 20, align = (:right, :top) )
 
     hist!(ax_prob,connectivities_1, color=:black, bins=sort!(unique(connectivities_1)), label=L"$S=1$",normalization = :probability)
-    hist!(ax_prob,connectivities_05, color=(:red,0.6), bins=sort!(unique(connectivities_05)), label=L"$S=1/2$",normalization = :probability)
+    hist!(ax_prob,connectivities_05, color=(:red,1), bins=sort!(unique(connectivities_05)), label=L"$S=1/2$",normalization = :probability)
 
     # hist!(ax_prob,connectivities_1, color=:black, bins=45, label=L"S=1",normalization = :probability)
     # hist!(ax_prob,connectivities_05, color=(:red,0.6), bins=45, label=L"S=1/2",normalization = :probability)
@@ -61,5 +75,3 @@ with_theme(theme_SimpleTicks()) do
     save("Application/figs/PaperFigs/sector_size_histograms.pdf", fig)
     fig
 end
-##
-##
