@@ -836,13 +836,14 @@ function plotCircularCuts!(axes,CBarPos,SqsGFMC;
     radii = LinRange(q_min, q_max, num_circles),
     use_scaling = false,
     up_sampling_factor = 1,
+    print_params = true,
+    scaling_exp = 2
     )
 
     ax_GFMC, ax_FT, axCuts = axes
 
     scaling = if use_scaling
-        # (qx,qy) -> (qx-pi)^2+(qy-pi)^2 + 1e-12*(qx ≈ pi && qy ≈ pi) 
-        (qx,qy) -> (qx)^2+(qy)^2 + 1e-12*(qx ≈ 0 && qy ≈ 0) 
+        (qx,qy) -> sqrt((qx)^2+(qy)^2)^scaling_exp + 1e-12*(qx ≈ 0 && qy ≈ 0) 
     else
         (qx,qy) -> 1
     end
@@ -851,7 +852,10 @@ function plotCircularCuts!(axes,CBarPos,SqsGFMC;
 
     SqMat = mean(SqsGFMC)
     SqErr = std(SqsGFMC)
-    fittingCoefs = optimizeCoeffs(SqMat)
+    # weightfunc(q) = exp(-0.5q'q)
+    # weightfunc(q) = q_min < q'q < 1.0q_max 
+    weightfunc(q) = 1
+    fittingCoefs = optimizeCoeffsAsym(SqMat, weightfunc)
 
     if up_sampling_factor != 1
         SqMat = FTools.resample(SqMat, up_sampling_factor .* size(SqMat))
@@ -860,7 +864,6 @@ function plotCircularCuts!(axes,CBarPos,SqsGFMC;
 
     SqMat = SW.expand_Sq(SqMat)
     SqErr = SW.expand_Sq(SqErr)
-    A_fit, r_fit = strd.(fittingCoefs)
     
     colors_cuts = cgrad(:brg, length(radii), categorical = true)
     # Maximum radius to sample
@@ -868,70 +871,125 @@ function plotCircularCuts!(axes,CBarPos,SqsGFMC;
 
     # qx_true = qy_true = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
     qx_true = qy_true = trueMomenta(-0.5pi -0.1q_max,0.5pi + 0.1q_max,size(SqMat,1)-1)
-    
+
+    qx_Full = trueMomenta(-pi,pi,size(SqMat,1)-1)
+    qy_Full = trueMomenta(-pi,pi,size(SqMat,1)-1)
+    q_grid = circshift(collect(Iterators.product(qx_Full, qy_Full)), size(SqMat) .÷ 2)
+
     Sq =  SW.getSqCont(SqMat)
     Sqerr = SW.getSqCont(SqErr)
 
 
 
-    SqFT_rescaled(qx,qy) = SqFieldTheory((qx,qy),fittingCoefs)/scaling(qx,qy)
+    SqFT_rescaled(qx,qy) = AsymFieldTheory((qx,qy),fittingCoefs)/scaling(qx,qy)
     Sq_rescaled(qx,qy) = Sq(qx,qy)/scaling(qx,qy)
     Sq_err_rescaled(qx,qy) = Sqerr(qx,qy)/scaling(qx,qy)
     
     Sq_resc = [Sq_rescaled(x,y) for x in qx_true, y in qy_true]
     Sq_FT_resc = [SqFT_rescaled(x,y) for x in qx_true, y in qy_true]
 
-    colorrange = (minimum(Sq_resc), 1)
+    
+    add_cbar_kwargs = (; colorrange = (0, 1))
+    
     if !use_scaling
         colorrange = extrema([extrema(Sq_resc)..., extrema(Sq_FT_resc)...])
+        add_cbar_kwargs = (;colorrange)
     end
-    heatmap!(ax_GFMC,qx_true,qy_true,Sq_resc, colormap = :viridis;colorrange, highclip = :white)
+    if up_sampling_factor != 1
+        add_cbar_kwargs = (; highclip = :white, add_cbar_kwargs...)
+    end
+    heatmap!(ax_GFMC,qx_true,qy_true,Sq_resc, colormap = :viridis; add_cbar_kwargs...)
 
-    hm = heatmap!(ax_FT,qx_true,qx_true,[SqFT_rescaled(x,y) for x in qx_true, y in qx_true], colormap = :viridis;colorrange, highclip = :white)
+    hm = heatmap!(ax_FT,qx_true,qx_true,[SqFT_rescaled(x,y) for x in qx_true, y in qx_true]; colormap = :viridis, add_cbar_kwargs...)
     
-    cbarlabel = use_scaling ? L"\mathcal{S}(\mathbf{q})/q^2" : L"\mathcal{S}(\mathbf{q})"
-    Colorbar(CBarPos,hm;label = cbarlabel, height = Relative(0.85),ticks = SimpleTicks() )
+    cbarlabel = use_scaling ? L"\mathcal{S}(\mathbf{q})/q^{%$(scaling_exp)}" : L"\mathcal{S}(\mathbf{q})"
+    Colorbar(CBarPos,hm;label = cbarlabel, height = Relative(0.95),ticks = SimpleTicks() )
+
+    norm(qx,qy) = sqrt(qx^2 + qy^2)
+    norm(q) = norm(q[1], q[2])
+
+    line_fatness = 0.1 /up_sampling_factor
 
     for (idx, q_abs) in enumerate(radii)
         # Generate points along this radial direction
-        path = [ q_abs .*(cos(phi), sin(phi)) for phi in phis]
-
+        path_raw = [ q_abs .*(cos(phi), sin(phi)) for phi in phis]
+        # path_inds = discrete_q_path(path_raw, SqMat)
+        # path = [q_grid[i] for i in path_inds]
+        path = filter( q -> q_abs - line_fatness <= norm(q) <= q_abs + line_fatness, q_grid)
+        phis_corrected = [get_angle(q) for q in path]
+        perm = sortperm(phis_corrected)
+        phis_corrected = phis_corrected[perm]
+        path = path[perm]
+        push!(phis_corrected, phis_corrected[1] + 2pi)
+        push!(path, path[1])
         Sq_cut = [Sq_rescaled(qx,qy) for (qx,qy) in path]
         Sq_err_cut = [Sq_err_rescaled(qx,qy) for (qx,qy) in path]
         SqFT_cut = [SqFT_rescaled(qx,qy) for (qx,qy) in path]
 
-        lines!(ax_FT, path, color = colors_cuts[idx],linewidth = 1,linestyle = :dash)
-
+        
         # Plot GFMC data with error bars
-        lines!(axCuts, phis, SqFT_cut, color = colors_cuts[idx],linewidth = 1, linestyle = :dash)
-        sc = scatter!(axCuts, phis, Sq_cut, color = colors_cuts[idx], markersize = 4)
-        translate!(sc, 0, 0, 1)
-        errorbars!(axCuts, phis, Sq_cut, Sq_err_cut, color = colors_cuts[idx], whiskerwidth = 4, linewidth=0.5)
-        lines!(ax_GFMC, path, color = colors_cuts[idx])
+        lines!(axCuts, phis_corrected, SqFT_cut, color = colors_cuts[idx],linewidth = 1, linestyle = :dash)
+        # lines!(ax_GFMC, path, color = colors_cuts[idx],linewidth = 1)
+        
+        if up_sampling_factor == 1
+            # lines!(ax_FT, path, color = colors_cuts[idx],linewidth = 1,linestyle = :dash)
+            scatter!(ax_GFMC, path, color = colors_cuts[idx],markersize = 4, alpha = 0.5)
+            sc = scatter!(axCuts, phis_corrected, Sq_cut, color = colors_cuts[idx], markersize = 4)
+
+            translate!(sc, 0, 0, 1)
+            errorbars!(axCuts, phis_corrected, Sq_cut, Sq_err_cut, color = colors_cuts[idx], whiskerwidth = 4, linewidth=0.5)
+        else
+            lines!(axCuts, phis_corrected, Sq_cut, color = colors_cuts[idx], linewidth = 2)
+        end
+        lines!(ax_GFMC, path_raw, color = colors_cuts[idx], linewidth = 1)
+        lines!(ax_FT, path_raw, color = colors_cuts[idx], linewidth = 1, linestyle = :dash)
+            # scatter!(ax_GFMC, path_raw, color = colors_cuts[idx], markersize = 4, alpha = 0.5)
+        # scatter!(ax_GFMC, path[1], marker = '●', color = colors_cuts[idx], markersize = 5)
     end
+    lines!(ax_FT, [Point2f(0,0), Point2f(maximum(radii),0)], color = :white, linewidth = 1, linestyle = :dash)
     # xlims!(axCuts, 0, scalingfunc(q_max))
+    A_fit, r_fit, p_fit = strd.(fittingCoefs)
     
     # Add fitting parameters as text
-    text!(ax_FT, Point(0.97, 0.98), 
-          text = L"$A = %$(A_fit),\ r = %$(r_fit)$",
-          align = (:right, :top), fontsize = 16,
-          strokecolor = (:black, 0.5), strokewidth = 3,space = :relative)
-    text!(ax_FT, Point(0.97, 0.98), 
-          text = L"$A = %$(A_fit),\ r = %$(r_fit)$",
-          align = (:right, :top), fontsize = 16, color = :white,space = :relative)   
+
+    if print_params
+        offsets = [0,-0.1,-0.2]
+        texts = [
+            L"$A = %$(A_fit)$",
+            L"$r = %$(r_fit)$",
+            L"$p = %$(p_fit)$"
+        ]
+        for (offset,text) in zip(offsets,texts)
+            text!(ax_FT, Point(0.97, 0.98 + offset), 
+                text = text,
+                align = (:right, :top), fontsize = 12,
+                strokecolor = (:black, 0.5), strokewidth = 3,space = :relative)
+            text!(ax_FT, Point(0.97, 0.98 + offset), 
+                text = text,
+                align = (:right, :top), fontsize = 12, color = :white,space = :relative)   
+        end
+    end
+    # text!(ax_FT, Point(0.97, 0.98), 
+    #       text = L"$A = %$(A_fit),\ r = %$(r_fit),\ p = %$(p_fit)$",
+    #       align = (:right, :top), fontsize = 12,
+    #       strokecolor = (:black, 0.5), strokewidth = 3,space = :relative)
+    # text!(ax_FT, Point(0.97, 0.98), 
+    #       text = L"$A = %$(A_fit),\ r = %$(r_fit),\ p = %$(p_fit)$",
+    #       align = (:right, :top), fontsize = 12, color = :white,space = :relative)   
           
     if up_sampling_factor != 1
         for ax in (ax_GFMC, )
              
-            text!(ax, Point(0.0, 0.0), 
+            text_bg!(ax, Point(0.0, 0.0), 
                 text = L"s_\text{up} = L × %$(up_sampling_factor)",
-                align = (:left, :bottom), fontsize = 16,
-                strokecolor = (:black, 0.6), strokewidth = 2,space = :relative)
-            text!(ax, Point(0.0, 0.0), 
-                text = L"s_\text{up} = L × %$(up_sampling_factor)",
-                align = (:left, :bottom), fontsize = 16, color = :white,space = :relative)
+                align = (:left, :bottom), fontsize = 16,space = :relative)
         end
     end
+end
+
+function text_bg!(ax, args...;kwargs_bg =(;),kwargs...)
+    text!(ax, args...;strokecolor = (:black, 0.5), strokewidth = 3, kwargs..., kwargs_bg...)
+    text!(ax, args...;color = :white, kwargs...)
 end
 ##
 with_theme(theme_SimpleTicks()) do 
@@ -941,10 +999,10 @@ with_theme(theme_SimpleTicks()) do
     q_min = 0.154pi
     num_circles = 4
     up_sampling_factor = 8
-    SqsGFMC = getSq(res,tau=15,mu=mu,L=L)
+    SqsGFMC = getSq(res,tau=13,mu=mu,L=L)
 
 
-    fig = Figure(size = 100 .* (8,4.3),fontsize = 22)
+    fig = Figure(size = 100 .* (7.5,5.5),fontsize = 22)
 
     xticks = yticks = PiTicks([-0.5pi,0,0.5pi])
     ax_GFMC = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, title = L"GFMC$$",
@@ -958,26 +1016,51 @@ with_theme(theme_SimpleTicks()) do
     xlabel = L"\varphi",xticks = PiTicks()
     )
 
-    plotCircularCuts!((ax_GFMC, ax_FT, axCuts),fig[1,3], SqsGFMC; q_max, q_min, num_circles)
+    axes_top = (ax_GFMC, ax_FT, axCuts)
 
-    ax_GFMC = Axis(fig[2,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
-    ax_FT = Axis(fig[2,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false)
+    plotCircularCuts!(axes_top,fig[1,3], SqsGFMC; q_max, q_min, num_circles)
+
+    ax_GFMC = Axis(fig[2,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,
+    xlabelvisible = false, xticklabelsvisible = false,
+    )
+    ax_FT = Axis(fig[2,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false,
+    xlabelvisible = false, xticklabelsvisible = false,)
     axCuts = Axis(fig[2,4], 
+    xlabelvisible = false, xticklabelsvisible = false,
     xlabel = L"\varphi",xticks = PiTicks()
     )
-
-    plotCircularCuts!((ax_GFMC, ax_FT, axCuts),fig[2,3], SqsGFMC; q_max, q_min, num_circles, up_sampling_factor = up_sampling_factor, use_scaling = true)
-
-
-    # colsize!(fig.layout, 3, Relative(0.05))
-    Label(fig[1,1, TopLeft()], L"(a)$$", padding = (-100, -40, -30, -40))
-    Label(fig[2,1, TopLeft()], L"(d)$$", padding = (-100, -40, -30, -40))
-
-    Label(fig[1,2, TopLeft()], L"(b)$$", padding = (-60, -40, -30, -40))
-    Label(fig[2,2, TopLeft()], L"(e)$$", padding = (-60, -40, -30, -40))
     
-    Label(fig[1,4, TopLeft()], L"(c)$$", padding = (-100, -40, -30, -40))
-    Label(fig[2,4, TopLeft()], L"(f)$$", padding = (-100, -40, -30, -40))
-    save("../../figs/PaperFigs/StairCaseSpin1_Sq_RadialCuts_no_upsampling.pdf", fig)
+    axes_mid = (ax_GFMC, ax_FT, axCuts)
+
+    plotCircularCuts!(axes_mid,fig[2,3], SqsGFMC; q_max, q_min, num_circles, up_sampling_factor = 1, use_scaling = true, print_params = false,)
+
+    ax_GFMC = Axis(fig[3,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
+    ax_FT = Axis(fig[3,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false)
+    axCuts = Axis(fig[3,4], 
+    xlabel = L"\varphi",xticks = PiTicks()
+    )
+    axes_bot = (ax_GFMC, ax_FT, axCuts)
+
+    plotCircularCuts!(axes_bot,fig[3,3], SqsGFMC; q_max, q_min, num_circles, up_sampling_factor = up_sampling_factor, use_scaling = true, print_params = false)
+
+    # for ax in [axes_top..., axes_mid..., axes_bot...]
+    all_axes = [axes_top..., axes_mid..., axes_bot...]
+    labels = ['a','b','c','d','e','f','g','h','i']
+    colors = repeat([:white, :white, :black], outer = 3)
+    for (i,ax) in enumerate(all_axes)
+        label = labels[i]
+        if colors[i] == :white
+            text_bg!(ax, Point(0.0, 1), text = L"(%$(label))$$", align = (:left, :top),space = :relative, color = :white, )
+        else
+            text!(ax, Point(0.0, 1), text = L"(%$(label))$$", align = (:left, :top),space = :relative, color = colors[i], )
+        end
+    end
+
+    cover_q = LinRange(-3*2pi/L, 3*pi/L, 200)
+    cover_func(q) = q'q < 1*(2pi/L)^2 ? 1 : NaN
+    heatmap!(axes_bot[1], cover_q, cover_q, (qx,qy) -> cover_func([qx,qy]), colormap = :grays, colorrange = (0,1),alpha = 0.8)
+    # scatter!(axes_bot[1], [Point(0,0)], markersize = 50, marker = '⚫', color = :white)
+    colgap!(fig.layout, 2, 4)
+    save("../../figs/PaperFigs/6x6Spin1_Sq_RadialCuts_mu0$(Int(10*mu)).pdf", fig)
     fig
 end
