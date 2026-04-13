@@ -248,7 +248,7 @@ with_theme(theme_PiTicks()) do
     # muPlot = [0.8,0.9,0.9,1.0]
     muPlot = [0.8,0.81,0.9,1.0]
     
-    fig = Figure(fontsize = 22,size = 260 .*(3,3.5))
+    fig = Figure(fontsize = 22,size = 290 .*(3,3.8))
 
     fig_xi = GridLayout()
     fig_en = GridLayout()
@@ -439,7 +439,7 @@ with_theme(theme_PiTicks()) do
     colsize!(fig_corr, 1, Relative(0.4))
     colsize!(fig_corr, 2, Relative(0.05))
 
-    rowsize!(fig.layout, 1, Relative(0.22))
+    rowsize!(fig.layout, 1, Relative(0.25))
     rowsize!(fig.layout, 4, Relative(0.28))
 
     rowsize!(fig_SQ,2, Relative(1))
@@ -448,10 +448,10 @@ with_theme(theme_PiTicks()) do
     rowgap!(fig.layout, 3, 10)
 
 
-    Label(fig[1, 1, TopLeft()], L"(a)$$", padding = (-20, 0, -10, 0))
-    Label(fig[2, 1, TopLeft()], L"(b)$$", padding = (-20, 0, -10, 0))
-    Label(fig[3, 1, TopLeft()], L"(c)$$", padding = (-20, 0, -10, 0))
-    Label(fig[4, 1, TopLeft()], L"(d)$$", padding = (-20, 0, -10, 0))
+    Label(fig[1, 1, TopLeft()], L"(a)$$", padding = (0, 80, -10, 0))
+    Label(fig[2, 1, TopLeft()], L"(b)$$", padding = (0, 80, -10, 0))
+    Label(fig[3, 1, TopLeft()], L"(c)$$", padding = (0, 80, -10, 0))
+    Label(fig[4, 1, TopLeft()], L"(d)$$", padding = (0, 80, -10, 0))
     Label(fig[4, 3, TopLeft()], L"(e)$$", padding = (-20, 0, -10, 0))
 
 

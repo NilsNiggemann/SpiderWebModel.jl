@@ -7,6 +7,11 @@ function get_S_diag!(S)
     S .= Sdiag[axes(S)...]
     return S
 end
+
+function get_angle(q)
+    ang = atan(q[2], q[1])
+    return ang < 0 ? ang + 2pi : ang
+end
 function get_neighbors(S)
     movelist = empty!([(1,1,1)])
     moves = SW.getMoves!(movelist,S)
@@ -69,9 +74,6 @@ function S_q_FT2(qx, qy, K, U, W)
 end
 
 ##
-S = SW.stencilConfig(zeros(12,12),1,boundaryCondition = :periodic)
-SW.plotApplPlaquettes(S)
-##
 S = SW.stencilConfig(zeros(200,200),1,boundaryCondition = :periodic)
 get_S_diag!(S)
 ##
@@ -81,16 +83,17 @@ Sq = get_perturbative_spin_corrs(S,2)
 filterSq = [s < maximum(Sq)/1.05 ? s : 0 for s in Sq]
 # filterSq_inv = [s >= maximum(Sq)/1.1 ? s : NaN for s in Sq]
 with_theme(theme_PiTicks()) do 
+    W = 1
     fig = Figure(size = 0.85 .*(1000,270))
     ax_pert = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect = 1,xticks = PiTicks([0,pi]),yticks = PiTicks([0,pi]),
     title = L"$$pert. theory",
     )
     ax_FT = Axis(fig[1,3],xlabel = L"q_x",ylabel = L"q_y",aspect = 1,xticks = PiTicks([0,pi]),yticks = PiTicks([0,pi]),
     ylabelvisible = false,yticklabelsvisible = false,
-    title = L"field theory $W=0$"
+    title = L"field theory $W=%$W$"
     )
     ax_scale = Axis(fig[1,4],xlabel = L"q_x",ylabel = L"q_y",aspect = 1,xticks = PiTicks([-0.5pi,0,0.5pi]),yticks = PiTicks([-0.5pi,0,0.5pi]),
-    # ylabelvisible = false,yticklabelsvisible = false,
+    ylabelvisible = false,#yticklabelsvisible = false,
     title = L"$$pert. theory $\times q^{-4}$ ",)
     ax_cuts = Axis(fig[1,5],xlabel = L"φ",ylabel = L"\mathcal{S}(q)/q^4",
     xticks = PiTicks([0,pi,2pi]),yticks = SimpleTicks()
@@ -106,7 +109,8 @@ with_theme(theme_PiTicks()) do
     
     Sq_pert = [SqCont(x,y) for x in qx, y in qy]
     # Sq_FT = [S_q_FT2(x,y,0.01,20000,0) for x in qx, y in qy]
-    Sq_FT = [SqFieldTheory(x,y,1,1e10) for x in qx, y in qy]
+    Sq_FT = [SqFieldTheory_full(x,y,1,W,1) for x in qx, y in qy]
+    # Sq_FT = [SqFieldTheory(x,y,1,1e10) for x in qx, y in qy]
     
     ring(r,phi) = r .* Point2f(cos(phi), sin(phi))
     
