@@ -3,9 +3,16 @@ using CairoMakie, MakieHelpers,Statistics
 using SpiderWebModel.HDF5
 using DataFrames
 using MakieExtra
+cd(@__DIR__)
 include("../plottingUtils.jl")
 include("../FSSUtils.jl")
 ##
+shift_center(a) = circshift(a, size(a) .÷2)
+
+function text_bg!(ax, args...;kwargs_bg =(;),kwargs...)
+    text!(ax, args...;strokecolor = (:black, 0.5), strokewidth = 3, kwargs..., kwargs_bg...)
+    text!(ax, args...;color = :white, kwargs...)
+end
 function file_format(filename)
     allkeys_1 = ["energies","mu","tau","SqsGFMC","p_Sq"]
     allkeys_2 = ["Energy","mu","τ","StructureFactor"]
@@ -189,6 +196,48 @@ with_theme(theme_SimpleTicks()) do
 end
 
 ##
+function getSiSj_reconstructed(Sq)
+    return real(SW.FFTW.ifft(Sq)) #/ prod(size(Sq))
+end
+function SiSj_fieldTheory(Lx,Ly,alpha=1)
+    s(x,y) = alpha*(3x^2+2x*y-3y^2)*(x^2-6x*y-y^2)/(x^2+y^2+1e-30)^(4)
+
+    SiSj = zeros(Lx,Ly)
+    for x in 1:Lx, y in 1:Ly
+        dx = min(x-1,Lx-x+1)
+        dy = min(y-1,Ly-y+1)
+        SiSj[x,y] = s(dx,dy)
+    end
+    return SiSj
+end
+
+function get_displacements_periodic(Lx,Ly)
+    displacements = zeros(2,Lx,Ly)
+    for x in 1:Lx, y in 1:Ly
+        dx_0 = x-1
+        dx_L = -(Lx-x+1)
+        if abs(dx_0) < abs(dx_L)
+            dx = dx_0
+        else
+            dx = dx_L
+        end
+        dy_0 = y-1
+        dy_L = -(Ly-y+1)
+        if abs(dy_0) < abs(dy_L)
+            dy = dy_0
+        else
+            dy = dy_L
+        end
+        displacements[1,x,y] = dx
+        displacements[2,x,y] = dy
+    end
+    return displacements
+end
+import LinearAlgebra
+function getDists_periodic(Lx,Ly)
+    return dropdims(mapslices(LinearAlgebra.norm, get_displacements_periodic(Lx,Ly), dims=1), dims=1)
+end
+
 xis = getXiCol(res,(pi/2,pi/2);tau = 3)
 Sqmax = getSqMaxCol(res,(pi/2,pi/2),tau = 3)
 res.xi = xis
@@ -199,17 +248,22 @@ with_theme(theme_PiTicks()) do
     # muPlot = [0.8,0.9,0.9,1.0]
     muPlot = [0.8,0.81,0.9,1.0]
     
-    fig = Figure(fontsize = 22,size = 300 .*(2,3))
+    fig = Figure(fontsize = 22,size = 290 .*(3,3.8))
 
     fig_xi = GridLayout()
     fig_en = GridLayout()
-    fig.layout[1,1:2] = fig_en
-    fig.layout[2,1:2] = fig_xi
+    fig_SQ = GridLayout()
+    fig_corr = GridLayout()
+    
+    fig.layout[1,1:4] = fig_en
+    fig.layout[2,1:4] = fig_xi
+    fig.layout[3,1:4] = fig_SQ
+    fig.layout[4,1:4] = fig_corr
 
     ax_en = Axis(fig_en[1, 1], xlabel = L"\mu", ylabel = L"E/(J'N_\textrm{sites}(1-\mu) )", xticks = SimpleTicks(), yticks = SimpleTicks(),xticklabelsvisible = false,xlabelvisible = false)
 
    
-    inset_En = Axis(fig[1,1],width = Relative(0.6),height = Relative(0.45),halign=0.65, valign=0.95, xticklabelsize= 12,yticklabelsize= 12,xticks = SimpleTicks(),yticks = SimpleTicks())
+    inset_En = Axis(fig_en[1,1],width = Relative(0.3),height = Relative(0.45),halign=0.18, valign=0.95, xticklabelsize= 12,yticklabelsize= 12,xticks = SimpleTicks(),yticks = SimpleTicks())
     translate!(inset_En.blockscene,0,0,100)
     colors = Dict(28 => (:blue,0.5), 32 => (:red,0.5), 36 => (:black,1.0))
     for L in (36)
@@ -268,92 +322,58 @@ with_theme(theme_PiTicks()) do
     # xlims!(axis,0.6,1)
     # ylims!(axis,0.0,70)
     axislegend(axis,position = :rt)
-    fig_SQ = GridLayout()
-    fig.layout[3,1:2] = fig_SQ
+
 
 
     ticks = PiTicks([0, pi])
 
-    axInds = [(i,(2j-1)) for (i, j) in Iterators.product(1:2, 1:2)]
-    ColbarInds = [(i,j+1) for (i, j) in axInds]
+    # axInds = [(i,(2j-1)) for (i, j) in Iterators.product(1:2, 1:2)]
+    axInds = [(2,i) for (i) in 1:4]
+    ColbarInds = [(1,j) for (i, j) in axInds]
 
     axes = [Axis(fig_SQ[i, j], aspect=1, xminorticks = IntervalsBetween(2), xminorticksvisible = true,
     yminorticks = IntervalsBetween(2), yminorticksvisible = true,
-    yticklabelsvisible=j==1, xticks=ticks, yticks=ticks, xlabel=L"q_x", ylabel=L"q_y", ylabelvisible=j==1,xticklabelsvisible= i==2, xlabelvisible = i==2) 
+    yticklabelsvisible=j==1, xticks=ticks, yticks=ticks, xlabel=L"q_x", ylabel=L"q_y", ylabelvisible=j==1,xticklabelsvisible= true, xlabelvisible = true) 
     for (i, j) in axInds]
     
+
+    # inv_scale_ratios = [2,1,1,1]
+
+    SqMats = [SW.expand_Sq(mean(getSq(res, tau=12., L=LPlot, mu=mu))) for mu in muPlot]
+
     for (idx, mu) in enumerate(muPlot)
-        i, j = divrem(idx - 1, 2) .+ 1
+        # i, j = divrem(idx - 1, 2) .+ 1
+        i = idx
+        j = 1
         SqMat = SW.expand_Sq(mean(getSq(res, tau=12., L=LPlot, mu=mu)))
 
         kx = ky = trueMomenta(-pi/2, 1.5pi, LPlot)
 
         SqFunc = SW.getSqCont(SqMat)
         Sqpl = SqFunc.(Iterators.product(kx, ky))
+        # hm = heatmap!(axes[i, j], kx, ky, Sqpl, colormap=:viridis)
         hm = heatmap!(axes[i, j], kx, ky, Sqpl, colormap=:viridis)
 
         Colorbar(fig_SQ[ColbarInds[idx]...], hm, 
-        ticks=SimpleTicks(), vertical=true, flipaxis=true, 
+        ticks=SimpleTicks(), flipaxis=true, 
         # label=L"\mathcal{S}(\mathbf{q})",
-        halign = :left,
-        width=Relative(0.5),
+        # halign = :left,
+        vertical = false,
+        halign = :center,
+        width=Relative(1),
         labelvisible=ColbarInds[idx][2] == 4)
-        
-        text!(axes[i, j], Point(0.5,0.99), text=L"\mu = %$(mu)", align=(:center, :top),space = :relative, strokecolor = (:black,0.3), strokewidth = 4)
-        text!(axes[i, j], Point(0.5,0.99), text=L"\mu = %$(mu)", align=(:center, :top),space = :relative,color = :white)
-
-        # band!(axes[i, j], [-0.5pi, 0.5pi], [1.1pi, 1.1pi], [1.5pi, 1.5pi], color=(:black, 0.5))
-        # text!(axes[i, j], Point(0, 1.3pi), text=L"μ = %$mu", color=:white, align=(:center, :center))
+        text_bg!(axes[i, j], Point(0.5,0.99), text=L"\mu = %$(mu)", align=(:center, :top),space = :relative,)
     end
-    rowsize!(fig.layout, 1, Relative(0.25))
-    rowsize!(fig.layout, 2, Relative(0.25))
-    rowgap!(fig.layout, 1, -20)
-    colsize!(fig_SQ, 2, Relative(0.05))
-    colsize!(fig_SQ, 4, Relative(0.05))
-    colgap!(fig_SQ, 1, 2)
-    colgap!(fig_SQ, 2, 2)
-    colgap!(fig_SQ, 3, 2)
-    Label(fig[1, 1, TopLeft()], L"(a)$$", padding = (-20, 0, -10, 0))
-    Label(fig[2, 1, TopLeft()], L"(b)$$", padding = (-20, 0, -10, 0))
-    Label(fig[3, 1, TopLeft()], L"(c)$$", padding = (-20, 0, -10, 0))
-    Label(fig[3, 1:2, Top()], L"\mathcal{S}(\mathbf{q})", padding = (0, 0, 10, 0))
+    # Label(fig[3, 1:2, Top()], L"\mathcal{S}(\mathbf{q})", padding = (0, 0, 10, 0))
     vlines!(ax_en,[0.805],color = :grey,linestyle = :dash,linewidth = 2,label = L"\mu_c")
     vlines!(axis,[0.805],color = :grey,linestyle = :dash,linewidth = 2,label = L"\mu_c")
     vlines!(inset_En,[0.805],color = :grey,linestyle = :dash,linewidth = 2,label = L"\mu_c")
     # colgap!(fig.layout, 2, 0)
-    save("../../figs/PaperFigs/StairCaseSpin1Overview.pdf", fig)
-    fig
-end
-##
-function getSiSj_reconstructed(Sq)
-    return real(SW.FFTW.ifft(Sq)) #/ prod(size(Sq))
-end
-function SiSj_fieldTheory(Lx,Ly,alpha=1)
-    s(x,y) = alpha*(3x^2+2x*y-3y^2)*(x^2-6x*y-y^2)/(x^2+y^2+1e-30)^(4)
-
-    SiSj = zeros(Lx,Ly)
-    for x in 1:Lx, y in 1:Ly
-        dx = min(x-1,Lx-x+1)
-        dy = min(y-1,Ly-y+1)
-        SiSj[x,y] = s(dx,dy)
-    end
-    return SiSj
-end
-
-function getDists_periodic(Lx,Ly)
-    dists = zeros(Lx,Ly)
-    for x in 1:Lx, y in 1:Ly
-        dx = min(x-1,Lx-x+1)
-        dy = min(y-1,Ly-y+1)
-        dists[x,y] = sqrt(dx^2 + dy^2)
-    end
-    return dists
-end
-##
-with_theme(theme_SimpleTicks()) do
+    
+    #________________________#
     L = 36
-    resL = get_res(res,mu=0.6,L=L)
-
+    resL = get_res(res,mu=0.9,L=L)
+    Corrs_threshold = 8
     tau_IDX = 30
     SqsGFMC = resL.Sq
 
@@ -364,65 +384,78 @@ with_theme(theme_SimpleTicks()) do
     SiSj = mean(SiSjs)
     SiSj_err = std(SiSjs)
 
+    displacements = get_displacements_periodic(L,L)
+    angles = atan.(displacements[2,:,:],displacements[1,:,:]) #.+ pi
+    angles_flat = angles[:]
     dists = getDists_periodic(L,L)
     qx= qy = trueMomenta(0,2pi,size(SqMat,1))[1:end-1]
-    fig = Figure(size = (900,300))
-    ax1 = Axis(fig[1,1],title = L"S(\mathbf{q})",xlabel = L"q_x",ylabel = L"q_y",aspect=1,xticks = PiTicks(),yticks = PiTicks())
 
-    SqFT = [AsymFieldTheory(x,y,0.36,0.0063,340.) for x in qx, y in qy]
-    # return SqMat
-    heatmap!(ax1,qx,qy,SqMat)
-    # heatmap!(ax1,SqMat- SqFT)
-    # heatmap!(ax1,SqFT)
-    ax2 = Axis(fig[1,2],title = L"FT(S(\mathbf{q}))",aspect=1)
-    # SiSj_recon = circshift(SiSj_recon,(-L÷2+1,-L÷2+1))
-    hm2 = heatmap!(ax2,circshift(SiSj,(-L÷2+1,-L÷2+1)),colorrange = extrema(SiSj))
-    Colorbar(fig[1,3],hm2)
-    # ax3 = Axis(fig[1,4],xlabel = L"|r_i - r_j|",ylabel = L"\frac{1}{N} \sum_i \langle S(r_i) S(r_j-r_i) \rangle",aspect=1,xscale = log10,yscale = log10)
-    ax3 = Axis(fig[1,4],xlabel = L"|r_i - r_j|",ylabel = L"\frac{1}{N} \sum_i \langle S(r_i) S(r_j-r_i) \rangle",aspect=1,xscale = log10,yscale = log10)
-    xlims!(ax3,1,maximum(dists))
-    ylims!(ax3,1e-6,1)
-    # scatter!(ax3,[dists[1,i] for i in 1:L],abs.([SiSj[1,i] for i in 1:L]),markersize=9,color=:red)
+    # fig = Figure(size = 1.0 .* (640,250))
+    ax = Axis(fig_corr[1,3:4],xlabel = L"|\mathbf{R}|",ylabel = L"|\mathcal{S}(\mathbf{R})|",xscale = log10,yscale = log10,xticks = SimpleTicks(),yticks = SimpleTicks())
+    xlims!(ax,1,maximum(dists))
+    ylims!(ax,1e-6,1)
 
-    rij = dists[:]
-    perm = sortperm(rij)
-    # perm = 1:length(rij)
-    rij = rij[perm]
+    dists_flat = dists[:]
+    perm = sortperm(dists_flat)
+    dists_flat = dists_flat[perm]
     SiSj_flat = SiSj[:][perm]
 
     SiSj_err_flat = SiSj_err[:][perm]
+    displacements_flat = reshape(displacements, 2, :)[:,perm]
 
-    # SiSj_FT = SiSj_fieldTheory(L,L,3)
-    SiSj_FT = getSiSj_reconstructed(SqFT)
+    rij_points = [Point(x,y) for (x,y) in zip(displacements_flat[1,:],displacements_flat[2,:])]
 
-    SiSj_FT_flat = SiSj_FT[:][perm]
-
-    red_inds = [i for i in eachindex(rij)[1:end-1] if SiSj_flat[i]>=maximum(SiSj_flat[i+1:end])-1e-5]
-    # red_inds_FT = [i for i in eachindex(rij)[1:end-1] if SiSj_FT_flat[i]>=maximum(SiSj_FT_flat[i+1:end])-1e-5]
+    red_inds = findall(abs.(SiSj_flat .* dists_flat.^4) .>Corrs_threshold)
     SiSj_red = SiSj_flat[red_inds]
-    SiSj_FT_red = SiSj_FT_flat[red_inds]
-
-    rij_red = rij[red_inds]
-    scatter!(ax3,rij_red,abs.(SiSj_red),markersize=10,color=(:red,0.9))
-    scatter!(ax3,rij,abs.(SiSj_flat),markersize=5,color=(:black,0.2))
     
-    # scatter!(ax3,rij,abs.(SiSj_FT_flat),markersize=10,color=(:blue,0.2),marker = '×')
-    scatter!(ax3,rij_red,abs.(SiSj_FT_red),markersize=10,color=(:blue,0.9),marker = '×')
+    dists_flat_red = dists_flat[red_inds]
+    scatter!(ax,dists_flat_red,abs.(SiSj_red),markersize=7,color = :black)
+    scatter!(ax,dists_flat,abs.(SiSj_flat),markersize=3,color=(:grey,0.4))
+    
     err_low = SiSj_err_flat
     err_low = [min(e,abs(s)) for (e,s) in zip(err_low,SiSj_flat)]
     err_high = SiSj_err_flat
 
-    # return err_high|> minimum
-    errorbars!(ax3,rij,abs.(SiSj_flat),err_low,err_high,whiskerwidth=5,color=(:black,0.1),linewidth=0.6)
-    # errorbars!(ax3,rij,abs.(SiSj_flat),SiSj_err_flat,whiskerwidth=5,color=(:black,0.1),linewidth=0.6)
+    errorbars!(ax,dists_flat[red_inds],abs.(SiSj_flat[red_inds]),err_low[red_inds],err_high[red_inds],whiskerwidth=5,color=(:black,0.9),linewidth=1)
 
-    unique_dists = LinRange(extrema(dists)...,200)[1:end]
-    lines!(ax3,unique_dists,1 ./unique_dists.^3,color=:blue,linestyle=:dash,label = L"\frac{1}{r^3}")
-    lines!(ax3,unique_dists,10 ./unique_dists.^4,color=:red,linestyle=:dash,label = L"\frac{1}{r^4}")
-    lines!(ax3,unique_dists,exp.(-unique_dists),color=:blue,linestyle=:solid,label = L"e^{-r}")
-    # corr_ex =  abs.(0.5 .- 1/2pi .* log.(unique_dists))
-    # lines!(ax3,unique_dists,corr_ex,color=:green,linestyle=:dash,label = L"log(r)")
-    axislegend(ax3,position=:lb)
+    unique_dists = LinRange(extrema(dists_flat)...,200)[1:end]
+    lines!(ax,unique_dists,15 ./unique_dists.^4,color=:red,linestyle=:dash,label = L"\sim\frac{1}{\mathbf{R}^4}")
+    axislegend(ax,position=:lb)
+
+    ax2 = Axis(fig_corr[1,1],xlabel = L"x",ylabel = L"y",aspect=1,xticks = SimpleTicks(),yticks = SimpleTicks())
+    
+    xdiff = unique(displacements_flat[1,:]) |> sort
+    ydiff = unique(displacements_flat[2,:]) |> sort
+    
+    # hm = heatmap!(ax2,xdiff, ydiff, shift_center(SiSj), colormap = :bwr)
+    maxabsSiSj = maximum(abs,SiSj.* dists.^4)
+    hm = heatmap!(ax2,xdiff, ydiff, shift_center(SiSj .* dists.^4), colormap = :bwr, colorrange = (-maxabsSiSj, maxabsSiSj))
+    Colorbar(fig_corr[1,2],hm, ticks=SimpleTicks();label=L"\mathcal{S}(\mathbf{R}) |\mathbf{R}|^4",minorticks = [Corrs_threshold,-Corrs_threshold],minorticksvisible = true, minorticksize = 12,minortickwidth = 2, minortickalign = 1.1)
+    
+    scatter!(ax2, [Point2(I) for I in eachslice(displacements_flat[:,red_inds],dims=2)],markersize=6,marker = '□',strokewidth = 0.5,color=:black)
+    
+    # Label(fig[1, 1, TopLeft()], L"(a)$$", padding = (-60, -20, -10, 0),fontsize = 17)
+    # Label(fig[1, 3, TopLeft()], L"(b)$$", padding = (-60, -20, -10, 0),fontsize = 17)
+    colsize!(fig_corr, 1, Relative(0.4))
+    colsize!(fig_corr, 2, Relative(0.05))
+
+    rowsize!(fig.layout, 1, Relative(0.25))
+    rowsize!(fig.layout, 4, Relative(0.28))
+
+    rowsize!(fig_SQ,2, Relative(1))
+    rowgap!(fig.layout, 1, -20)
+    rowgap!(fig_SQ, 1, 5)
+    rowgap!(fig.layout, 3, 10)
+
+
+    Label(fig[1, 1, TopLeft()], L"(a)$$", padding = (0, 80, -10, 0))
+    Label(fig[2, 1, TopLeft()], L"(b)$$", padding = (0, 80, -10, 0))
+    Label(fig[3, 1, TopLeft()], L"(c)$$", padding = (0, 80, -10, 0))
+    Label(fig[4, 1, TopLeft()], L"(d)$$", padding = (0, 80, -10, 0))
+    Label(fig[4, 3, TopLeft()], L"(e)$$", padding = (-20, 0, -10, 0))
+
+
+    save("../../figs/PaperFigs/StairCaseSpin1Overview.pdf", fig)
     fig
 end
 
@@ -430,7 +463,7 @@ end
 with_theme(theme_SimpleTicks()) do
     L = 36
     resL = get_res(res,mu=0.9,L=L)
-
+    Corrs_threshold = 8
     tau_IDX = 30
     SqsGFMC = resL.Sq
 
@@ -441,46 +474,68 @@ with_theme(theme_SimpleTicks()) do
     SiSj = mean(SiSjs)
     SiSj_err = std(SiSjs)
 
+    displacements = get_displacements_periodic(L,L)
+    angles = atan.(displacements[2,:,:],displacements[1,:,:]) #.+ pi
+    angles_flat = angles[:]
     dists = getDists_periodic(L,L)
     qx= qy = trueMomenta(0,2pi,size(SqMat,1))[1:end-1]
-    fig = Figure(size = (350,250))
-    # ax = Axis(fig[1,1],xlabel = L"|r_i - r_j|",ylabel = L"\frac{1}{N} \sum_i \langle S(r_i) S(r_j-r_i) \rangle",xscale = log10,yscale = log10)
-    ax = Axis(fig[1,1],xlabel = L"|\mathbf{R}_{ij}|",ylabel = L"\mathcal{S}(\mathbf{R}_{ij})",xscale = log10,yscale = log10)
+
+    fig = Figure(size = 1.0 .* (640,250))
+    ax = Axis(fig[1,3],xlabel = L"|\mathbf{R}|",ylabel = L"|\mathcal{S}(\mathbf{R})|",xscale = log10,yscale = log10)
     xlims!(ax,1,maximum(dists))
     ylims!(ax,1e-6,1)
 
-    rij = dists[:]
-    perm = sortperm(rij)
-    # perm = 1:length(rij)
-    rij = rij[perm]
+    dists_flat = dists[:]
+    perm = sortperm(dists_flat)
+    dists_flat = dists_flat[perm]
     SiSj_flat = SiSj[:][perm]
 
     SiSj_err_flat = SiSj_err[:][perm]
+    displacements_flat = reshape(displacements, 2, :)[:,perm]
 
-    # SiSj_FT = SiSj_fieldTheory(L,L,3)
-    red_inds = [i for i in eachindex(rij)[1:end-1] if SiSj_flat[i]>=maximum(SiSj_flat[i+1:end])-1e-5]
-    # red_inds_FT = [i for i in eachindex(rij)[1:end-1] if SiSj_FT_flat[i]>=maximum(SiSj_FT_flat[i+1:end])-1e-5]
+    rij_points = [Point(x,y) for (x,y) in zip(displacements_flat[1,:],displacements_flat[2,:])]
+
+    function pointfilter(r)
+        x,y = Tuple(r)
+        x <0 && return false
+        -0.26*x <= y <= 0.26*x && return true
+        23^2 < x^2+y^2 && return true
+        return false
+    end
+
+    red_inds = findall(abs.(SiSj_flat .* dists_flat.^4) .>Corrs_threshold)
     SiSj_red = SiSj_flat[red_inds]
-
-    rij_red = rij[red_inds]
-    # scatter!(ax,rij_red,abs.(SiSj_red),markersize=10,color=(:red,0.9))
-    scatter!(ax,rij,abs.(SiSj_flat),markersize=8,color=(:black,0.2))
     
-    # scatter!(ax3,rij,abs.(SiSj_FT_flat),markersize=10,color=(:blue,0.2),marker = '×')
+
+
+    dists_flat_red = dists_flat[red_inds]
+    scatter!(ax,dists_flat_red,abs.(SiSj_red),markersize=7,color = :black)
+    scatter!(ax,dists_flat,abs.(SiSj_flat),markersize=3,color=(:grey,0.4))
+    
     err_low = SiSj_err_flat
     err_low = [min(e,abs(s)) for (e,s) in zip(err_low,SiSj_flat)]
     err_high = SiSj_err_flat
 
-    # return err_high|> minimum
-    errorbars!(ax,rij,abs.(SiSj_flat),err_low,err_high,whiskerwidth=5,color=(:black,0.1),linewidth=0.6)
-    # errorbars!(ax3,rij,abs.(SiSj_flat),SiSj_err_flat,whiskerwidth=5,color=(:black,0.1),linewidth=0.6)
+    errorbars!(ax,dists_flat[red_inds],abs.(SiSj_flat[red_inds]),err_low[red_inds],err_high[red_inds],whiskerwidth=5,color=(:black,0.9),linewidth=1)
 
-    unique_dists = LinRange(extrema(dists)...,200)[1:end]
-    lines!(ax,unique_dists,15 ./unique_dists.^4,color=:red,linestyle=:dash,label = L"\sim\frac{1}{\mathbf{R}_{ij}^4}")
-    lines!(ax,unique_dists,1 .*exp.(-unique_dists),color=:blue,linestyle=:solid,label = L"\exp({-|\mathbf{R}_{ij}|})")
-    # corr_ex =  abs.(0.5 .- 1/2pi .* log.(unique_dists))
-    # lines!(ax3,unique_dists,corr_ex,color=:green,linestyle=:dash,label = L"log(r)")
+    unique_dists = LinRange(extrema(dists_flat)...,200)[1:end]
+    lines!(ax,unique_dists,15 ./unique_dists.^4,color=:red,linestyle=:dash,label = L"\sim\frac{1}{\mathbf{R}^4}")
     axislegend(ax,position=:lb)
+
+    ax2 = Axis(fig[1,1],xlabel = L"x",ylabel = L"y",aspect=1)
+    
+    xdiff = unique(displacements_flat[1,:]) |> sort
+    ydiff = unique(displacements_flat[2,:]) |> sort
+    
+    # hm = heatmap!(ax2,xdiff, ydiff, shift_center(SiSj), colormap = :bwr)
+    maxabsSiSj = maximum(abs,SiSj.* dists.^4)
+    hm = heatmap!(ax2,xdiff, ydiff, shift_center(SiSj .* dists.^4), colormap = :bwr, colorrange = (-maxabsSiSj, maxabsSiSj))
+    Colorbar(fig[1,2],hm, ticks=SimpleTicks();label=L"\mathcal{S}(\mathbf{R}) |\mathbf{R}|^4",minorticks = [Corrs_threshold,-Corrs_threshold],minorticksvisible = true, minorticksize = 12,minortickwidth = 2, minortickalign = 1.1)
+    
+    scatter!(ax2, [Point2(I) for I in eachslice(displacements_flat[:,red_inds],dims=2)],markersize=6,marker = '□',strokewidth = 0.5,color=:black)
+    
+    Label(fig[1, 1, TopLeft()], L"(a)$$", padding = (-60, -20, -10, 0),fontsize = 17)
+    Label(fig[1, 3, TopLeft()], L"(b)$$", padding = (-60, -20, -10, 0),fontsize = 17)
     save("../../figs/PaperFigs/StairCaseSpin1Corr.pdf", fig)
     fig
 end
@@ -618,117 +673,456 @@ with_theme(theme_SimpleTicks()) do
     fig
 end
 
-##
-scaling_exp = 4
-invscalingfunc(x) = x^(1/scaling_exp)
-scalingfunc(q) = q^scaling_exp
 
-# Plot showing radial cuts of S(q) at different angles
+##
+
+function get_qmapping(SqMat;cutoffEnd = 1)
+    SqPlot = @view SqMat[1:end-cutoffEnd,1:end-cutoffEnd]
+    Lx,Ly = size(SqPlot)
+    
+    function _convertToInds(k, L)
+        i =  k*L/(2pi)
+        i = (i + L) % L # Ensure positive indices before modulo
+        i = round(Int,i) +1
+        i == L+1 && return 1
+        return i
+    end
+
+    function q(kx,ky)
+        ix = _convertToInds(kx,Lx)
+        iy = _convertToInds(ky,Ly)
+        return ix,iy
+    end
+    q(k) = q(k[1],k[2])
+    return q
+end
+
+function get_discrete_path_idx(path,q_mapping)
+    q_discrete_idx = Int[]
+    qs = empty(path)
+    qs_Set = Set(qs)
+    for (idx,q) in enumerate(path)
+        new_q = q_mapping(q)
+        if new_q ∉ qs_Set
+            push!(qs, new_q)
+            push!(qs_Set, new_q)
+            push!(q_discrete_idx, idx)
+        end
+    end
+    return q_discrete_idx
+end
+##
+import FourierTools as FTools
 with_theme(theme_SimpleTicks()) do 
-    mu = 0.6
+    mu = 0.9
     L = 36
-    q_max = 1.2
-    SqsGFMC = SW.expand_Sq.(getSq(res,tau=15,mu=mu,L=L))
+    q_max = 0.35pi
+    q_min = 0.15pi
+    SqsGFMC = SW.expand_Sq.(getSq(res,tau=10,mu=mu,L=L))
     SqMat = mean(SqsGFMC)
     SqErr = std(SqsGFMC)
-    
-    # Get field theory fitting coefficients
+
+    # SqMat = FTools.resample(SqMat[1:end-1,1:end-1], (36*8,36*8))
+    # SqErr = FTools.resample(SqErr[1:end-1,1:end-1], (36*8,36*8))
+
     fittingCoefs = optimizeCoeffsAsym(SqMat)
     A_fit, r_fit, p_fit = strd.(fittingCoefs)
     
     μ = mu
+
     fig = Figure(size = 120 .* (8,3),fontsize = 22)
 
-    xticks = yticks = PiTicks()
-    ax_GFMC = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,
-                   title = L"GFMC$$")
-    ax_FT = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,
-                 yticklabelsvisible = false, ylabelvisible = false, title = L"Field Theory$$")
+    xticks = yticks = PiTicks([0,pi])
+    ax_GFMC = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, title = L"GFMC$$")
+    ax_FT = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false, title = L"Field Theory$$")
     
-    Sq = SW.getSqCont(SqMat)
-    Sqerr = SW.getSqCont(SqErr)
-    qx = qy = trueMomenta(-pi,2pi,size(SqMat,1)-1)
-    Sq_q = Sq.(Iterators.product(qx,qy))
-    
-    # Plot GFMC heatmap
-    hm_GFMC = heatmap!(ax_GFMC,qx,qy,Sq_q,colormap = :viridis)
-    
-    # Plot Field Theory heatmap
-    SqFT_q = [AsymFieldTheory(x,y,fittingCoefs...) for x in qx, y in qy]
-    hm_FT = heatmap!(ax_FT,qx,qy,SqFT_q,colormap = :viridis, colorrange = extrema(Sq_q))
-    
-    # Colorbar(fig[1,3], hm_GFMC, label = L"\mathcal{S}(\mathbf{q})", ticks = SimpleTicks())
-    
-    # Define angular cuts
-    angles_deg = [-20,0,45,60,90,130,170] 
+    radii = LinRange(q_min, q_max, 5) 
     # angles_deg = [45] 
-    angles_rad = deg2rad.(angles_deg)
-    # colors_cuts = Makie.Colors.distinguishable_colors(length(angles_rad),lchoices = LinRange(0,40,2))
-    colors_cuts = cgrad(:brg, length(angles_rad), categorical = true)
+    colors_cuts = cgrad(:brg, length(radii), categorical = true)
 
     # Plot axis for cuts
     axCuts = Axis(fig[1,3], ylabel = L"\mathcal{S}(\mathbf{q})", 
-                  xlabel = L"|\mathbf{q}|^%$(scaling_exp)",
+                  xlabel = L"\varphi",xticks = PiTicks()
                 #   xscale = Makie.ReversibleScale(scalingfunc,invscalingfunc),yscale = identity
                   )
     
     # Maximum radius to sample
-    n_points = 10
-    q_radii = LinRange(0, q_max, n_points)
-    qx = qy = trueMomenta(-pi,2pi,size(SqMat,1)-1)
-    xygrid = [(x,y) for x in qx, y in qy]
-    for (idx, (phi, phi_deg)) in enumerate(zip(angles_rad, angles_deg))
-        # Generate points along this radial direction
-        qx_line = q_radii .* cos(phi)
-        qy_line = q_radii .* sin(phi)
-        tRange = eachindex(qx_line)
-        path = [(qx, qy) for (qx, qy) in zip(qx_line, qy_line)]
+    phis = LinRange(0, 2pi, 30)
 
-
-        # Plot the radial lines on heatmaps
-        # lines!(ax_GFMC, qx_line, qy_line, color = colors_cuts[idx], linewidth = 2, linestyle = :solid)
-        # lines!(ax_FT, qx_line, qy_line, color = colors_cuts[idx], linewidth = 2, linestyle = :dash)
-        
-        tRange_discrete, path_discrete = rasterCurve(path, xygrid, tRange)
-        path_points = xygrid[path_discrete]
-        # Sample S(q) along this direction
-        Sqcut = [Sq(qx,qy) for (qx,qy) in path_points]
-        Sqerrcut = [Sqerr(qx,qy) for (qx,qy) in path_points]
-        
-        # Field theory along this direction
-        SqFT_cut = [AsymFieldTheory((qx,qy), fittingCoefs) for (qx,qy) in path_points]
-        scatter!(ax_GFMC, path_points, color = colors_cuts[idx], markersize = 3, marker = '●')
-        lines!(ax_FT, path_points, color = colors_cuts[idx],linestyle = :solid,linewidth = 1)
-        q_radii_discrete = [scalingfunc(sqrt(qx^2 + qy^2)) for (qx,qy) in path_points]
-        # Plot GFMC data with error bars
-        scatter!(axCuts, q_radii_discrete, Sqcut, color = colors_cuts[idx], markersize = 8, 
-                marker = '●')
-
-        errorbars!(axCuts, q_radii_discrete, Sqcut, Sqerrcut, color = colors_cuts[idx], 
-                  whiskerwidth = 4, linewidth=0.5)
-        # scatter!(axCuts, q_radii, Sqcut, color = colors_cuts[idx], markersize = 8, 
-                # marker = '●')
-        # Plot field theory fit
-        lines!(axCuts, q_radii_discrete, SqFT_cut, color = colors_cuts[idx], linewidth = 1,alpha=0.8, linestyle = :solid, label = L"\phi = %$(phi_deg)^\circ$$")
-    end
-    # axislegend(axCuts, position = :lt,nbanks=2, labelsize = 12)
-    # xlims!(axCuts, 0, nothing)
-    xlims!(axCuts, 0, scalingfunc(q_max))
+    q_dense = LinRange(-0.5pi, 1.5pi, 200)
     
-    # Add fitting parameters as text
-    text!(ax_FT, Point(-pi, -0.8*pi), 
-          text = L"$A = %$(A_fit),\ r = %$(r_fit),\ p = %$(p_fit)$",
-          align = (:left, :top), fontsize = 16,
-          strokecolor = (:black, 0.3), strokewidth = 4)
-    text!(ax_FT, Point(-pi, -0.8*pi), 
-          text = L"$A = %$(A_fit),\ r = %$(r_fit),\ p = %$(p_fit)$",
-          align = (:left, :top), fontsize = 16, color = :white)
+    # qx_true = qy_true = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
+    qx_true = qy_true = trueMomenta(pi-1.5q_max,pi+1.5q_max,size(SqMat,1)-1)
+    
+    Sq =  SW.getSqCont(SqMat)
+    Sqerr = SW.getSqCont(SqErr)
+    scaling(qx,qy) = (qx-pi)^2+(qy-pi)^2
+
+    SqFT_rescaled(qx,qy) = AsymFieldTheory((qx,qy),fittingCoefs)/scaling(qx,qy)
+    Sq_rescaled(qx,qy) = Sq(qx,qy)/scaling(qx,qy)
+    Sq_err_rescaled(qx,qy) = Sqerr(qx,qy)/scaling(qx,qy)
+    
+    heatmap!(ax_GFMC,qx_true,qy_true, [Sq_rescaled(x,y) for x in qx_true, y in qy_true], colormap = :viridis)
+
+    heatmap!(ax_FT,qx_true,qx_true,[SqFT_rescaled(x,y) for x in qx_true, y in qx_true], colormap = :viridis)
+
+    q_default = trueMomenta(0,2pi,size(SqMat,1)-1)
+    q_grid = [(qx,qy) for qx in q_default, qy in q_default]
+    q_map = SW.getSqCont(q_grid)
+
+    # scaling(qx,qy) = 1
+    for (idx, q_abs) in enumerate(radii)
+        # Generate points along this radial direction
+        path = [ (pi,pi) .+ q_abs .*(cos(phi), sin(phi)) for phi in phis]
+
+        Sq_cut = [Sq_rescaled(qx,qy) for (qx,qy) in path]
+        Sq_err_cut = [Sq_err_rescaled(qx,qy) for (qx,qy) in path]
+        SqFT_cut = [SqFT_rescaled(qx,qy) for (qx,qy) in path]
+
+        lines!(ax_FT, path, color = colors_cuts[idx],linestyle = :solid,linewidth = 1)
+
+        # Plot GFMC data with error bars
+        lines!(axCuts, phis, SqFT_cut, color = colors_cuts[idx])
+        scatter!(axCuts, phis, Sq_cut, color = colors_cuts[idx])
+        errorbars!(axCuts, phis, Sq_cut, Sq_err_cut, color = colors_cuts[idx], whiskerwidth = 4, linewidth=0.5)
+        lines!(ax_GFMC, path, color = colors_cuts[idx])
+    end
+    # xlims!(axCuts, 0, scalingfunc(q_max))
+    
+    # # Add fitting parameters as text
+    # text!(ax_FT, Point(-pi, -0.8*pi), 
+    #       text = L"$A = %$(A_fit),\ r = %$(r_fit),\ p = %$(p_fit)$",
+    #       align = (:left, :top), fontsize = 16,
+    #       strokecolor = (:black, 0.3), strokewidth = 4)
+    # text!(ax_FT, Point(-pi, -0.8*pi), 
+    #       text = L"$A = %$(A_fit),\ r = %$(r_fit),\ p = %$(p_fit)$",
+        #   align = (:left, :top), fontsize = 16, color = :white)
     
     # colsize!(fig.layout, 3, Relative(0.05))
     Label(fig[1,1, TopLeft()], L"(a)$$", padding = (-20, 0, -0, 0))
     Label(fig[1,2, TopLeft()], L"(b)$$", padding = (-20, 0, -0, 0))
     Label(fig[1,3, TopLeft()], L"(c)$$", padding = (-20, 0, -0, 0))
+    # save("../../figs/PaperFigs/StairCaseSpin1_Sq_RadialCuts.pdf", fig)
+    fig
+end
+##
+function discrete_q_path(q,SqMat)
+    indices_interpolant = SW.getSqCont(CartesianIndices(SqMat))
+    indices_along_path = unique([indices_interpolant(q_i) for q_i in q] )
+    # indices_along_path = ([indices_interpolant(q_i) for q_i in q] )
+    return indices_along_path
+end
+
+function get_angle(q)
+    ang = atan(q[2], q[1])
+    return ang < 0 ? ang + 2pi : ang
+end
+# a(1.3,2.2)
+##
+import FourierTools as FTools
+function plotCircularCuts!(axes,CBarPos,SqsGFMC;     
+    q_max = 0.26pi,
+    q_min = 0.14pi,
+    num_circles = 4,
+    radii = LinRange(q_min, q_max, num_circles),
+    use_scaling = false,
+    up_sampling_factor = 1,
+    print_params = true,
+    scaling_exp = 2
+    )
+
+    ax_GFMC, ax_FT, axCuts = axes
+
+    scaling = if use_scaling
+        (qx,qy) -> sqrt((qx)^2+(qy)^2)^scaling_exp + 1e-12*(qx ≈ 0 && qy ≈ 0) 
+    else
+        (qx,qy) -> 1
+    end
+    # scaling(qx,qy) = 1
+    # resampling_factor = 1
+
+    SqMat = mean(SqsGFMC)
+    SqErr = std(SqsGFMC)
+    # weightfunc(q) = exp(-0.5q'q)
+    # weightfunc(q) = q_min < q'q < 1.0q_max 
+    weightfunc(q) = 1
+    fittingCoefs = optimizeCoeffsAsym(SqMat, weightfunc)
+
+    if up_sampling_factor != 1
+        SqMat = FTools.resample(SqMat, up_sampling_factor .* size(SqMat))
+        SqErr = FTools.resample(SqErr, up_sampling_factor .* size(SqErr))
+    end
+
+    SqMat = SW.expand_Sq(SqMat)
+    SqErr = SW.expand_Sq(SqErr)
+    
+    colors_cuts = cgrad(:brg, length(radii), categorical = true)
+    # Maximum radius to sample
+    phis = LinRange(0, 2pi, 100)
+
+    # qx_true = qy_true = trueMomenta(-0.5pi,1.5pi,size(SqMat,1)-1)
+    qx_true = qy_true = trueMomenta(-0.5pi -0.1q_max,0.5pi + 0.1q_max,size(SqMat,1)-1)
+
+    qx_Full = trueMomenta(-pi,pi,size(SqMat,1)-1)
+    qy_Full = trueMomenta(-pi,pi,size(SqMat,1)-1)
+    q_grid = circshift(collect(Iterators.product(qx_Full, qy_Full)), size(SqMat) .÷ 2)
+
+    Sq =  SW.getSqCont(SqMat)
+    Sqerr = SW.getSqCont(SqErr)
+
+
+
+    SqFT_rescaled(qx,qy) = AsymFieldTheory((qx,qy),fittingCoefs)/scaling(qx,qy)
+    Sq_rescaled(qx,qy) = Sq(qx,qy)/scaling(qx,qy)
+    Sq_err_rescaled(qx,qy) = Sqerr(qx,qy)/scaling(qx,qy)
+    
+    Sq_resc = [Sq_rescaled(x,y) for x in qx_true, y in qy_true]
+    Sq_FT_resc = [SqFT_rescaled(x,y) for x in qx_true, y in qy_true]
+
+    
+    add_cbar_kwargs = (; colorrange = (0, 1))
+    
+    if !use_scaling
+        colorrange = extrema([extrema(Sq_resc)..., extrema(Sq_FT_resc)...])
+        add_cbar_kwargs = (;colorrange)
+    end
+    if up_sampling_factor != 1
+        add_cbar_kwargs = (; highclip = :white, add_cbar_kwargs...)
+    end
+    heatmap!(ax_GFMC,qx_true,qy_true,Sq_resc, colormap = :viridis; add_cbar_kwargs...)
+
+    hm = heatmap!(ax_FT,qx_true,qx_true,[SqFT_rescaled(x,y) for x in qx_true, y in qx_true]; colormap = :viridis, add_cbar_kwargs...)
+    
+    cbarlabel = use_scaling ? L"\mathcal{S}(\mathbf{q})/q^{%$(scaling_exp)}" : L"\mathcal{S}(\mathbf{q})"
+    Colorbar(CBarPos,hm;label = cbarlabel, height = Relative(0.95),ticks = SimpleTicks() )
+
+    norm(qx,qy) = sqrt(qx^2 + qy^2)
+    norm(q) = norm(q[1], q[2])
+
+    line_fatness = 0.1 /up_sampling_factor
+
+    for (idx, q_abs) in enumerate(radii)
+        # Generate points along this radial direction
+        path_raw = [ q_abs .*(cos(phi), sin(phi)) for phi in phis]
+        # path_inds = discrete_q_path(path_raw, SqMat)
+        # path = [q_grid[i] for i in path_inds]
+        path = filter( q -> q_abs - line_fatness <= norm(q) <= q_abs + line_fatness, q_grid)
+        phis_corrected = [get_angle(q) for q in path]
+        perm = sortperm(phis_corrected)
+        phis_corrected = phis_corrected[perm]
+        path = path[perm]
+        push!(phis_corrected, phis_corrected[1] + 2pi)
+        push!(path, path[1])
+        Sq_cut = [Sq_rescaled(qx,qy) for (qx,qy) in path]
+        Sq_err_cut = [Sq_err_rescaled(qx,qy) for (qx,qy) in path]
+        SqFT_cut = [SqFT_rescaled(qx,qy) for (qx,qy) in path]
+
+        
+        # Plot GFMC data with error bars
+        lines!(axCuts, phis_corrected, SqFT_cut, color = colors_cuts[idx],linewidth = 1, linestyle = :dash)
+        # lines!(ax_GFMC, path, color = colors_cuts[idx],linewidth = 1)
+        
+        if up_sampling_factor == 1
+            # lines!(ax_FT, path, color = colors_cuts[idx],linewidth = 1,linestyle = :dash)
+            scatter!(ax_GFMC, path, color = colors_cuts[idx],markersize = 4, alpha = 0.5)
+            sc = scatter!(axCuts, phis_corrected, Sq_cut, color = colors_cuts[idx], markersize = 4)
+
+            translate!(sc, 0, 0, 1)
+            errorbars!(axCuts, phis_corrected, Sq_cut, Sq_err_cut, color = colors_cuts[idx], whiskerwidth = 4, linewidth=0.5)
+        else
+            lines!(axCuts, phis_corrected, Sq_cut, color = colors_cuts[idx], linewidth = 2)
+        end
+        lines!(ax_GFMC, path_raw, color = colors_cuts[idx], linewidth = 1)
+        lines!(ax_FT, path_raw, color = colors_cuts[idx], linewidth = 1, linestyle = :dash)
+            # scatter!(ax_GFMC, path_raw, color = colors_cuts[idx], markersize = 4, alpha = 0.5)
+        # scatter!(ax_GFMC, path[1], marker = '●', color = colors_cuts[idx], markersize = 5)
+    end
+    lines!(ax_FT, [Point2f(0,0), Point2f(maximum(radii),0)], color = :white, linewidth = 1, linestyle = :dash)
+    # xlims!(axCuts, 0, scalingfunc(q_max))
+    A_fit, r_fit, p_fit = strd.(fittingCoefs)
+    
+    # Add fitting parameters as text
+
+    if print_params
+        offsets = [0,-0.1,-0.2]
+        texts = [
+            L"$A = %$(A_fit)$",
+            L"$r = %$(r_fit)$",
+            L"$p = %$(p_fit)$"
+        ]
+        for (offset,text) in zip(offsets,texts)
+            text!(ax_FT, Point(0.97, 0.98 + offset), 
+                text = text,
+                align = (:right, :top), fontsize = 12,
+                strokecolor = (:black, 0.5), strokewidth = 3,space = :relative)
+            text!(ax_FT, Point(0.97, 0.98 + offset), 
+                text = text,
+                align = (:right, :top), fontsize = 12, color = :white,space = :relative)   
+        end
+    end
+    # text!(ax_FT, Point(0.97, 0.98), 
+    #       text = L"$A = %$(A_fit),\ r = %$(r_fit),\ p = %$(p_fit)$",
+    #       align = (:right, :top), fontsize = 12,
+    #       strokecolor = (:black, 0.5), strokewidth = 3,space = :relative)
+    # text!(ax_FT, Point(0.97, 0.98), 
+    #       text = L"$A = %$(A_fit),\ r = %$(r_fit),\ p = %$(p_fit)$",
+    #       align = (:right, :top), fontsize = 12, color = :white,space = :relative)   
+          
+    if up_sampling_factor != 1
+        for ax in (ax_GFMC, )
+             
+            text_bg!(ax, Point(0.0, 0.0), 
+                text = L"s_\text{up} = L × %$(up_sampling_factor)",
+                align = (:left, :bottom), fontsize = 16,space = :relative)
+        end
+    end
+end
+
+##
+with_theme(theme_SimpleTicks()) do 
+    mu = 0.9
+    L = 36
+    q_max = 0.33pi
+    q_min = 0.154pi
+    num_circles = 4
+    up_sampling_factor = 8
+    SqsGFMC = getSq(res,tau=13,mu=mu,L=L)
+
+
+    fig = Figure(size = 100 .* (7.5,5.5),fontsize = 22)
+
+    xticks = yticks = PiTicks([-0.5pi,0,0.5pi])
+    ax_GFMC = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, title = L"GFMC$$",
+    xlabelvisible = false, xticklabelsvisible = false,
+    )
+    ax_FT = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false, title = L"Field Theory$$",
+    xlabelvisible = false, xticklabelsvisible = false,
+    )
+    axCuts = Axis(fig[1,4],
+    xlabelvisible = false, xticklabelsvisible = false,
+    xlabel = L"\varphi",xticks = PiTicks()
+    )
+
+    axes_top = (ax_GFMC, ax_FT, axCuts)
+
+    plotCircularCuts!(axes_top,fig[1,3], SqsGFMC; q_max, q_min, num_circles)
+
+    ax_GFMC = Axis(fig[2,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,
+    xlabelvisible = false, xticklabelsvisible = false,
+    )
+    ax_FT = Axis(fig[2,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false,
+    xlabelvisible = false, xticklabelsvisible = false,)
+    axCuts = Axis(fig[2,4], 
+    xlabelvisible = false, xticklabelsvisible = false,
+    xlabel = L"\varphi",xticks = PiTicks()
+    )
+    
+    axes_mid = (ax_GFMC, ax_FT, axCuts)
+
+    plotCircularCuts!(axes_mid,fig[2,3], SqsGFMC; q_max, q_min, num_circles, up_sampling_factor = 1, use_scaling = true, print_params = false,)
+
+    ax_GFMC = Axis(fig[3,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
+    ax_FT = Axis(fig[3,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false)
+    axCuts = Axis(fig[3,4], 
+    xlabel = L"\varphi",xticks = PiTicks()
+    )
+    axes_bot = (ax_GFMC, ax_FT, axCuts)
+
+    plotCircularCuts!(axes_bot,fig[3,3], SqsGFMC; q_max, q_min, num_circles, up_sampling_factor = up_sampling_factor, use_scaling = true, print_params = false)
+
+    # for ax in [axes_top..., axes_mid..., axes_bot...]
+    all_axes = [axes_top..., axes_mid..., axes_bot...]
+    labels = ['a','b','c','d','e','f','g','h','i']
+    colors = repeat([:white, :white, :black], outer = 3)
+    for (i,ax) in enumerate(all_axes)
+        label = labels[i]
+        if colors[i] == :white
+            text_bg!(ax, Point(0.0, 1), text = L"(%$(label))$$", align = (:left, :top),space = :relative, color = :white, )
+        else
+            text!(ax, Point(0.0, 1), text = L"(%$(label))$$", align = (:left, :top),space = :relative, color = colors[i], )
+        end
+    end
+
+    cover_q = LinRange(-3*2pi/L, 3*pi/L, 200)
+    cover_func(q) = q'q < 1*(2pi/L)^2 ? 1 : NaN
+    heatmap!(axes_bot[1], cover_q, cover_q, (qx,qy) -> cover_func([qx,qy]), colormap = :grays, colorrange = (0,1),alpha = 0.8)
+    # scatter!(axes_bot[1], [Point(0,0)], markersize = 50, marker = '⚫', color = :white)
+    colgap!(fig.layout, 2, 4)
     save("../../figs/PaperFigs/StairCaseSpin1_Sq_RadialCuts.pdf", fig)
     fig
 end
 
+##
+with_theme(theme_SimpleTicks()) do 
+    mu = 0.6
+    L = 36
+    q_max = 0.33pi
+    q_min = 0.154pi
+    num_circles = 4
+    up_sampling_factor = 8
+    SqsGFMC = getSq(res,tau=13,mu=mu,L=L)
+
+
+    fig = Figure(size = 100 .* (7.5,5.5),fontsize = 22)
+
+    xticks = yticks = PiTicks([-0.5pi,0,0.5pi])
+    ax_GFMC = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, title = L"GFMC$$",
+    xlabelvisible = false, xticklabelsvisible = false,
+    )
+    ax_FT = Axis(fig[1,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false, title = L"Field Theory$$",
+    xlabelvisible = false, xticklabelsvisible = false,
+    )
+    axCuts = Axis(fig[1,4],
+    xlabelvisible = false, xticklabelsvisible = false,
+    xlabel = L"\varphi",xticks = PiTicks()
+    )
+
+    axes_top = (ax_GFMC, ax_FT, axCuts)
+
+    plotCircularCuts!(axes_top,fig[1,3], SqsGFMC; q_max, q_min, num_circles)
+
+    ax_GFMC = Axis(fig[2,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks,
+    xlabelvisible = false, xticklabelsvisible = false,
+    )
+    ax_FT = Axis(fig[2,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false,
+    xlabelvisible = false, xticklabelsvisible = false,)
+    axCuts = Axis(fig[2,4], 
+    xlabelvisible = false, xticklabelsvisible = false,
+    xlabel = L"\varphi",xticks = PiTicks()
+    )
+    
+    axes_mid = (ax_GFMC, ax_FT, axCuts)
+
+    plotCircularCuts!(axes_mid,fig[2,3], SqsGFMC; q_max, q_min, num_circles, up_sampling_factor = 8, use_scaling = true, print_params = false,)
+
+    ax_GFMC = Axis(fig[3,1],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks)
+    ax_FT = Axis(fig[3,2],xlabel = L"q_x",ylabel = L"q_y",aspect=1;xticks, yticks, yticklabelsvisible = false, ylabelvisible = false)
+    axCuts = Axis(fig[3,4], 
+    xlabel = L"\varphi",xticks = PiTicks()
+    )
+    axes_bot = (ax_GFMC, ax_FT, axCuts)
+
+    plotCircularCuts!(axes_bot,fig[3,3], SqsGFMC; q_max, q_min, num_circles, up_sampling_factor = up_sampling_factor, use_scaling = true, print_params = false,scaling_exp = 2.5)
+
+    # for ax in [axes_top..., axes_mid..., axes_bot...]
+    all_axes = [axes_top..., axes_mid..., axes_bot...]
+    labels = ['a','b','c','d','e','f','g','h','i']
+    colors = repeat([:white, :white, :black], outer = 3)
+    for (i,ax) in enumerate(all_axes)
+        label = labels[i]
+        if colors[i] == :white
+            text_bg!(ax, Point(0.0, 1), text = L"(%$(label))$$", align = (:left, :top),space = :relative, color = :white, )
+        else
+            text!(ax, Point(0.0, 1), text = L"(%$(label))$$", align = (:left, :top),space = :relative, color = colors[i], )
+        end
+    end
+
+    cover_q = LinRange(-3*2pi/L, 3*pi/L, 200)
+    cover_func(q) = q'q < 1*(2pi/L)^2 ? 1 : NaN
+    heatmap!(axes_mid[1], cover_q, cover_q, (qx,qy) -> cover_func([qx,qy]), colormap = :grays, colorrange = (0,1),alpha = 0.8)
+    heatmap!(axes_bot[1], cover_q, cover_q, (qx,qy) -> cover_func([qx,qy]), colormap = :grays, colorrange = (0,1),alpha = 0.8)
+    # scatter!(axes_bot[1], [Point(0,0)], markersize = 50, marker = '⚫', color = :white)
+    colgap!(fig.layout, 2, 4)
+    save("../../figs/PaperFigs/StairCaseSpin1_Sq_RadialCuts_mu06.pdf", fig)
+    fig
+end

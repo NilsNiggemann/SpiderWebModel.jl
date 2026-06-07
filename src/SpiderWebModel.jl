@@ -34,6 +34,7 @@ include("Types/VariationalWFTypes.jl")
 
 include("Constraint.jl")
 include("PeriodicTilings.jl")
+include("PeriodicTilings_lazy.jl")
 
 include("ED/Fluctuations.jl")
 include("ED/ConstructHilbertSpace.jl")

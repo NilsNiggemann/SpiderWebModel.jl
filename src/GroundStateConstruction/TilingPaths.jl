@@ -1,6 +1,7 @@
 function xdirecPath(LPx, LPy = LPx)
     [(i, j) for j = 1:(2LPy+1) for i = 1:(2LPx+1) if iseven(i + j)]
 end
+
 function xdirecPathReverse(LPx, LPy = LPx)
     [(i, j) for j = 1:(2LPy+1) for i = (2LPx+1):-1:1 if iseven(i + j)]
 end
