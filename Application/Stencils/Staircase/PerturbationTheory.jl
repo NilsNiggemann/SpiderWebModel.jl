@@ -84,7 +84,7 @@ filterSq = [s < maximum(Sq)/1.05 ? s : 0 for s in Sq]
 # filterSq_inv = [s >= maximum(Sq)/1.1 ? s : NaN for s in Sq]
 with_theme(theme_PiTicks()) do 
     W = 1
-    fig = Figure(size = 0.85 .*(1000,270))
+    fig = Figure(size = 0.85 .*(610,400))
     ax_pert = Axis(fig[1,1],xlabel = L"q_x",ylabel = L"q_y",aspect = 1,xticks = PiTicks([0,pi]),yticks = PiTicks([0,pi]),
     title = L"$$pert. theory",
     )
@@ -95,7 +95,7 @@ with_theme(theme_PiTicks()) do
     ax_scale = Axis(fig[1,4],xlabel = L"q_x",ylabel = L"q_y",aspect = 1,xticks = PiTicks([-0.5pi,0,0.5pi]),yticks = PiTicks([-0.5pi,0,0.5pi]),
     ylabelvisible = false,#yticklabelsvisible = false,
     title = L"$$pert. theory $\times q^{-4}$ ",)
-    ax_cuts = Axis(fig[1,5],xlabel = L"φ",ylabel = L"\mathcal{S}(q)/q^4",
+    ax_cuts = Axis(fig[2,1:4],xlabel = L"φ",ylabel = L"\mathcal{S}(q)/q^4",
     xticks = PiTicks([0,pi,2pi]),yticks = SimpleTicks()
     )
     norm(x,y) = sqrt(x^2 + y^2) + 1e-16
@@ -172,11 +172,12 @@ with_theme(theme_PiTicks()) do
         # scatterlines!(ax_cuts, phis_corrected, cut_scale, color = colors[idx],markersize = 4)
         lines!(ax_cuts, phis_corrected, cut_scale, color = colors[idx])
     end
-    colsize!(fig.layout,5, Relative(0.4))
+    # rowsize!(fig.layout,1, Relative(0.55))
+    # colsize!(fig.layout,5, Relative(0.4))
     Label(fig[1, 1,TopLeft()], L"(a)$$", padding = (-40,0,-25, -20),fontsize = 16)
-    Label(fig[1, 3,TopLeft()], L"(b)$$", padding = (-40,0,-25, -20),fontsize = 16)
-    Label(fig[1, 4,TopLeft()], L"(c)$$", padding = (-40,0,-25, -20),fontsize = 16)
-    Label(fig[1, 5,TopLeft()], L"(d)$$", padding = (-40,0,-25, -20),fontsize = 16)
+    Label(fig[1, 3,TopLeft()], L"(b)$$", padding = (-40,15,-25, -20),fontsize = 16)
+    Label(fig[1, 4,TopLeft()], L"(c)$$", padding = (-20,0,-25, -20),fontsize = 16)
+    Label(fig[2, 1,TopLeft()], L"(d)$$", padding = (-40,0,-25, -20),fontsize = 16)
     save("../../figs/PaperFigs/SqPerturbation.pdf",fig,px_per_unit =3)
     fig
 end
