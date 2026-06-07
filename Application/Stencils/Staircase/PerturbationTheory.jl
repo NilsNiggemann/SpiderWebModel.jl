@@ -74,7 +74,7 @@ function S_q_FT2(qx, qy, K, U, W)
 end
 
 ##
-S = SW.stencilConfig(zeros(200,200),1,boundaryCondition = :periodic)
+S = SW.stencilConfig(zeros(220,220),1,boundaryCondition = :periodic)
 get_S_diag!(S)
 ##
 Sq = get_perturbative_spin_corrs(S,2)
@@ -114,7 +114,7 @@ with_theme(theme_PiTicks()) do
     
     ring(r,phi) = r .* Point2f(cos(phi), sin(phi))
     
-    radii = LinRange(0.15pi,0.3pi,4)
+    radii = LinRange(0.1pi,0.25pi,4)
     
     
     Sq_scale = [SqCont(x,y)/norm(x,y)^4 for x in qxzoom, y in qyzoom]
